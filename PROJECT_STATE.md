@@ -100,11 +100,29 @@ Batch 35) sebelum mulai.
   Deliberately not bumped further — see "Defaults a new reader should know".
 
 ## Pending Queue (not done this batch — do next, in this order)
-_Kosong — MICRO_POLISH_GUIDE.md 8/8 prioritas tuntas (Batch 36-47).
-STOP CONDITION panduan tercapai. Item pending berikutnya menunggu
-arahan/temuan baru dari user._
+_Kosong — audit gesture-back regresi (Batch 48) tuntas, fix diterapkan.
+Item pending berikutnya menunggu arahan/temuan baru dari user._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 48** — Inspeksi mendalam regresi "gesture back memicu close app
+  langsung, bukan balik bertahap". Root cause ditemukan:
+  `android:enableOnBackInvokedCallback` TIDAK ADA di `<application>`
+  AndroidManifest.xml, padahal `targetSdk=34` (Android 14). Tanpa flag
+  ini, sistem predictive-back tidak tahu app sudah register
+  `OnBackPressedCallback` (basis semua `BackHandler` Compose di
+  Batch/GIF/Compressor/StudioScreen) — OS selalu preview animasi "app
+  akan tertutup" di tiap gesture back walau `BackHandler` sebenarnya
+  intercept di detik akhir, persis gejala yang dilaporkan. Diaudit juga
+  seluruh 5 screen (Resizer/Batch/GIF/Compressor/Studio): keempat
+  sub-screen SUDAH punya `BackHandler(enabled = true)` + toolbar-arrow
+  yang konsisten logic-nya (gesture & tombol toolbar sama-sama cek
+  `isProcessing`/`selectionMode` sebelum `onBack()`) — tidak ada gap
+  lain di situ, sudah benar sejak Batch 43. ResizerScreen sengaja
+  `enabled = isProcessing` saja (ia layar utama, back saat idle = keluar
+  app, itu perilaku benar bukan bug). Fix: tambah
+  `android:enableOnBackInvokedCallback="true"` (edit-parsial, 1 atribut)
+  + komentar penjelasan di manifest. XML divalidasi well-formed. 1 file
+  disentuh (`AndroidManifest.xml`, protected asset — edit parsial only).
 - **Batch 47** — MICRO_POLISH_GUIDE Prioritas 8 (Duplikasi Theme/
   System-Bar) [DONE — audit saja, tidak ada defect]. Cek `themes.xml`
   (values/ + values-night/, statis, cuma ikut system dark mode) vs

@@ -1,5 +1,33 @@
 # Changelog
 
+## Batch 48: Fix regresi gesture-back memicu close app langsung
+
+Root cause: `android:enableOnBackInvokedCallback` tidak pernah
+ditambahkan ke `<application>` di AndroidManifest.xml walau
+`targetSdk=34` (Android 14). Tanpa flag ini, sistem predictive-back
+tidak tahu app sudah register `OnBackPressedCallback` (basis semua
+`BackHandler` Compose yang menangani navigasi Batch/GIF/Compressor/
+StudioScreen) — OS jadi selalu menampilkan preview animasi "app akan
+tertutup" untuk setiap gesture back, walau `BackHandler` di kode
+sebenarnya intercept-nya di detik akhir. Ini persis match gejala yang
+dilaporkan: "gesture back memicu close app langsung, bukan balik
+bertahap".
+
+Audit juga dilakukan atas seluruh 5 screen (Resizer/Batch/GIF/
+Compressor/Studio) untuk pastikan tidak ada gap lain di kelas bug yang
+sama: keempat sub-screen sudah punya `BackHandler(enabled = true)`
+sejak Batch 43, dan toolbar-arrow-nya konsisten logic dengan gesture
+(sama-sama cek `isProcessing`/`selectionMode` sebelum `onBack()`) — jadi
+tidak ada regresi lain ditemukan di jalur back itu sendiri.
+ResizerScreen sengaja `enabled = isProcessing` saja karena ia layar
+utama — back saat idle memang harus keluar app, bukan bug.
+
+Fix: tambah 1 atribut `android:enableOnBackInvokedCallback="true"` +
+komentar penjelasan di manifest. XML divalidasi well-formed lewat
+`xml.etree.ElementTree`. 1 file disentuh (`AndroidManifest.xml`,
+protected asset — edit parsial only, tidak ada elemen lain yang
+disentuh/dihapus).
+
 ## Batch 47: MICRO_POLISH_GUIDE Prioritas 8 — Duplikasi Theme/System-Bar (audit, tidak ada defect)
 
 ### AUDITED

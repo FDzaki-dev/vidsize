@@ -1,5 +1,31 @@
 # Changelog
 
+## Batch 49: Fix ExportForegroundService tidak pernah dipanggil di GIF (audit umum)
+
+Audit cari-bug umum menemukan bug nyata: `ExportForegroundService`
+(proteksi anti-background-kill saat proses ekspor berjalan lama) sudah
+dipanggil dengan benar di `ResizerScreen`, `BatchScreen`, dan
+`CompressorScreen` — tapi `GifScreen` terlewat total sejak fitur GIF
+pertama kali dibuat. Dampak nyata: kalau user mengunci layar atau
+pindah ke app lain saat GIF sedang dibuat, proses tidak punya
+proteksi foreground-priority sama sekali — OS bisa membunuh proses di
+background dan konversi GIF mati diam-diam, persis bug class yang
+`ExportForegroundService` memang dibuat untuk mencegah.
+
+Fix: 5 titik ditambah di `GifScreen` supaya simetris dengan 3 screen
+lain — `ExportForegroundService.start(context)` saat proses mulai,
+`updateProgress(context, p)` di callback progress (dipanggil bareng
+update state Compose di Main thread), dan `stop(context)` di 3 jalur
+keluar: selesai normal, tombol "Batalkan" saat proses berjalan, dan
+konfirmasi keluar-saat-proses (dialog "Batalkan proses?").
+
+Diaudit juga jalur resource lain yang rawan leak: 6 instantiasi
+`MediaMetadataRetriever`/`MediaExtractor` di seluruh file — semua sudah
+`try/finally { retriever.release() }` atau `runCatching` + release
+tanpa terkecuali, tidak ada leak. `CrashLogger.kt` dan
+`ExportForegroundService.kt` sendiri direview baris-per-baris — tidak
+ada bug ditemukan di keduanya. 1 file disentuh (`MainActivity.kt`).
+
 ## Batch 48: Fix regresi gesture-back memicu close app langsung
 
 Root cause: `android:enableOnBackInvokedCallback` tidak pernah

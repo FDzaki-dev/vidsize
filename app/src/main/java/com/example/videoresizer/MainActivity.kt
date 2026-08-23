@@ -4182,6 +4182,7 @@ private fun GifScreen(
                     showExitWhileProcessingConfirm = false
                     activeJob?.cancel()
                     isProcessing = false
+                    ExportForegroundService.stop(context)
                     onBack()
                 }) { Text("Batalkan proses", color = MaterialTheme.colorScheme.error) }
             },
@@ -4308,6 +4309,7 @@ private fun GifScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 activeJob?.cancel()
                                 isProcessing = false
+                                ExportForegroundService.stop(context)
                                 message = "Dibatalkan."
                             }) { Text("Batalkan") }
                         }
@@ -4323,6 +4325,7 @@ private fun GifScreen(
                             resultFile = null
                             galleryUri = null
                             val outFile = File(context.cacheDir, "gif_${UUID.randomUUID()}.gif")
+                            ExportForegroundService.start(context)
                             activeJob = scope.launch {
                                 val result = withContext(Dispatchers.Default) {
                                     GifExporter.export(
@@ -4341,11 +4344,15 @@ private fun GifScreen(
                                             // touching Compose state, rather than
                                             // relying on the snapshot system to
                                             // paper over a cross-thread write.
-                                            scope.launch(Dispatchers.Main) { progress = p }
+                                            scope.launch(Dispatchers.Main) {
+                                                progress = p
+                                                ExportForegroundService.updateProgress(context, p)
+                                            }
                                         }
                                     )
                                 }
                                 isProcessing = false
+                                ExportForegroundService.stop(context)
                                 when (result) {
                                     is GifExportResult.Success -> {
                                         val publicUri = withContext(Dispatchers.IO) {

@@ -100,10 +100,28 @@ Batch 35) sebelum mulai.
   Deliberately not bumped further — see "Defaults a new reader should know".
 
 ## Pending Queue (not done this batch — do next, in this order)
-_Kosong — audit gesture-back regresi (Batch 48) tuntas, fix diterapkan.
-Item pending berikutnya menunggu arahan/temuan baru dari user._
+_Kosong — bug ExportForegroundService di GIF (Batch 49) tuntas
+diperbaiki. Item pending berikutnya menunggu arahan/temuan baru dari
+user._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 49** — Audit cari-bug umum. Bug nyata ditemukan:
+  `ExportForegroundService` (proteksi anti-background-kill saat proses
+  lama) TIDAK PERNAH dipanggil di `GifScreen` — Resize/Batch/Compress
+  ketiganya sudah `start()`/`updateProgress()`/`stop()` sejak batch lama,
+  tapi jalur konversi GIF terlewat total sejak fitur GIF pertama kali
+  dibuat. Dampak: user yang mengunci layar/pindah app saat GIF sedang
+  dibuat berisiko proses mati diam-diam kalau OS membunuh proses di
+  background — persis bug class yang `ExportForegroundService` dibuat
+  untuk mencegah, tapi GIF tidak pernah kebagian proteksinya. Fix: 5
+  titik ditambah agar simetris dengan 3 screen lain — `start()` di awal
+  proses, `updateProgress()` di callback progress, `stop()` di jalur
+  selesai normal DAN di kedua jalur cancel (tombol "Batalkan" +
+  konfirmasi keluar-saat-proses). Diaudit juga MediaMetadataRetriever/
+  MediaExtractor (6 titik) — semua sudah try/finally atau
+  runCatching+release yang benar, tidak ada leak. CrashLogger &
+  ExportForegroundService sendiri direview — tidak ada bug. 1 file
+  disentuh (`MainActivity.kt`).
 - **Batch 48** — Inspeksi mendalam regresi "gesture back memicu close app
   langsung, bukan balik bertahap". Root cause ditemukan:
   `android:enableOnBackInvokedCallback` TIDAK ADA di `<application>`

@@ -1,5 +1,56 @@
 # Changelog
 
+## Batch 45: MICRO_POLISH_GUIDE Prioritas 6 — Responsive/Font-Scale Polish
+
+### AUDITED (tidak diubah — sudah benar)
+- Seluruh 27 pemanggilan `FilterChip` (16 kluster) — semua sudah dibungkus
+  `LazyRow`, otomatis scrollable, tidak ada risiko clipping/overflow di
+  font-scale besar atau layar sempit.
+- Studio action row (`StudioEntryCard`) — sudah difix Batch 41
+  (`weight(1f, fill=false).horizontalScroll`, delete dipin di luar
+  scroll). Tidak disentuh.
+- Dialog input (CustomResolution/CustomBitrate/TargetSize×2) — tombol
+  Save/Cancel M3 `AlertDialog` bawaan, sudah responsif secara default.
+
+### FOUND & FIXED
+Row aksi hasil export "Bagikan" / "Buka di Galeri" di **GifScreen** &
+**CompressorScreen** pakai `Button`/`OutlinedButton` (lebih lebar dari
+`TextButton` — padding horizontal M3 lebih besar) berdampingan dalam
+`Row(horizontalArrangement = spacedBy(10.dp))` polos, TANPA proteksi
+scroll/wrap. Di layar sempit (~360dp) + font-scale besar (130%+, umum di
+setting aksesibilitas), 2 tombol ini berisiko overflow di luar batas layar
+tanpa cara menjangkaunya. ResizerScreen punya Row serupa (baris ~1628)
+tapi pakai `TextButton` yang lebih ringkas (risiko lebih kecil, tapi
+tetap tidak dilindungi) — ikut difix untuk konsistensi.
+
+### CHANGED
+- 3 titik Row (ResizerScreen ~1628, GifScreen ~4410, CompressorScreen
+  ~4866): tambah `Modifier.horizontalScroll(rememberScrollState())`.
+  Pola identik dengan fix Studio action row Batch 41 — bukan pola baru.
+  Tidak ada perubahan gaya/warna/ukuran tombol (identitas visual utuh).
+
+### VERIFIED
+- Static: grep ulang semua `Row(` yang berisi ≥2 komponen
+  Button-family, cross-check mana yang sudah/belum pakai
+  `horizontalScroll`/`weight`.
+- Import `horizontalScroll`/`rememberScrollState` sudah ada di file,
+  tidak perlu import baru.
+- Balance kurung `{}`/`()` MainActivity.kt dicek (net 0/0).
+
+### NOT VERIFIED
+- Runtime/device: tampilan aktual di font-scale besar/layar sempit
+  sungguhan tidak dites di device/emulator pada sesi ini.
+
+### UNTOUCHED
+- Resolution/bitrate controls, progress UI, dialog — sudah diperiksa,
+  tidak ditemukan isu clipping/overflow nyata, tidak disentuh. Gaya
+  tombol (Button vs TextButton per screen) sengaja dibiarkan berbeda —
+  itu identitas visual eksisting, bukan bug, di luar scope Prioritas 6.
+
+### VERDICT
+Prioritas 6: **selesai untuk temuan konkret yang ada**. File diubah:
+`MainActivity.kt` saja (1 file, 3 titik, sesuai micro-batch limit).
+
 ## Batch 44: MICRO_POLISH_GUIDE Prioritas 5 — Lifecycle Filmstrip/Frame Extraction
 
 ### CHANGED

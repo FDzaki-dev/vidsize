@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Video Resizer
 
-Snapshot as of **Batch 44**. This is the first-read file per the context
+Snapshot as of **Batch 45**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -100,11 +100,23 @@ Batch 35) sebelum mulai.
   Deliberately not bumped further — see "Defaults a new reader should know".
 
 ## Pending Queue (not done this batch — do next, in this order)
-1. Eksekusi **MICRO_POLISH_GUIDE.md Prioritas 6** (Responsive/Font-Scale
-   Polish) — satu prioritas per micro-batch (maks 3 file/task).
-2. Prioritas 7–8 menyusul berurutan, lihat MICRO_POLISH_GUIDE.md untuk detail.
+1. Eksekusi **MICRO_POLISH_GUIDE.md Prioritas 7** (Accessibility
+   Micro-Polish) — satu prioritas per micro-batch (maks 3 file/task).
+2. Prioritas 8 menyusul, lihat MICRO_POLISH_GUIDE.md untuk detail.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 45** — MICRO_POLISH_GUIDE Prioritas 6 (Responsive/Font-Scale
+  Polish) [DONE]. Audit chip rows (27 FilterChip di 16 titik) — semua
+  SUDAH pakai LazyRow (scrollable), tidak disentuh. Bug nyata ditemukan:
+  Row aksi hasil "Bagikan"/"Buka di Galeri" di GifScreen & CompressorScreen
+  pakai `Button`/`OutlinedButton` (lebih lebar dari `TextButton`) tanpa
+  proteksi scroll/wrap — berisiko overflow di font-scale besar + layar
+  sempit. ResizerScreen versi sendiri (TextButton, risiko lebih kecil)
+  juga ikut dilindungi utk konsistensi. Fix: tambah
+  `Modifier.horizontalScroll(rememberScrollState())` ke ketiga Row
+  tsb — pola persis yg sudah dipakai di tempat lain file ini (Studio
+  action row Batch 41), tidak ada perubahan gaya tombol/visual identity.
+  File disentuh: MainActivity.kt (1 file).
 - **Batch 44** — MICRO_POLISH_GUIDE Prioritas 5 (Lifecycle Filmstrip/Frame
   Extraction) [DONE]. Audit: LaunchedEffect(selectedUri, durationMs) di
   ResizerScreen/GifScreen/CompressorScreen sudah otomatis benar utk

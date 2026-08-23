@@ -71,7 +71,7 @@ dilepas dengan tepat; pergantian video cepat tidak menyisakan preview
 basi. Perbaiki hanya isu lifecycle/state konkret. DILARANG mendesain
 ulang arsitektur filmstrip.
 
-## PRIORITAS 6 — Responsive / Font-Scale Polish
+## PRIORITAS 6 — Responsive / Font-Scale Polish [DONE — Batch 45]
 Audit layar sempit & font-scale sistem besar. Cek: chips, buttons, action
 rows, dialogs, resolution controls, bitrate controls, progress UI.
 Perbaiki hanya masalah clipping/overflow/touch-target nyata. DILARANG

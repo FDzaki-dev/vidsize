@@ -1625,7 +1625,10 @@ private fun ResizerScreen(
 
                             if (outputFile != null || galleryUri != null) {
                                 Spacer(Modifier.height(10.dp))
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                                ) {
                                     // Gallery integration: opens straight in the
                                     // user's default Gallery/video app when we
                                     // successfully published to MediaStore.
@@ -4407,7 +4410,10 @@ private fun GifScreen(
                     val savedGifFile = resultFile
                     val savedGalleryUri = galleryUri
                     if (savedGifFile != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                        ) {
                             Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); shareGifFile(context, savedGifFile) }) { Text("Bagikan") }
                             if (savedGalleryUri != null) {
                                 OutlinedButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); openGifInGallery(context, savedGalleryUri) }) { Text("Buka di Galeri") }
@@ -4863,7 +4869,10 @@ private fun CompressorScreen(onBack: () -> Unit) {
                     val savedFile = resultFile
                     val savedGalleryUri = galleryUri
                     if (savedFile != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            modifier = Modifier.horizontalScroll(rememberScrollState())
+                        ) {
                             Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); shareVideo(context, savedFile) }) { Text("Bagikan") }
                             if (savedGalleryUri != null) {
                                 OutlinedButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); openInGallery(context, savedGalleryUri) }) { Text("Buka di Galeri") }

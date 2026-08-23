@@ -1,5 +1,104 @@
 # Changelog
 
+## Batch 47: MICRO_POLISH_GUIDE Prioritas 8 — Duplikasi Theme/System-Bar (audit, tidak ada defect)
+
+### AUDITED
+- `app/src/main/res/values/themes.xml` & `values-night/themes.xml` —
+  statis, hardcode warna status/nav bar, cuma resolve lewat qualifier
+  `values-night` (ikut SYSTEM dark mode saja).
+- `ui/theme/Theme.kt` — `VideoResizerTheme()` punya `SideEffect` yang
+  jalan tiap composisi: set `window.statusBarColor`/`navigationBarColor`
+  = `colorScheme.background.toArgb()` DAN
+  `isAppearanceLightStatusBars`/`isAppearanceLightNavigationBars` =
+  `!isDark`, keduanya diturunkan dari `resolvedStyle` (hasil resolve
+  `ThemePreference` in-app milik user — SYSTEM/LIGHT/DARK/3 tema
+  kustom — BUKAN cuma system dark mode mentah).
+
+### KESIMPULAN — TIDAK ADA DEFECT
+Compose `SideEffect` di atas SUDAH menjadi runtime source-of-truth yang
+benar, dan menang setiap frame setelah cold-start pertama — termasuk
+saat user ganti tema in-app secara manual (mis. pilih "Dark" saat sistem
+Light, atau sebaliknya), yang tadinya dikira berpotensi jadi kasus
+"XML vs Compose disagree". Ternyata SideEffect membaca `resolvedStyle`
+(hasil akhir preferensi in-app), bukan `isSystemInDarkTheme()` mentah,
+jadi selalu sinkron dengan tampilan aktual. XML hanya berperan sebagai
+tebakan warna awal sebelum frame Compose pertama — pola standar Android
+utk menghindari flash warna salah saat cold-start, bukan bug, bukan
+sumber kebenaran yang bersaing.
+
+### TIDAK DILAKUKAN
+Sesuai instruksi eksplisit Prioritas 8 sendiri ("Kalau tidak ada defect
+runtime/UI nyata, biarkan") — **tidak ada perubahan kode** batch ini.
+
+### VERDICT
+Prioritas 8: **selesai (audit, tidak ada defect ditemukan)**.
+**MICRO_POLISH_GUIDE.md 8/8 prioritas tuntas (Batch 36-47).** STOP
+CONDITION panduan tercapai — polishing lanjutan menunggu temuan/arahan
+baru dari user, bukan eksekusi otomatis lanjutan. File diubah:
+PROJECT_STATE.md, CHANGELOG.md, MICRO_POLISH_GUIDE.md (dokumentasi saja,
+0 file kode).
+
+## Batch 46: MICRO_POLISH_GUIDE Prioritas 7 — Accessibility Micro-Polish
+
+### AUDITED (tidak diubah — sudah benar)
+- 10 `IconButton` di file — semua sudah punya `contentDescription`
+  bermakna ("Kembali", "Studio", "Menu lainnya", "Play"/"Pause",
+  "Pilih semua", "Hapus yang dipilih", "Batal pilih"/"Kembali", dst).
+- 27 `Icon(contentDescription = null)` — direview satu-satu, semuanya
+  ikon dekoratif bersanding langsung dengan `Text` (leadingIcon chip,
+  label menu, dsb.) — `null` di situ justru praktik a11y yang BENAR
+  (mencegah TalkBack mengumumkan dua kali: ikon + teks di sampingnya).
+- `FilterChip` (selected state) & tombol destruktif (Hapus) — semantics
+  selected/warna sudah ditangani otomatis oleh komponen M3, tidak ada
+  yang menyesatkan.
+
+### FOUND & FIXED
+`TrimHandle` (drag handle batas potong video) — dipakai BERSAMA oleh
+ResizerScreen, GifScreen, dan CompressorScreen lewat `VideoEditorPreview`
+yang sama — outer touch-target `Box`-nya (raw `pointerInput` +
+`detectDragGestures`, bukan komponen Material bawaan) sama sekali TIDAK
+punya semantics node. Buat pengguna TalkBack, handle ini tidak terlihat/
+tidak punya nama sama sekali — kontrol krusial (menentukan potongan video)
+yang sepenuhnya tidak terjangkau non-visual.
+
+### CHANGED
+- `TrimHandle`: parameter baru `label: String`.
+- `Modifier.semantics { contentDescription = label }` ditambah ke outer
+  touch-target Box (48dp), di atas `Modifier.pointerInput`.
+- 2 titik pemanggilan (start/end handle) diisi label deskriptif:
+  `"Batas awal potongan, <waktu>"` / `"Batas akhir potongan, <waktu>"`,
+  pakai `formatSeconds(startMs/endMs)` yang sudah ada di scope yang sama
+  — tidak ada helper/format baru.
+
+### CONSIDERED, TIDAK DILAKUKAN
+Custom accessibility actions (mis. drag lewat TalkBack gesture/slider
+role penuh) — di luar scope micro-polish, akan jadi "framework
+accessibility baru" yang eksplisit dilarang panduan. `contentDescription`
+statis + info posisi saat ini sudah memberi konteks bermakna tanpa itu.
+
+### VERIFIED
+- Static: grep ulang semua `IconButton(` dan `contentDescription = null`
+  di file, direview satu-satu.
+- `startMs`/`endMs`/`formatSeconds` dikonfirmasi sudah ada di scope
+  pemanggil (dipakai juga oleh Text "Potong: ..." di baris yang sama).
+- Import `androidx.compose.ui.semantics.semantics` +
+  `.contentDescription` ditambah (belum ada sebelumnya).
+- Balance kurung `{}`/`()` MainActivity.kt dicek (net 0/0).
+
+### NOT VERIFIED
+- Runtime/device: belum dites dengan TalkBack sungguhan di
+  device/emulator pada sesi ini.
+
+### UNTOUCHED
+- Progress indicators (`CircularProgressIndicator`, teks "X%") — sudah
+  disertai `Text` yang otomatis terbaca TalkBack, tidak ada isu nyata.
+- Logika drag/gesture TrimHandle itu sendiri — tidak disentuh sama
+  sekali, murni tambahan semantics.
+
+### VERDICT
+Prioritas 7: **selesai untuk temuan konkret yang ada**. File diubah:
+`MainActivity.kt` saja (1 file).
+
 ## Batch 45: MICRO_POLISH_GUIDE Prioritas 6 — Responsive/Font-Scale Polish
 
 ### AUDITED (tidak diubah — sudah benar)

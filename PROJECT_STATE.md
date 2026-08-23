@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Video Resizer
 
-Snapshot as of **Batch 45**. This is the first-read file per the context
+Snapshot as of **Batch 47**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -100,11 +100,40 @@ Batch 35) sebelum mulai.
   Deliberately not bumped further — see "Defaults a new reader should know".
 
 ## Pending Queue (not done this batch — do next, in this order)
-1. Eksekusi **MICRO_POLISH_GUIDE.md Prioritas 7** (Accessibility
-   Micro-Polish) — satu prioritas per micro-batch (maks 3 file/task).
-2. Prioritas 8 menyusul, lihat MICRO_POLISH_GUIDE.md untuk detail.
+_Kosong — MICRO_POLISH_GUIDE.md 8/8 prioritas tuntas (Batch 36-47).
+STOP CONDITION panduan tercapai. Item pending berikutnya menunggu
+arahan/temuan baru dari user._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 47** — MICRO_POLISH_GUIDE Prioritas 8 (Duplikasi Theme/
+  System-Bar) [DONE — audit saja, tidak ada defect]. Cek `themes.xml`
+  (values/ + values-night/, statis, cuma ikut system dark mode) vs
+  `Theme.kt`'s `VideoResizerTheme` (Compose runtime, `SideEffect` set
+  `window.statusBarColor`/`navigationBarColor` +
+  `isAppearanceLightStatusBars/NavigationBars` tiap composisi, ikut
+  `resolvedStyle` app — SUDAH benar memperhitungkan in-app theme
+  override, bukan cuma system dark mode). Kesimpulan: Compose SideEffect
+  SUDAH jadi runtime source-of-truth yang benar & menang tiap frame
+  setelah cold-start pertama, termasuk saat user ganti tema in-app.
+  XML cuma warna tebakan awal sebelum frame Compose pertama (pola
+  standar, bukan bug). TIDAK ada defect nyata → sesuai instruksi
+  panduan sendiri ("kalau tidak ada defect runtime/UI nyata, biarkan"),
+  TIDAK ADA PERUBAHAN KODE batch ini. **MICRO_POLISH_GUIDE.md 8/8
+  prioritas tuntas.** File disentuh: PROJECT_STATE.md, CHANGELOG.md,
+  MICRO_POLISH_GUIDE.md (dokumentasi saja).
+- **Batch 46** — MICRO_POLISH_GUIDE Prioritas 7 (Accessibility
+  Micro-Polish) [DONE]. Bug nyata: `TrimHandle` (drag handle
+  trim awal/akhir, dipakai bareng di ResizerScreen/GifScreen/
+  CompressorScreen via `VideoEditorPreview` yang sama) sama sekali TIDAK
+  punya semantics node — cuma `Box` polos dgn raw `pointerInput`/
+  `detectDragGestures`, tidak terjangkau/tidak ada nama sama sekali buat
+  TalkBack. Fix: parameter `label: String` baru + `Modifier.semantics { contentDescription = label }`
+  pada outer touch-target Box, isi "Batas awal/akhir potongan, <waktu>"
+  di kedua titik pemanggilan (reuse `formatSeconds` yg sudah ada). Audit
+  IconButton (10x) & Icon dgn `contentDescription = null` (27x) —
+  semua IconButton sudah punya deskripsi benar, semua null-description
+  adalah ikon dekoratif di samping Text (praktik benar, tidak disentuh).
+  File disentuh: MainActivity.kt (1 file).
 - **Batch 45** — MICRO_POLISH_GUIDE Prioritas 6 (Responsive/Font-Scale
   Polish) [DONE]. Audit chip rows (27 FilterChip di 16 titik) — semua
   SUDAH pakai LazyRow (scrollable), tidak disentuh. Bug nyata ditemukan:

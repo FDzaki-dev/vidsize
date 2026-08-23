@@ -72,6 +72,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -2785,6 +2787,7 @@ private fun VideoEditorPreview(
                         handleWidthPx = handleWidthPx,
                         trackHeight = trackHeight,
                         color = accent,
+                        label = "Batas awal potongan, ${formatSeconds(startMs)}",
                         onDragStart = { pauseIfPlaying() },
                         onFractionChange = { newStart ->
                             onTrimRangeChange(newStart..trimRange.endInclusive)
@@ -2798,6 +2801,7 @@ private fun VideoEditorPreview(
                         handleWidthPx = handleWidthPx,
                         trackHeight = trackHeight,
                         color = accent,
+                        label = "Batas akhir potongan, ${formatSeconds(endMs)}",
                         onDragStart = { pauseIfPlaying() },
                         onFractionChange = { newEnd ->
                             onTrimRangeChange(trimRange.start..newEnd)
@@ -2859,6 +2863,8 @@ private fun TrimHandle(
     handleWidthPx: Float,
     trackHeight: Dp,
     color: Color,
+    /** Batch 46 (Prioritas 7 — Accessibility): TalkBack label for this handle, e.g. "Batas awal potongan, 0:03". Was previously unreachable/nameless to a screen reader — this Box only had a raw pointerInput drag detector, no semantics node at all. */
+    label: String,
     onDragStart: () -> Unit,
     onFractionChange: (Float) -> Unit
 ) {
@@ -2926,6 +2932,7 @@ private fun TrimHandle(
             }
             .width(touchTargetWidth)
             .height(trackHeight)
+            .semantics { contentDescription = label }
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = {

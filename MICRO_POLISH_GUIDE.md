@@ -8,11 +8,9 @@ removable" walau seluruh 8 prioritas di bawah sudah tuntas dikerjakan
 (kalau tuntas, cukup tandai tiap prioritas [DONE] + batch berapa, jangan
 hapus filenya).
 
-**Status saat ditanam: BELUM DIEKSEKUSI.** Batch 35 hanya menanam panduan
-ini secara permanen ke project, tidak mengubah kode/logika apa pun.
-Eksekusi 8 prioritas dilakukan bertahap (micro-batch, maks 3 file/task
-per batch) mulai batch berikutnya, sesuai Pending Queue di
-PROJECT_STATE.md.
+**Status: SEMUA 8 PRIORITAS SELESAI (Batch 36-47).** Panduan ini TETAP
+tidak boleh dihapus (aturan permanen di atas) — untuk task polishing
+UI/UX di masa depan, mulai dari sini dulu sebelum audit baru.
 
 ## TUJUAN
 Bawa VideoResizer ke kondisi polished akhir HANYA dengan perubahan lokal
@@ -77,7 +75,7 @@ rows, dialogs, resolution controls, bitrate controls, progress UI.
 Perbaiki hanya masalah clipping/overflow/touch-target nyata. DILARANG
 mengubah identitas visual tanpa perlu.
 
-## PRIORITAS 7 — Accessibility Micro-Polish
+## PRIORITAS 7 — Accessibility Micro-Polish [DONE — Batch 46]
 Audit semantics/content description yang ada. Perbaiki hanya yang
 hilang/menyesatkan: icon-only controls, trim handles, progress
 indicators, selection chips, destructive actions. Sediakan (kalau
@@ -85,7 +83,7 @@ relevan): content description bermakna, state selected/unselected, state
 enabled/disabled, makna progress/state. DILARANG membangun framework
 accessibility baru.
 
-## PRIORITAS 8 — Duplikasi Theme/System-Bar
+## PRIORITAS 8 — Duplikasi Theme/System-Bar [DONE — Batch 47, audit saja, tidak ada defect]
 Periksa konfigurasi XML theme & Compose theme yang ada. Kalau keduanya
 mendefinisikan system-bar appearance yang overlap: tentukan runtime
 source of truth sebenarnya; hapus/sesuaikan HANYA konfigurasi redundan

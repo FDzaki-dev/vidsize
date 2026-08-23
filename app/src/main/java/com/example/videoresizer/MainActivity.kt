@@ -451,11 +451,23 @@ private fun ResizerScreen(
     // adds zero additional video-decoding work over what already happens.
     var resultThumbnailFile by remember { mutableStateOf<File?>(null) }
     var resultThumbnailBitmap by remember { mutableStateOf<Bitmap?>(null) }
+    // Batch 44 (Prioritas 5): this used to decodeFile() at FULL output
+    // resolution (up to ~8MB as an ARGB_8888 Bitmap for a 1080p export)
+    // just to show it in the small before/after preview column below —
+    // now downsampled to what that preview actually needs, which alone
+    // cuts the allocation by roughly an order of magnitude. Deliberately
+    // NOT also calling .recycle() on the previous bitmap here (unlike
+    // StudioEntryCard's onDispose below, which is safe because that row
+    // has actually left composition) — this state can still be actively
+    // on-screen the instant this LaunchedEffect reassigns it, and
+    // recycling a Bitmap while Compose might still be mid-draw with the
+    // old reference risks a hard crash for marginal benefit now that the
+    // decode itself is already small.
     LaunchedEffect(resultThumbnailFile) {
         val file = resultThumbnailFile
         resultThumbnailBitmap = if (file != null && file.exists()) {
             withContext(Dispatchers.IO) {
-                runCatching { android.graphics.BitmapFactory.decodeFile(file.absolutePath) }.getOrNull()
+                runCatching { decodeSampledBitmapFromFile(file.absolutePath, 480) }.getOrNull()
             }
         } else {
             null
@@ -2057,19 +2069,34 @@ private fun BatchScreen(onBack: () -> Unit) {
         )
     }
 
-    // BUG FIX: BatchScreen had no BackHandler at all — only the on-screen
-    // back arrow in the TopAppBar went through cancelBatch(). Since this
-    // app has no Navigation-Compose back stack (screens are manual state,
-    // not backstack entries), a system back press/gesture with nothing
-    // registered to intercept it falls through to the default platform
-    // behavior, which finishes the Activity — i.e. pressing back here used
-    // to be able to exit the whole app outright while a batch export was
-    // actively running, silently, with none of the same safety the on-screen
-    // button had. Mirrors the same logic as the button so both paths behave
-    // identically.
+    // UX FIX (Batch 43, audit "back/cancel belum merata"): both the
+    // system back gesture and the toolbar arrow used to silently call
+    // cancelBatch() + onBack() with zero warning while a batch export
+    // was actively running — the same gap ResizerScreen/CompressorScreen
+    // already closed for themselves via showExitWhileProcessingConfirm.
+    // Only asks when isProcessing; back while idle behaves exactly as
+    // before (immediate onBack(), no dialog).
+    var showExitWhileProcessingConfirm by remember { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = true) {
-        if (isProcessing) cancelBatch()
-        onBack()
+        if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
+    }
+    if (showExitWhileProcessingConfirm) {
+        AlertDialog(
+            onDismissRequest = { showExitWhileProcessingConfirm = false },
+            title = { Text("Batalkan proses?") },
+            text = { Text("Batch sedang diproses. Keluar sekarang akan menghentikan dan membatalkan seluruh antrean ini.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showExitWhileProcessingConfirm = false
+                    cancelBatch()
+                    onBack()
+                }) { Text("Batalkan proses", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showExitWhileProcessingConfirm = false }) { Text("Tetap di sini") }
+            }
+        )
     }
 
     val isGlass = com.example.videoresizer.ui.theme.LocalIsGlassTheme.current
@@ -2086,8 +2113,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                 navigationIcon = {
                     IconButton(onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        if (isProcessing) cancelBatch()
-                        onBack()
+                        if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
                     }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali")
                     }
@@ -3580,9 +3606,19 @@ private fun StudioEntryCard(
 ) {
     val haptic = LocalHapticFeedback.current
     var thumb by remember(entry.id) { mutableStateOf<Bitmap?>(null) }
+    // Batch 44 (Prioritas 5): was decodeFile() at FULL output resolution
+    // (up to ~8MB as an ARGB_8888 Bitmap for a 1080p export) for every
+    // single row, just to show it at 72dp — LazyColumn compounds this
+    // across however many rows are alive at once while scrolling. Now
+    // downsampled to what this thumbnail actually needs. Deliberately NOT
+    // adding a manual .recycle() on dispose here: with the decode already
+    // this small the memory-pressure problem is solved, and recycling a
+    // Bitmap Compose might still hold a lingering reference to during a
+    // LazyColumn item transition/ripple isn't a risk worth taking for the
+    // little it would still save.
     LaunchedEffect(entry.id) {
         thumb = withContext(Dispatchers.IO) {
-            runCatching { BitmapFactory.decodeFile(entry.thumbnailPath) }.getOrNull()
+            runCatching { decodeSampledBitmapFromFile(entry.thumbnailPath, 240) }.getOrNull()
         }
     }
 
@@ -3872,6 +3908,34 @@ private fun openInGallery(context: android.content.Context, uri: Uri) {
     }
 }
 
+/**
+ * Decodes [path] downsampled to roughly [reqHeightPx] tall instead of full
+ * resolution (Batch 44 — MICRO_POLISH_GUIDE Prioritas 5). Both call sites
+ * that use this (StudioEntryCard's 72dp list thumbnail, ResizerScreen's
+ * before/after result preview) only ever display the result at a few
+ * hundred px at most, but were decoding the underlying JPEG — which is
+ * saved at the FULL output resolution by [extractVideoThumbnail], e.g.
+ * ~8MB as an ARGB_8888 Bitmap for a 1080p export — at full size every
+ * single time. `inJustDecodeBounds` reads just the header first (no pixel
+ * data) to compute a power-of-two `inSampleSize`, so the real decode below
+ * never allocates more than it needs to actually show on screen.
+ */
+private fun decodeSampledBitmapFromFile(path: String, reqHeightPx: Int): Bitmap? {
+    return try {
+        val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeFile(path, boundsOptions)
+        var sampleSize = 1
+        val rawHeight = boundsOptions.outHeight
+        if (rawHeight > reqHeightPx && reqHeightPx > 0) {
+            while (rawHeight / (sampleSize * 2) >= reqHeightPx) sampleSize *= 2
+        }
+        val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
+        BitmapFactory.decodeFile(path, decodeOptions)
+    } catch (e: Exception) {
+        null
+    }
+}
+
 /** Grabs the first frame of [videoFile] and saves it as a JPEG at [thumbnailFile]. Returns success. */
 private fun extractVideoThumbnail(videoFile: File, thumbnailFile: File): Boolean {
     val retriever = MediaMetadataRetriever()
@@ -4084,9 +4148,37 @@ private fun GifScreen(
     // without this a system back press/gesture falls through to the
     // default platform behavior and exits the whole app instead of
     // returning to the Resizer screen underneath.
+    // UX FIX (Batch 43, audit "back/cancel belum merata"): both the
+    // system back gesture and the toolbar arrow used to silently cancel
+    // activeJob + exit with zero warning while a GIF export was actively
+    // running — the on-screen "Batalkan" button (during progress) was the
+    // only path that ever asked/confirmed anything. Same gap
+    // ResizerScreen/CompressorScreen/BatchScreen already closed for
+    // themselves via showExitWhileProcessingConfirm. Only asks when
+    // isProcessing; back while idle behaves exactly as before (immediate
+    // onBack(), no dialog).
+    var showExitWhileProcessingConfirm by remember { mutableStateOf(false) }
     androidx.activity.compose.BackHandler(enabled = true) {
-        if (isProcessing) activeJob?.cancel()
-        onBack()
+        if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
+    }
+    if (showExitWhileProcessingConfirm) {
+        AlertDialog(
+            onDismissRequest = { showExitWhileProcessingConfirm = false },
+            title = { Text("Batalkan proses?") },
+            text = { Text("GIF sedang dibuat. Keluar sekarang akan menghentikan dan membatalkan proses ini.") },
+            confirmButton = {
+                TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                    showExitWhileProcessingConfirm = false
+                    activeJob?.cancel()
+                    isProcessing = false
+                    onBack()
+                }) { Text("Batalkan proses", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = {
+                TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showExitWhileProcessingConfirm = false }) { Text("Tetap di sini") }
+            }
+        )
     }
 
     // Batch 13: same Box-wrap-Scaffold overlay pattern as ResizerScreen, so
@@ -4097,7 +4189,10 @@ private fun GifScreen(
             TopAppBar(
                 title = { Text("Video ke GIF") },
                 navigationIcon = {
-                    IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onBack() }) {
+                    IconButton(onClick = {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
+                    }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },

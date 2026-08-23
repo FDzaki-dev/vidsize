@@ -1,5 +1,100 @@
 # Changelog
 
+## Batch 44: MICRO_POLISH_GUIDE Prioritas 5 — Lifecycle Filmstrip/Frame Extraction
+
+### CHANGED
+- Helper baru `decodeSampledBitmapFromFile(path, reqHeightPx)` di
+  MainActivity.kt: `inJustDecodeBounds` baca dimensi dulu tanpa alokasi
+  pixel, hitung `inSampleSize` power-of-two, baru decode downsampled.
+- `StudioEntryCard` (list history Studio, thumbnail 72dp): ganti
+  `BitmapFactory.decodeFile()` mentah → `decodeSampledBitmapFromFile(path, 240)`.
+- `ResizerScreen`'s `resultThumbnailBitmap` (preview before/after,
+  setengah-lebar-layar): sama, → `decodeSampledBitmapFromFile(path, 480)`.
+
+### AUDITED (tidak diubah — sudah benar)
+- `LaunchedEffect(selectedUri, durationMs)` di ResizerScreen/GifScreen/
+  CompressorScreen (filmstrip 8-frame): Compose structured concurrency
+  sudah otomatis benar — key baru cancel coroutine lama; kalaupun
+  extraction lama sempat selesai di background sebelum ter-cancel,
+  resume coroutine yang sudah dibatalkan tidak akan sempat menjalankan
+  assignment `filmstrip = ...` (CancellationException dilempar duluan).
+  Jadi "ekstraksi frame usang menimpa UI aktif" & "ganti video cepat
+  nyisa preview basi" TIDAK terbukti sebagai bug nyata di kode saat ini.
+- `FilmstripExtractor.extract()`: raw frame dari `getFrameAtTime()` sudah
+  di-`recycle()` setelah discale (kalau scale benar-benar terjadi) — sudah
+  benar, tidak disentuh.
+
+### FOUND & FIXED
+Bug nyata yang ditemukan: 2 titik decode thumbnail dari file JPEG hasil
+`extractVideoThumbnail()` — yang disimpan pada RESOLUSI OUTPUT PENUH (bisa
+1080p+, ~8MB per Bitmap ARGB_8888 saat didekode mentah) — didekode ulang
+tanpa downsampling padahal cuma ditampilkan kecil (72dp list item / preview
+setengah-layar). Compounding risk terbesar ada di `StudioEntryCard` karena
+dipanggil per-row di `LazyColumn` (berpotensi banyak instance hidup
+bersamaan saat scroll cepat).
+
+### CONSIDERED, TIDAK DILAKUKAN
+Sempat menambah `.recycle()` manual untuk bitmap lama (baik saat
+`resultThumbnailBitmap` diganti, maupun via `DisposableEffect(onDispose)`
+di `StudioEntryCard`) — di-drop setelah dipertimbangkan ulang: downsampling
+sendiri sudah memangkas alokasi ~10x, dan recycle() manual di titik yang
+mungkin masih aktif di-draw Compose berisiko crash "Bitmap already
+recycled" yang tidak bisa diverifikasi tanpa runtime testing di sesi ini.
+Sesuai VERIFICATION GATE #8 (kalau runtime testing tidak tersedia,
+nyatakan eksplisit, jangan klaim lolos) — patch teraman yang dipilih.
+
+### VERIFIED
+- Static: setiap call site `BitmapFactory.decodeFile`/`decodeStream` di
+  file di-grep ulang & diperiksa satu-satu.
+- Balance kurung `{}`/`()` seluruh MainActivity.kt dicek (net 0/0).
+- Import `Bitmap`/`BitmapFactory` sudah ada, tidak perlu import baru.
+
+### NOT VERIFIED
+- Runtime/device: perilaku decode/scroll performa Studio list & preview
+  before/after tidak dites di device/emulator sungguhan pada sesi ini.
+
+### UNTOUCHED
+- Logika resize/compress/export, Media3/encoder, navigasi, persistence —
+  tidak disentuh sama sekali. `AsyncThumbnail` (thumbnail gambar watermark
+  yang dipilih user, BUKAN frame video) sengaja tidak disentuh — di luar
+  scope Prioritas 5 ("ekstraksi thumbnail/filmstrip VIDEO").
+
+### VERDICT
+Prioritas 5: **selesai untuk temuan konkret yang ada**. File diubah:
+`MainActivity.kt` saja (1 file, sesuai micro-batch limit).
+
+## Batch 43: Audit + Fix Back/Cancel Konsistensi Antar-Screen
+
+### AUDITED
+Seluruh screen (`ResizerScreen`, `BatchScreen`, `GifScreen`,
+`CompressorScreen`, `StudioScreen`) + semua 13 `AlertDialog` di file,
+fokus pada perilaku back/cancel saat proses sedang berjalan.
+
+### FIXED
+`MainActivity.kt`, `BatchScreen` & `GifScreen` — kedua screen ini
+adalah satu-satunya yang TIDAK konfirmasi sebelum keluar saat proses
+(export batch / pembuatan GIF) sedang berjalan; back (system gesture
+maupun toolbar arrow) langsung `cancel...()` + `onBack()` secara
+diam-diam, kehilangan progres tanpa peringatan sama sekali.
+`ResizerScreen` dan `CompressorScreen` sudah punya proteksi ini dari
+batch sebelumnya. Fix: pola `showExitWhileProcessingConfirm` (dialog
+"Batalkan proses?" + tombol "Batalkan proses"/"Tetap di sini")
+disamakan ke `BatchScreen` & `GifScreen` — 3 titik per screen:
+`BackHandler`, `IconButton` navigationIcon toolbar, dan dialog
+konfirmasi itu sendiri. Back/cancel saat idle (tidak sedang proses)
+tidak berubah — tetap langsung `onBack()`.
+
+### REVIEWED (bukan bug)
+4 `AlertDialog` input custom (Resolusi Kustom, Bitrate Kustom, Ukuran
+Target×2 untuk Resizer & Batch) sengaja set
+`dismissOnBackPress = false` + `onDismissRequest` kosong, sehingga back
+tidak menutup dialog. Ini proteksi anti-accidental-dismiss yang
+disengaja dari batch sebelumnya (form punya tombol Save/Cancel
+eksplisit di bawahnya) — bukan gap, tidak disentuh.
+
+### File disentuh
+`MainActivity.kt` (1 file).
+
 ## Batch 42: Transisi Navigasi Ala iOS (Push/Pop Slide + Fade)
 
 ### CHANGED

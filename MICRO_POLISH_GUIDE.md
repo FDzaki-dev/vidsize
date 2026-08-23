@@ -63,7 +63,7 @@ estimasi, buat jelas secara visual bahwa ukuran hasil encode final bisa
 berbeda. Pertahankan logika kalkulasi/estimasi yang ada kecuali ada bukti
 bug faktual. DILARANG menambah algoritma prediksi rumit.
 
-## PRIORITAS 5 — Lifecycle Filmstrip/Frame Extraction
+## PRIORITAS 5 — Lifecycle Filmstrip/Frame Extraction [DONE — Batch 44]
 Audit ekstraksi thumbnail/filmstrip video. Verifikasi: kerja yang
 dibatalkan/diganti video benar-benar bisa dibatalkan; ekstraksi frame
 usang tidak bisa menimpa UI state video yang aktif sekarang; bitmap besar

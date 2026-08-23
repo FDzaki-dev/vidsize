@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Video Resizer
 
-Snapshot as of **Batch 39**. This is the first-read file per the context
+Snapshot as of **Batch 44**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -44,6 +44,17 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 43 (audit + fix):** Back/cancel konsistensi. Audit seluruh
+  screen (Resizer/Batch/GIF/Compressor/Studio) + semua 13 `AlertDialog`:
+  ResizerScreen & CompressorScreen SUDAH benar (confirm dulu sebelum
+  keluar saat `isProcessing`). **BatchScreen & GifScreen GAP**: back
+  (system gesture + toolbar arrow) langsung cancel proses + keluar
+  tanpa konfirmasi sama sekali. Fix: pola `showExitWhileProcessingConfirm`
+  yang sama disamakan ke 2 screen ini. 4 dialog input (CustomResolution/
+  CustomBitrate/TargetSize×2) sengaja disable back-dismiss
+  (`dismissOnBackPress = false`) — direview, ini BUKAN gap, ini
+  proteksi anti-accidental-dismiss yang disengaja (form punya
+  Save/Cancel eksplisit), tidak disentuh.
 - **Batch 42 (polish):** Navigasi antar-screen (Batch/GIF/Compressor/
   Studio) sebelumnya `if (screen == Screen.X) { Screen(...) }` — instant
   cut, nol animasi (inilah akar keluhan user "transisi terlalu cepat").
@@ -89,11 +100,42 @@ Batch 35) sebelum mulai.
   Deliberately not bumped further — see "Defaults a new reader should know".
 
 ## Pending Queue (not done this batch — do next, in this order)
-1. Eksekusi **MICRO_POLISH_GUIDE.md Prioritas 5** (Lifecycle Filmstrip/
-   Frame Extraction) — satu prioritas per micro-batch (maks 3 file/task).
-2. Prioritas 6–8 menyusul berurutan, lihat MICRO_POLISH_GUIDE.md untuk detail.
+1. Eksekusi **MICRO_POLISH_GUIDE.md Prioritas 6** (Responsive/Font-Scale
+   Polish) — satu prioritas per micro-batch (maks 3 file/task).
+2. Prioritas 7–8 menyusul berurutan, lihat MICRO_POLISH_GUIDE.md untuk detail.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 44** — MICRO_POLISH_GUIDE Prioritas 5 (Lifecycle Filmstrip/Frame
+  Extraction) [DONE]. Audit: LaunchedEffect(selectedUri, durationMs) di
+  ResizerScreen/GifScreen/CompressorScreen sudah otomatis benar utk
+  cancel/no-stale-overwrite (structured concurrency Compose — key baru
+  cancel coroutine lama, resume yang sudah dibatalkan gak sempat assign
+  state). Bug nyata yang ditemukan: `StudioEntryCard` (list history) &
+  `resultThumbnailBitmap` (before/after preview ResizerScreen) sama-sama
+  `BitmapFactory.decodeFile()` thumbnail JPEG di RESOLUSI PENUH (bisa
+  ~8MB per Bitmap ARGB_8888 utk export 1080p) padahal cuma ditampilkan
+  72dp / setengah-lebar-layar. Fix: helper baru `decodeSampledBitmapFromFile()`
+  (inJustDecodeBounds → hitung inSampleSize → decode downsampled),
+  dipakai di kedua titik. Sengaja TIDAK menambah `.recycle()` manual di
+  kedua titik (dipertimbangkan lalu di-drop) — downsampling sendiri sudah
+  memangkas ukuran alokasi ~10x lebih kecil, sementara recycle() manual
+  di tengah kemungkinan Compose masih memegang referensi lama saat draw
+  berisiko crash tanpa bisa diverifikasi runtime di sesi ini. File
+  disentuh: MainActivity.kt (1 file).
+- **Batch 43** — Audit + fix back/cancel konsistensi [DONE]. User:
+  "audit button back/cancelation yang belum merata di seluruh sektor".
+  Audit semua screen + 13 AlertDialog di file. Temuan: ResizerScreen
+  (Batch-lama) & CompressorScreen (Batch 34) sudah punya pola
+  "Batalkan proses?" confirm sebelum keluar saat masih processing.
+  BatchScreen & GifScreen TIDAK — back (baik system gesture maupun
+  toolbar arrow) langsung silent-cancel + keluar, kehilangan progres
+  tanpa peringatan. Fix: samakan pola `showExitWhileProcessingConfirm`
+  ke 2 screen ini (dialog + BackHandler + toolbar arrow, 3 titik per
+  screen). Juga diaudit: 4 dialog input custom (Resolution/Bitrate/
+  TargetSize×2) sengaja `dismissOnBackPress = false` — direview dan
+  disimpulkan itu proteksi anti-accidental-dismiss yang disengaja
+  (form punya Save/Cancel eksplisit), BUKAN bug, tidak disentuh. File
+  disentuh: `MainActivity.kt` (1 file, sesuai micro-batch limit).
 - **Batch 42** — Transisi navigasi ala iOS [DONE]. User: "perbaiki semua
   transisi yang terlalu over fastest, wajib profesional seperti iOS".
   Audit animasi di seluruh file: cuma 1 `AnimatedVisibility` yang sudah

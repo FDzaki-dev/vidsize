@@ -1,5 +1,38 @@
 # Changelog
 
+## Batch 50: Fix cancel-tidak-beneran-cancel di GifExporter (audit umum lanjutan)
+
+Audit cari-bug umum (lanjutan Batch 49) menemukan bug nyata:
+`GifExporter.export()` adalah fungsi blocking biasa (bukan `suspend`),
+tanpa satupun cek `ensureActive()`/cancellation di kedua loop utamanya
+(ekstraksi frame ~40% + kuantisasi warna ~50% dari total kerja).
+Akibatnya `activeJob?.cancel()` yang dipanggil tombol "Batalkan" dan
+dialog konfirmasi-keluar `GifScreen` cuma menandai coroutine
+`Cancelled` secara administratif — CPU tetap menjalankan seluruh sisa
+loop sampai selesai natural, membuang baterai/CPU sia-sia walau UI
+sudah langsung menampilkan "Dibatalkan.", dan hasil akhirnya dibuang
+diam-diam (tidak pernah masuk histori Studio atau galeri, karena
+coroutine yang menampung hasilnya sudah cancelled duluan).
+
+Fix: `export()` diubah jadi `suspend fun`, ditambah
+`coroutineContext.ensureActive()` di baris pertama kedua loop, supaya
+titik henti nyata ada di setiap iterasi (bukan cuma di akhir fungsi).
+Ditambah juga `catch (kotlinx.coroutines.CancellationException) { ...;
+throw e }` eksplisit DI ATAS `catch (Exception)` yang sudah ada di
+kedua titik try/catch — kalau tidak, `CancellationException` (subclass
+`Exception`) akan tertangkap generic catch dan berubah jadi hasil
+`GifExportResult.Failure` palsu, yang merusak structured concurrency
+(job yang dibatalkan tidak akan pernah benar-benar selesai
+di-cancel). Bitmap yang belum sempat di-`recycle()` saat pembatalan
+terjadi di tengah loop kuantisasi dibersihkan eksplisit di catch-nya
+(`consistentBitmaps.drop(indexedFrames.size).forEach { it.recycle() }`)
+supaya tidak ada native bitmap memory yang leak selama unwind.
+
+Tidak ada perubahan di pemanggil (`MainActivity.kt`) — `suspend fun`
+tetap valid dipanggil dari dalam `withContext(Dispatchers.Default) {
+GifExporter.export(...) }` yang sudah ada sejak awal. 1 file disentuh
+(`GifExporter.kt`).
+
 ## Batch 49: Fix ExportForegroundService tidak pernah dipanggil di GIF (audit umum)
 
 Audit cari-bug umum menemukan bug nyata: `ExportForegroundService`

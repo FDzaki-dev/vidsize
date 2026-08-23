@@ -100,11 +100,33 @@ Batch 35) sebelum mulai.
   Deliberately not bumped further — see "Defaults a new reader should know".
 
 ## Pending Queue (not done this batch — do next, in this order)
-_Kosong — bug ExportForegroundService di GIF (Batch 49) tuntas
-diperbaiki. Item pending berikutnya menunggu arahan/temuan baru dari
-user._
+_Kosong — bug cancel-tidak-beneran-cancel di GifExporter (Batch 50)
+tuntas diperbaiki. Item pending berikutnya menunggu arahan/temuan baru
+dari user._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 50** — Audit cari-bug umum (lanjutan). Bug nyata ditemukan:
+  `GifExporter.export()` adalah fungsi blocking biasa (bukan `suspend`),
+  tanpa satupun cek `ensureActive()`/cancellation di kedua loop utamanya
+  (ekstraksi frame + kuantisasi warna). Akibatnya `activeJob?.cancel()`
+  di tombol "Batalkan"/dialog-keluar `GifScreen` cuma menandai coroutine
+  cancelled tapi TIDAK menghentikan kerja CPU yang sedang berjalan —
+  encoding tetap lanjut sampai selesai di background (buang CPU/baterai
+  walau UI sudah bilang "Dibatalkan."), lalu hasilnya dibuang diam-diam
+  tanpa pernah masuk histori/galeri. Fix: `export()` diubah jadi
+  `suspend fun`, ditambah `coroutineContext.ensureActive()` di awal
+  kedua loop, DAN `catch (CancellationException) { ...; throw e }`
+  eksplisit di atas `catch (Exception)` di kedua titik (kalau tidak,
+  `CancellationException` — yang merupakan subclass `Exception` — akan
+  tertangkap generic catch dan berubah jadi hasil `Failure` palsu,
+  merusak structured concurrency). Bitmap yang belum sempat di-recycle
+  saat pembatalan terjadi di loop kuantisasi juga dibersihkan eksplisit
+  di catch-nya (`consistentBitmaps.drop(indexedFrames.size).forEach {
+  it.recycle() }`) supaya tidak ada native bitmap yang leak saat
+  unwind. Tidak ada perubahan di pemanggilnya (`MainActivity.kt`) —
+  `suspend fun` tetap valid dipanggil dari dalam
+  `withContext(Dispatchers.Default) { ... }` yang sudah ada. 1 file
+  disentuh (`GifExporter.kt`).
 - **Batch 49** — Audit cari-bug umum. Bug nyata ditemukan:
   `ExportForegroundService` (proteksi anti-background-kill saat proses
   lama) TIDAK PERNAH dipanggil di `GifScreen` — Resize/Batch/Compress

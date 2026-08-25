@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Video Resizer
 
-Snapshot as of **Batch 47**. This is the first-read file per the context
+Snapshot as of **Batch 48**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -100,69 +100,25 @@ Batch 35) sebelum mulai.
   Deliberately not bumped further — see "Defaults a new reader should know".
 
 ## Pending Queue (not done this batch — do next, in this order)
-_Kosong — bug cancel-tidak-beneran-cancel di GifExporter (Batch 50)
-tuntas diperbaiki. Item pending berikutnya menunggu arahan/temuan baru
-dari user._
+1. **Rebrand "Video Resizer" → "Vidsize" — sisa dokumentasi.** Kode &
+   strings.xml sudah selesai Batch 48 (4 file, sudah kena cap). Sisa
+   referensi nama lama murni di dokumentasi: README.md, CHANGELOG.md
+   (entri lama sengaja tidak diubah retroaktif — bukan bagian rebrand),
+   PROJECT_STATE.md (judul), MICRO_POLISH_GUIDE.md (kalau ada). Ganti
+   HANYA judul/heading utama, bukan isi historis batch lama.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
-- **Batch 50** — Audit cari-bug umum (lanjutan). Bug nyata ditemukan:
-  `GifExporter.export()` adalah fungsi blocking biasa (bukan `suspend`),
-  tanpa satupun cek `ensureActive()`/cancellation di kedua loop utamanya
-  (ekstraksi frame + kuantisasi warna). Akibatnya `activeJob?.cancel()`
-  di tombol "Batalkan"/dialog-keluar `GifScreen` cuma menandai coroutine
-  cancelled tapi TIDAK menghentikan kerja CPU yang sedang berjalan —
-  encoding tetap lanjut sampai selesai di background (buang CPU/baterai
-  walau UI sudah bilang "Dibatalkan."), lalu hasilnya dibuang diam-diam
-  tanpa pernah masuk histori/galeri. Fix: `export()` diubah jadi
-  `suspend fun`, ditambah `coroutineContext.ensureActive()` di awal
-  kedua loop, DAN `catch (CancellationException) { ...; throw e }`
-  eksplisit di atas `catch (Exception)` di kedua titik (kalau tidak,
-  `CancellationException` — yang merupakan subclass `Exception` — akan
-  tertangkap generic catch dan berubah jadi hasil `Failure` palsu,
-  merusak structured concurrency). Bitmap yang belum sempat di-recycle
-  saat pembatalan terjadi di loop kuantisasi juga dibersihkan eksplisit
-  di catch-nya (`consistentBitmaps.drop(indexedFrames.size).forEach {
-  it.recycle() }`) supaya tidak ada native bitmap yang leak saat
-  unwind. Tidak ada perubahan di pemanggilnya (`MainActivity.kt`) —
-  `suspend fun` tetap valid dipanggil dari dalam
-  `withContext(Dispatchers.Default) { ... }` yang sudah ada. 1 file
-  disentuh (`GifExporter.kt`).
-- **Batch 49** — Audit cari-bug umum. Bug nyata ditemukan:
-  `ExportForegroundService` (proteksi anti-background-kill saat proses
-  lama) TIDAK PERNAH dipanggil di `GifScreen` — Resize/Batch/Compress
-  ketiganya sudah `start()`/`updateProgress()`/`stop()` sejak batch lama,
-  tapi jalur konversi GIF terlewat total sejak fitur GIF pertama kali
-  dibuat. Dampak: user yang mengunci layar/pindah app saat GIF sedang
-  dibuat berisiko proses mati diam-diam kalau OS membunuh proses di
-  background — persis bug class yang `ExportForegroundService` dibuat
-  untuk mencegah, tapi GIF tidak pernah kebagian proteksinya. Fix: 5
-  titik ditambah agar simetris dengan 3 screen lain — `start()` di awal
-  proses, `updateProgress()` di callback progress, `stop()` di jalur
-  selesai normal DAN di kedua jalur cancel (tombol "Batalkan" +
-  konfirmasi keluar-saat-proses). Diaudit juga MediaMetadataRetriever/
-  MediaExtractor (6 titik) — semua sudah try/finally atau
-  runCatching+release yang benar, tidak ada leak. CrashLogger &
-  ExportForegroundService sendiri direview — tidak ada bug. 1 file
-  disentuh (`MainActivity.kt`).
-- **Batch 48** — Inspeksi mendalam regresi "gesture back memicu close app
-  langsung, bukan balik bertahap". Root cause ditemukan:
-  `android:enableOnBackInvokedCallback` TIDAK ADA di `<application>`
-  AndroidManifest.xml, padahal `targetSdk=34` (Android 14). Tanpa flag
-  ini, sistem predictive-back tidak tahu app sudah register
-  `OnBackPressedCallback` (basis semua `BackHandler` Compose di
-  Batch/GIF/Compressor/StudioScreen) — OS selalu preview animasi "app
-  akan tertutup" di tiap gesture back walau `BackHandler` sebenarnya
-  intercept di detik akhir, persis gejala yang dilaporkan. Diaudit juga
-  seluruh 5 screen (Resizer/Batch/GIF/Compressor/Studio): keempat
-  sub-screen SUDAH punya `BackHandler(enabled = true)` + toolbar-arrow
-  yang konsisten logic-nya (gesture & tombol toolbar sama-sama cek
-  `isProcessing`/`selectionMode` sebelum `onBack()`) — tidak ada gap
-  lain di situ, sudah benar sejak Batch 43. ResizerScreen sengaja
-  `enabled = isProcessing` saja (ia layar utama, back saat idle = keluar
-  app, itu perilaku benar bukan bug). Fix: tambah
-  `android:enableOnBackInvokedCallback="true"` (edit-parsial, 1 atribut)
-  + komentar penjelasan di manifest. XML divalidasi well-formed. 1 file
-  disentuh (`AndroidManifest.xml`, protected asset — edit parsial only).
+- **Batch 48** — Rebrand kosmetik "Video Resizer" → **"Vidsize"** (nama
+  simpel, langsung kebaca fungsinya = video+resize), atas permintaan
+  user. Scope: HANYA nama tampil (display brand text), BUKAN package
+  name/applicationId (`com.example.videoresizer` tidak disentuh — itu
+  perubahan struktural, di luar "kosmetik", butuh izin eksplisit
+  terpisah kalau memang diinginkan). 4 file kena cap batch ini:
+  `strings.xml` (`app_name`), `MainActivity.kt` (Text judul TopAppBar +
+  komentar bug-fix Batch 23 yg mengutip nama lama), `CrashLogger.kt`
+  (header file crash log), `VideoPickerScreen.kt` (teks rationale izin
+  baca video). Sisa referensi nama lama di file dokumentasi (.md)
+  di-queue ke batch berikutnya (cap 3 file/task sudah tercapai).
 - **Batch 47** — MICRO_POLISH_GUIDE Prioritas 8 (Duplikasi Theme/
   System-Bar) [DONE — audit saja, tidak ada defect]. Cek `themes.xml`
   (values/ + values-night/, statis, cuma ikut system dark mode) vs

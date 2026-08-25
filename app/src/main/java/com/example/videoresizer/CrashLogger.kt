@@ -87,7 +87,7 @@ object CrashLogger {
         }
 
         return buildString {
-            appendLine("=== Video Resizer crash log ===")
+            appendLine("=== Vidsize crash log ===")
             appendLine("Timestamp: ${Date()}")
             appendLine("App version: $versionInfo")
             appendLine("OS: Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")

@@ -337,7 +337,7 @@ private fun PermissionRequestPanel(onGrant: () -> Unit) {
         Text("Izin akses video diperlukan", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Video Resizer perlu izin membaca video di perangkatmu supaya bisa menampilkan daftar video di sini.",
+            "Vidsize perlu izin membaca video di perangkatmu supaya bisa menampilkan daftar video di sini.",
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             style = MaterialTheme.typography.bodyMedium

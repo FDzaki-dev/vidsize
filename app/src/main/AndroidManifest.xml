@@ -49,18 +49,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.VideoResizer"
         android:fullBackupContent="@xml/backup_rules"
-        android:dataExtractionRules="@xml/data_extraction_rules"
-        android:enableOnBackInvokedCallback="true">
-        <!-- REGRESSION FIX: targetSdk=34 (Android 14) tanpa flag ini bikin
-             sistem predictive-back TIDAK tahu app sudah register
-             OnBackPressedCallback (basis semua BackHandler Compose di
-             BatchScreen/GifScreen/CompressorScreen/StudioScreen). Efeknya:
-             OS selalu preview "app akan tertutup" di setiap gesture back,
-             walau BackHandler menangkapnya di detik akhir — persis gejala
-             "gesture back memicu close app langsung, bukan balik
-             bertahap". Fix: opt-in predictive back resmi supaya sistem
-             tahu callback terdaftar dan preview animasinya benar
-             (balik-dalam-app), bukan animasi tutup-app. -->
+        android:dataExtractionRules="@xml/data_extraction_rules">
 
         <provider
             android:name="androidx.core.content.FileProvider"

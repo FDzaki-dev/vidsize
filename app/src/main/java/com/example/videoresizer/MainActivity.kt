@@ -894,9 +894,13 @@ private fun ResizerScreen(
                     // bar (update/compress/batch/gif/studio/theme, since
                     // Batch 21's update button), the title slot's available
                     // width shrank enough that this Text — which had no
-                    // maxLines/overflow — wrapped "Video Resizer" onto a
-                    // second line and got clipped by TopAppBar's fixed
-                    // height, rendering as garbled fragments ("eo"/"Res").
+                    // maxLines/overflow — wrapped the old "Video Resizer"
+                    // name onto a second line and got clipped by TopAppBar's
+                    // fixed height, rendering as garbled fragments
+                    // ("eo"/"Res"). Renamed to "Vidsize" in Batch 48
+                    // (cosmetic rebrand) — shorter, so this wrap risk is
+                    // now moot in practice, but the guard stays since a
+                    // narrow-enough screen could still in theory clip it.
                     // weight(1f, fill=false) lets the title shrink to
                     // whatever width remains instead of forcing the Row
                     // wider than it has room for; maxLines=1 + Ellipsis
@@ -914,7 +918,7 @@ private fun ResizerScreen(
                         }
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
-                            "Video Resizer",
+                            "Vidsize",
                             fontWeight = FontWeight.SemiBold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -4182,7 +4186,6 @@ private fun GifScreen(
                     showExitWhileProcessingConfirm = false
                     activeJob?.cancel()
                     isProcessing = false
-                    ExportForegroundService.stop(context)
                     onBack()
                 }) { Text("Batalkan proses", color = MaterialTheme.colorScheme.error) }
             },
@@ -4309,7 +4312,6 @@ private fun GifScreen(
                                 haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                 activeJob?.cancel()
                                 isProcessing = false
-                                ExportForegroundService.stop(context)
                                 message = "Dibatalkan."
                             }) { Text("Batalkan") }
                         }
@@ -4325,7 +4327,6 @@ private fun GifScreen(
                             resultFile = null
                             galleryUri = null
                             val outFile = File(context.cacheDir, "gif_${UUID.randomUUID()}.gif")
-                            ExportForegroundService.start(context)
                             activeJob = scope.launch {
                                 val result = withContext(Dispatchers.Default) {
                                     GifExporter.export(
@@ -4344,15 +4345,11 @@ private fun GifScreen(
                                             // touching Compose state, rather than
                                             // relying on the snapshot system to
                                             // paper over a cross-thread write.
-                                            scope.launch(Dispatchers.Main) {
-                                                progress = p
-                                                ExportForegroundService.updateProgress(context, p)
-                                            }
+                                            scope.launch(Dispatchers.Main) { progress = p }
                                         }
                                     )
                                 }
                                 isProcessing = false
-                                ExportForegroundService.stop(context)
                                 when (result) {
                                     is GifExportResult.Success -> {
                                         val publicUri = withContext(Dispatchers.IO) {

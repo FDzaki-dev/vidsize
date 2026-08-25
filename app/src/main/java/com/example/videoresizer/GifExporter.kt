@@ -4,8 +4,6 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.media.MediaMetadataRetriever
 import android.net.Uri
-import kotlin.coroutines.coroutineContext
-import kotlinx.coroutines.ensureActive
 import java.io.File
 import java.io.FileOutputStream
 import kotlin.math.max
@@ -41,16 +39,7 @@ object GifExporter {
      */
     const val MAX_FRAMES = 200
 
-    // BUG FIX (audit, Batch 50): cancellation was cosmetic-only. This is
-    // now `suspend` + calls `coroutineContext.ensureActive()` at the top
-    // of both hot loops below, so `activeJob?.cancel()` in GifScreen
-    // actually halts the CPU work at the next frame boundary instead of
-    // silently running to completion after the UI already said
-    // "Dibatalkan." — the same class of bug Batch 31 fixed for
-    // BatchScreen's Transformer path, but this one's root cause is the
-    // opposite: no suspension point existed anywhere in this function for
-    // a cancelled Job to actually interrupt.
-    suspend fun export(
+    fun export(
         context: Context,
         sourceUri: Uri,
         startMs: Long,
@@ -81,7 +70,6 @@ object GifExporter {
         try {
             retriever.setDataSource(context, sourceUri)
             for (i in 0 until frameCount) {
-                coroutineContext.ensureActive()
                 val timeMs = startMs + (i * actualIntervalMs).toLong()
                 val frame = retriever.getFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST)
                     ?: continue
@@ -98,13 +86,6 @@ object GifExporter {
                 // quantizing (40-90%) and LZW encoding (90-100%) make up the rest.
                 onProgress((((i + 1) * 40) / frameCount).coerceIn(0, 40))
             }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // MUST re-throw, never swallow — catching this as a generic
-            // Exception below would turn a real cancellation into a fake
-            // "Failure" result and break structured concurrency (the
-            // cancelling coroutine would never actually finish cancelling).
-            bitmaps.forEach { it.recycle() }
-            throw e
         } catch (e: Exception) {
             bitmaps.forEach { it.recycle() }
             return GifExportResult.Failure(e.message ?: "Gagal membaca video sumber")
@@ -138,21 +119,10 @@ object GifExporter {
         val paletteB = IntArray(palette.size) { palette[it] and 0xFF }
 
         val indexedFrames = ArrayList<ByteArray>(consistentBitmaps.size)
-        try {
-            for ((i, bmp) in consistentBitmaps.withIndex()) {
-                coroutineContext.ensureActive()
-                indexedFrames.add(quantizeFrame(bmp, paletteR, paletteG, paletteB, width, height))
-                bmp.recycle()
-                onProgress((40 + ((i + 1) * 50) / consistentBitmaps.size).coerceIn(40, 90))
-            }
-        } catch (e: kotlinx.coroutines.CancellationException) {
-            // Bitmaps already quantized above are recycled in-loop; this
-            // cleans up the ones still pending when cancellation hit, so a
-            // cancelled GIF export doesn't leak native bitmap memory while
-            // it unwinds. Re-throw is mandatory — see comment on the
-            // frame-extraction catch block above.
-            consistentBitmaps.drop(indexedFrames.size).forEach { if (!it.isRecycled) it.recycle() }
-            throw e
+        for ((i, bmp) in consistentBitmaps.withIndex()) {
+            indexedFrames.add(quantizeFrame(bmp, paletteR, paletteG, paletteB, width, height))
+            bmp.recycle()
+            onProgress((40 + ((i + 1) * 50) / consistentBitmaps.size).coerceIn(40, 90))
         }
 
         val delayCentiseconds = max(2, (actualIntervalMs / 10.0).toInt())

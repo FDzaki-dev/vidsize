@@ -1,91 +1,42 @@
 # Changelog
 
-## Batch 50: Fix cancel-tidak-beneran-cancel di GifExporter (audit umum lanjutan)
+## Batch 48: Rebrand kosmetik — "Video Resizer" → "Vidsize"
 
-Audit cari-bug umum (lanjutan Batch 49) menemukan bug nyata:
-`GifExporter.export()` adalah fungsi blocking biasa (bukan `suspend`),
-tanpa satupun cek `ensureActive()`/cancellation di kedua loop utamanya
-(ekstraksi frame ~40% + kuantisasi warna ~50% dari total kerja).
-Akibatnya `activeJob?.cancel()` yang dipanggil tombol "Batalkan" dan
-dialog konfirmasi-keluar `GifScreen` cuma menandai coroutine
-`Cancelled` secara administratif — CPU tetap menjalankan seluruh sisa
-loop sampai selesai natural, membuang baterai/CPU sia-sia walau UI
-sudah langsung menampilkan "Dibatalkan.", dan hasil akhirnya dibuang
-diam-diam (tidak pernah masuk histori Studio atau galeri, karena
-coroutine yang menampung hasilnya sudah cancelled duluan).
+Atas permintaan user: nama app diganti ke sesuatu yang simpel & langsung
+kebaca fungsinya. User memilih **"Vidsize"** dari daftar opsi (video +
+size/resize, jelas fungsinya di nama). Scope dibatasi eksplisit
+"kosmetik only" — hanya nama tampil/brand text, BUKAN package name.
 
-Fix: `export()` diubah jadi `suspend fun`, ditambah
-`coroutineContext.ensureActive()` di baris pertama kedua loop, supaya
-titik henti nyata ada di setiap iterasi (bukan cuma di akhir fungsi).
-Ditambah juga `catch (kotlinx.coroutines.CancellationException) { ...;
-throw e }` eksplisit DI ATAS `catch (Exception)` yang sudah ada di
-kedua titik try/catch — kalau tidak, `CancellationException` (subclass
-`Exception`) akan tertangkap generic catch dan berubah jadi hasil
-`GifExportResult.Failure` palsu, yang merusak structured concurrency
-(job yang dibatalkan tidak akan pernah benar-benar selesai
-di-cancel). Bitmap yang belum sempat di-`recycle()` saat pembatalan
-terjadi di tengah loop kuantisasi dibersihkan eksplisit di catch-nya
-(`consistentBitmaps.drop(indexedFrames.size).forEach { it.recycle() }`)
-supaya tidak ada native bitmap memory yang leak selama unwind.
+### CHANGED (4 file, kena cap micro-batch)
+- `res/values/strings.xml`: `app_name` = "Vidsize".
+- `MainActivity.kt`: `Text("Video Resizer")` hardcoded di judul TopAppBar
+  → `"Vidsize"`; komentar bug-fix Batch 23 di atasnya diupdate biar tetap
+  akurat (masih menjelaskan histori bug yang sama, cuma nama app-nya
+  diganti + catatan bahwa nama baru yg lebih pendek otomatis mengurangi
+  risiko wrap yang jadi alasan fix itu ada).
+- `CrashLogger.kt`: header `"=== Video Resizer crash log ==="` →
+  `"=== Vidsize crash log ==="`.
+- `VideoPickerScreen.kt`: teks rationale izin baca video, "Video Resizer
+  perlu izin..." → "Vidsize perlu izin...".
 
-Tidak ada perubahan di pemanggil (`MainActivity.kt`) — `suspend fun`
-tetap valid dipanggil dari dalam `withContext(Dispatchers.Default) {
-GifExporter.export(...) }` yang sudah ada sejak awal. 1 file disentuh
-(`GifExporter.kt`).
+### SENGAJA TIDAK DISENTUH
+- **Package name / applicationId** (`com.example.videoresizer`) —
+  perubahan struktural (rename folder Kotlin, update build.gradle.kts
+  yang protected, ganti keystore signing config, dst.), bukan kosmetik,
+  butuh izin eksplisit terpisah kalau memang mau dilakukan.
+- Dokumentasi (.md) — README.md, CHANGELOG.md (entri lama), PROJECT_STATE.md
+  judul, MICRO_POLISH_GUIDE.md — masuk Pending Queue, cap 3 file/task
+  batch ini sudah tercapai di sisi kode.
 
-## Batch 49: Fix ExportForegroundService tidak pernah dipanggil di GIF (audit umum)
+### VERIFIED
+- Grep ulang `"Video Resizer"` di seluruh `app/src/main/java` &
+  `app/src/main/res` — bersih, sisa cuma 1 referensi historis di
+  komentar (sengaja dipertahankan sbg konteks bug-fix lama).
+- Balance kurung `{}`/`()` ketiga file .kt dicek (net 0/0 semua).
 
-Audit cari-bug umum menemukan bug nyata: `ExportForegroundService`
-(proteksi anti-background-kill saat proses ekspor berjalan lama) sudah
-dipanggil dengan benar di `ResizerScreen`, `BatchScreen`, dan
-`CompressorScreen` — tapi `GifScreen` terlewat total sejak fitur GIF
-pertama kali dibuat. Dampak nyata: kalau user mengunci layar atau
-pindah ke app lain saat GIF sedang dibuat, proses tidak punya
-proteksi foreground-priority sama sekali — OS bisa membunuh proses di
-background dan konversi GIF mati diam-diam, persis bug class yang
-`ExportForegroundService` memang dibuat untuk mencegah.
-
-Fix: 5 titik ditambah di `GifScreen` supaya simetris dengan 3 screen
-lain — `ExportForegroundService.start(context)` saat proses mulai,
-`updateProgress(context, p)` di callback progress (dipanggil bareng
-update state Compose di Main thread), dan `stop(context)` di 3 jalur
-keluar: selesai normal, tombol "Batalkan" saat proses berjalan, dan
-konfirmasi keluar-saat-proses (dialog "Batalkan proses?").
-
-Diaudit juga jalur resource lain yang rawan leak: 6 instantiasi
-`MediaMetadataRetriever`/`MediaExtractor` di seluruh file — semua sudah
-`try/finally { retriever.release() }` atau `runCatching` + release
-tanpa terkecuali, tidak ada leak. `CrashLogger.kt` dan
-`ExportForegroundService.kt` sendiri direview baris-per-baris — tidak
-ada bug ditemukan di keduanya. 1 file disentuh (`MainActivity.kt`).
-
-## Batch 48: Fix regresi gesture-back memicu close app langsung
-
-Root cause: `android:enableOnBackInvokedCallback` tidak pernah
-ditambahkan ke `<application>` di AndroidManifest.xml walau
-`targetSdk=34` (Android 14). Tanpa flag ini, sistem predictive-back
-tidak tahu app sudah register `OnBackPressedCallback` (basis semua
-`BackHandler` Compose yang menangani navigasi Batch/GIF/Compressor/
-StudioScreen) — OS jadi selalu menampilkan preview animasi "app akan
-tertutup" untuk setiap gesture back, walau `BackHandler` di kode
-sebenarnya intercept-nya di detik akhir. Ini persis match gejala yang
-dilaporkan: "gesture back memicu close app langsung, bukan balik
-bertahap".
-
-Audit juga dilakukan atas seluruh 5 screen (Resizer/Batch/GIF/
-Compressor/Studio) untuk pastikan tidak ada gap lain di kelas bug yang
-sama: keempat sub-screen sudah punya `BackHandler(enabled = true)`
-sejak Batch 43, dan toolbar-arrow-nya konsisten logic dengan gesture
-(sama-sama cek `isProcessing`/`selectionMode` sebelum `onBack()`) — jadi
-tidak ada regresi lain ditemukan di jalur back itu sendiri.
-ResizerScreen sengaja `enabled = isProcessing` saja karena ia layar
-utama — back saat idle memang harus keluar app, bukan bug.
-
-Fix: tambah 1 atribut `android:enableOnBackInvokedCallback="true"` +
-komentar penjelasan di manifest. XML divalidasi well-formed lewat
-`xml.etree.ElementTree`. 1 file disentuh (`AndroidManifest.xml`,
-protected asset — edit parsial only, tidak ada elemen lain yang
-disentuh/dihapus).
+### NOT VERIFIED
+Runtime/device: tampilan judul TopAppBar & teks izin belum dites visual
+di device/emulator sungguhan pada sesi ini.
 
 ## Batch 47: MICRO_POLISH_GUIDE Prioritas 8 — Duplikasi Theme/System-Bar (audit, tidak ada defect)
 

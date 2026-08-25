@@ -1,4 +1,4 @@
-# Video Resizer (Android, Jetpack Compose)
+# Vidsize (Android, Jetpack Compose)
 
 A from-scratch Android app that resizes videos by **aspect ratio**, **resolution**
 (including exact custom dimensions), **trim range**, **rotation**, and **mute**,
@@ -107,15 +107,15 @@ download the finished file on your phone.
 3. Once pushed, GitHub Actions runs automatically (see `.github/workflows/build.yml`).
    Check progress under the repo's **Actions** tab.
 4. When the run finishes (green check), open that run → scroll to **Artifacts** →
-   download **VideoResizer-release**. It downloads as a `.zip` containing
-   `VideoResizer-release.apk` — a **release build** (not debug), which avoids the extra
+   download **Vidsize-release**. It downloads as a `.zip` containing
+   `Vidsize-release.apk` — a **release build** (not debug), which avoids the extra
    overhead/instrumentation a debug build carries, so playback and UI should
    feel noticeably smoother. It's signed with Gradle's auto-generated debug
    keystore purely so it stays directly installable; that's fine for
    personal use but isn't a Play Store–ready signature.
-5. Unzip it on your phone, tap `VideoResizer-release.apk` to install (Android will ask you to
+5. Unzip it on your phone, tap `Vidsize-release.apk` to install (Android will ask you to
    allow "install unknown apps" for your browser/file manager the first time),
-   and open **Video Resizer**.
+   and open **Vidsize**.
 
 ### Alternative: build entirely on-device with Termux
 If you'd rather not use GitHub at all, Termux can build Android projects locally,

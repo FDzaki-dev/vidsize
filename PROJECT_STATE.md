@@ -1,6 +1,6 @@
-# PROJECT_STATE.md — Video Resizer
+# PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 48**. This is the first-read file per the context
+Snapshot as of **Batch 50**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -100,14 +100,37 @@ Batch 35) sebelum mulai.
   Deliberately not bumped further — see "Defaults a new reader should know".
 
 ## Pending Queue (not done this batch — do next, in this order)
-1. **Rebrand "Video Resizer" → "Vidsize" — sisa dokumentasi.** Kode &
-   strings.xml sudah selesai Batch 48 (4 file, sudah kena cap). Sisa
-   referensi nama lama murni di dokumentasi: README.md, CHANGELOG.md
-   (entri lama sengaja tidak diubah retroaktif — bukan bagian rebrand),
-   PROJECT_STATE.md (judul), MICRO_POLISH_GUIDE.md (kalau ada). Ganti
-   HANYA judul/heading utama, bukan isi historis batch lama.
+_Kosong. Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI,
+dokumentasi, nama file APK Release). 1 item sisanya (rename repo GitHub)
+tetap aksi manual di luar ZIP — lihat pesan chat._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 50** — Rename nama file APK GitHub Release: `VideoResizer-v...
+  -release.apk` → `Vidsize-v...-release.apk`. Izin eksplisit diberikan
+  user utk edit-parsial `.github/workflows/build.yml` (protected file,
+  1 baris: variabel `OUT_NAME`). Diverifikasi TIDAK menyentuh/merusak:
+  `RELEASE_TAG` (variabel terpisah, format tag rilis tidak berubah),
+  Stale Run Guard (bandingkan `$GITHUB_SHA` vs tip `main`, tidak terkait
+  nama file sama sekali), `AppUpdater.kt` (match asset rilis lewat
+  `name.endsWith(".apk")` — bukan hardcode prefix nama, jadi auto-updater
+  in-app TIDAK terpengaruh sama sekali oleh rename ini). README.md ikut
+  diupdate (3 titik instruksi install current/forward-facing) — entri
+  histori v1.9/v1.10 yg cerita soal nama file lama SENGAJA tidak
+  disentuh (catatan sejarah). File disentuh: `.github/workflows/build.yml`,
+  `README.md`.
+- **Batch 49** — Lanjutan rebrand: sisa judul dokumentasi. `README.md`
+  (H1 title + instruksi "open **Vidsize**" — HANYA teks current/forward,
+  entri histori v1.9 yg cerita soal app lain kebetulan sama-sama
+  bernama "Video Resizer" SENGAJA tidak diubah, itu catatan sejarah),
+  `PROJECT_STATE.md` (judul), `MICRO_POLISH_GUIDE.md` (judul). Audit
+  menyeluruh titik lain yg nampak ke user: notification channel/content
+  title (ExportForegroundService) sudah generik ("Proses video"/
+  "Memproses video…", gak pernah pakai brand name — tidak perlu diubah),
+  app icon (vector, gak ada teks ter-embed), shortcuts.xml/splash
+  (gak ada). 2 titik SISA yg BUTUH keputusan/izin eksplisit user (bukan
+  auto-dikerjakan): nama file APK Release (di `.github/workflows/*`,
+  protected) & rename repo GitHub (di luar ZIP, aksi manual). File
+  disentuh: README.md, PROJECT_STATE.md, MICRO_POLISH_GUIDE.md.
 - **Batch 48** — Rebrand kosmetik "Video Resizer" → **"Vidsize"** (nama
   simpel, langsung kebaca fungsinya = video+resize), atas permintaan
   user. Scope: HANYA nama tampil (display brand text), BUKAN package

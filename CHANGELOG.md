@@ -1,5 +1,66 @@
 # Changelog
 
+## Batch 50: Rename nama file APK GitHub Release — VideoResizer → Vidsize
+
+Izin eksplisit diberikan user utk edit `.github/workflows/build.yml`
+(protected file, edit-parsial 1 baris) selama tidak mengacaukan workflow
+Termux — dikonfirmasi aman, lihat verifikasi di bawah.
+
+### CHANGED
+- `.github/workflows/build.yml` baris `OUT_NAME=...`: prefix
+  `VideoResizer-v...` → `Vidsize-v...`. Format sisanya (versionName,
+  build number, suffix `-release.apk`) tidak berubah.
+- `README.md`: 3 titik instruksi install current/forward-facing
+  (baris ~110-116) diupdate match nama file baru. Entri histori v1.9/
+  v1.10 (`VideoResizer-release.apk` sbg contoh bug lama & fix-nya)
+  SENGAJA tidak disentuh — catatan sejarah, bukan instruksi aktif.
+
+### VERIFIED — tidak merusak apa pun
+- `RELEASE_TAG` (dipakai buat GitHub Release tag + `AppUpdater.kt`'s
+  `Regex("build(\\d+)")` parser) = variabel TERPISAH dari `OUT_NAME`,
+  formatnya tidak disentuh sama sekali.
+- Stale Run Guard (`$GITHUB_SHA` vs tip `origin/main`) tidak terkait
+  nama file APK sama sekali.
+- `AppUpdater.kt` mencari asset rilis lewat `name.endsWith(".apk")` —
+  BUKAN hardcode prefix "VideoResizer" — jadi fitur auto-update di app
+  tidak terpengaruh oleh rename ini, akan tetap nemu APK-nya normal.
+- Script Termux user (`~/storage/downloads/VideoResizer*.zip`) merujuk
+  ke ZIP SUMBER yang saya kirim ke chat — nama itu, terpisah total dari
+  nama file APK hasil build GitHub Actions — TIDAK diubah, TIDAK
+  konflik.
+
+### TIDAK DILAKUKAN (di luar scope ZIP)
+Rename repository GitHub — bukan bagian dari isi ZIP, aksi manual user
+sendiri (`gh repo rename ...`).
+
+### VERDICT
+Rebrand "Video Resizer" → "Vidsize" **tuntas 100%** untuk semua yang ada
+di ZIP (kode, UI, dokumentasi, nama file APK Release). File diubah:
+`.github/workflows/build.yml`, `README.md`.
+
+## Batch 49: Lanjutan rebrand — sisa judul dokumentasi
+
+User menanyakan apakah rebrand sudah mencakup nama on-device, repo, dan
+semua yang nampak ke user. Audit menyeluruh dilakukan.
+
+### CHANGED
+- `README.md`: H1 title + instruksi "open **Vidsize**" (current/forward
+  text saja — entri histori v1.9 yg cerita soal app lain kebetulan
+  sama-sama bernama "Video Resizer" SENGAJA tidak diubah).
+- `PROJECT_STATE.md`, `MICRO_POLISH_GUIDE.md`: judul H1.
+
+### AUDITED (tidak diubah — sudah benar/tidak relevan)
+- Notification channel/content title (`ExportForegroundService`) —
+  sudah generik ("Proses video"/"Memproses video…"), tidak pernah
+  menyebut brand name.
+- App icon — vector, tidak ada teks ter-embed.
+- Shortcuts/splash screen — tidak ada di project ini.
+
+### DITEMUKAN, BUTUH KONFIRMASI USER (tidak auto-dikerjakan)
+- Nama file APK di GitHub Release (`VideoResizer-vX-release.apk`) —
+  diatur `.github/workflows/*`, file PROTECTED, butuh izin eksplisit.
+- Rename repository GitHub — di luar ZIP sama sekali, aksi manual user.
+
 ## Batch 48: Rebrand kosmetik — "Video Resizer" → "Vidsize"
 
 Atas permintaan user: nama app diganti ke sesuatu yang simpel & langsung

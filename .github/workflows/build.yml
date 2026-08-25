@@ -129,7 +129,7 @@ jobs:
           # compatibility with AppUpdater.kt's `Regex("build(\\d+)")` tag
           # parser (Batch 21), so that file didn't need touching this batch.
           RELEASE_TAG="v${VERSION_NAME}-build${GITHUB_RUN_NUMBER}"
-          OUT_NAME="VideoResizer-v${VERSION_NAME}-build${GITHUB_RUN_NUMBER}-release.apk"
+          OUT_NAME="Vidsize-v${VERSION_NAME}-build${GITHUB_RUN_NUMBER}-release.apk"
           echo "Versioned name: $OUT_NAME"
           cp "$APK_PATH" "$OUT_NAME"
           echo "apk_name=$OUT_NAME" >> "$GITHUB_OUTPUT"

@@ -1,4 +1,4 @@
-# MICRO_POLISH_GUIDE.md — Video Resizer
+# MICRO_POLISH_GUIDE.md — Vidsize
 
 Panduan operasional PERMANEN (ditanam Batch 35, sumber upload user:
 `VideoResizer_FINAL_MICRO_POLISH_ClaudeOnly.md`). Wajib dibaca sebelum

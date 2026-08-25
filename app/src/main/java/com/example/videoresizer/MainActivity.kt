@@ -98,6 +98,19 @@ import java.util.UUID
 private enum class ThemePreference { SYSTEM, LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS }
 private enum class Screen { MAIN, STUDIO, BATCH, GIF, COMPRESSOR }
 
+// Kategorisasi panel setting ResizerScreen jadi tab (diminta user: "kategorikan
+// jadi beberapa tab menu agar terlihat clean dan minimalis"). Murni state UI
+// lokal ResizerScreen — tidak mengubah ResizeRequest/VideoResizer.kt sama
+// sekali, cuma cara pengelompokan visual dari OptionSection/Column yang sudah
+// ada sebelumnya (sebelumnya semua tampil sekaligus dalam satu scroll panjang).
+private enum class ResizerSettingsTab(val label: String) {
+    PRESET("Preset"),
+    UKURAN("Ukuran"),
+    KUALITAS("Kualitas"),
+    OVERLAY("Overlay"),
+    LAINNYA("Lainnya")
+}
+
 class MainActivity : ComponentActivity() {
 
     @androidx.annotation.OptIn(UnstableApi::class)
@@ -509,6 +522,10 @@ private fun ResizerScreen(
     // not a separate code path, so it stays in sync with manual overrides:
     // touching resolution/quality manually afterward silently clears it.
     var selectedSocialPreset by remember { mutableStateOf<SocialPreset?>(null) }
+    // Tab aktif panel setting (Preset/Ukuran/Kualitas/Overlay/Lainnya) — lihat
+    // ResizerSettingsTab. Reset ke PRESET tiap video baru dipilih supaya tab
+    // yang tersisa terbuka dari sesi sebelumnya tidak nyangkut.
+    var selectedSettingsTab by remember { mutableStateOf(ResizerSettingsTab.PRESET) }
     // Progress speed/ETA: derived purely from the existing percentage feed
     // (see VideoResizer.resize's poll loop) plus a wall-clock start time, no
     // new Media3 API surface needed — elapsed/percent*(100-percent) is the
@@ -612,6 +629,7 @@ private fun ResizerScreen(
                 captionText = p.captionText ?: ""
                 captionPosition = p.captionPosition
                 selectedSocialPreset = null
+                selectedSettingsTab = ResizerSettingsTab.PRESET
                 trimRange = (p.trimStartMs.toFloat() / d).coerceIn(0f, 1f)..(p.trimEndMs.toFloat() / d).coerceIn(0f, 1f)
                 resultMessage = null
                 outputFile = null
@@ -782,6 +800,7 @@ private fun ResizerScreen(
         resultThumbnailFile = null
         customWidth = null
         customHeight = null
+        selectedSettingsTab = ResizerSettingsTab.PRESET
         scope.launch {
             loadVideoMetadata(
                 uri,
@@ -1062,6 +1081,13 @@ private fun ResizerScreen(
                 val startMs = (trimRange.start * durationMs).toLong()
                 val endMs = (trimRange.endInclusive * durationMs).toLong()
 
+                SettingsTabBar(
+                    tabs = ResizerSettingsTab.entries,
+                    selected = selectedSettingsTab,
+                    onSelect = { selectedSettingsTab = it }
+                )
+
+                if (selectedSettingsTab == ResizerSettingsTab.PRESET) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(
@@ -1109,7 +1135,9 @@ private fun ResizerScreen(
                         )
                     }
                 }
+                }
 
+                if (selectedSettingsTab == ResizerSettingsTab.UKURAN) {
                 OptionSection(
                     title = "Aspect ratio",
                     options = AspectRatioOption.ENTRIES,
@@ -1174,7 +1202,9 @@ private fun ResizerScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                }
 
+                if (selectedSettingsTab == ResizerSettingsTab.KUALITAS) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Kualitas / bitrate", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                     // UX: same reasoning as the Crop/Stretch caption above —
@@ -1268,7 +1298,9 @@ private fun ResizerScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+                }
 
+                if (selectedSettingsTab == ResizerSettingsTab.OVERLAY) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1389,7 +1421,9 @@ private fun ResizerScreen(
                         )
                     }
                 }
+                }
 
+                if (selectedSettingsTab == ResizerSettingsTab.LAINNYA) {
                 OptionSection(
                     title = "Rotasi",
                     options = RotationOption.ENTRIES,
@@ -1430,6 +1464,7 @@ private fun ResizerScreen(
                 ) {
                     Text("Bisukan audio", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                     Switch(checked = muteAudio, onCheckedChange = { muteAudio = it })
+                }
                 }
 
                 if (isProcessing) {
@@ -3346,6 +3381,65 @@ private fun BatchTargetSizeDialog(
             TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onDismiss() }) { Text("Batal") }
         }
     )
+}
+
+// Segmented tab bar ala iOS (pill track + pill aktif ber-gradient) untuk
+// mengelompokkan panel setting ResizerScreen. Reuse token visual yang sudah
+// ada di file ini (surfaceVariant = track/unselected FilterChip, gradient
+// primary→secondary = persis brush tombol CTA "Resize video" di bawah) —
+// sengaja tidak menambah warna/komponen baru di luar yang sudah dipakai.
+// Tidak pakai API experimental Material3 apapun (bukan FilterChip/TopAppBar),
+// jadi tidak butuh @OptIn(ExperimentalMaterial3Api::class).
+@Composable
+private fun SettingsTabBar(
+    tabs: List<ResizerSettingsTab>,
+    selected: ResizerSettingsTab,
+    onSelect: (ResizerSettingsTab) -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+            .padding(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(4.dp)
+    ) {
+        tabs.forEach { tab ->
+            val isSelected = tab == selected
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .then(
+                        if (isSelected) {
+                            Modifier.background(
+                                brush = Brush.horizontalGradient(
+                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
+                                )
+                            )
+                        } else {
+                            Modifier
+                        }
+                    )
+                    .clickable {
+                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                        onSelect(tab)
+                    }
+                    .padding(vertical = 10.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    tab.label,
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
+                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 50**. This is the first-read file per the context
+Snapshot as of **Batch 51**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -105,6 +105,34 @@ dokumentasi, nama file APK Release). 1 item sisanya (rename repo GitHub)
 tetap aksi manual di luar ZIP — lihat pesan chat._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 51** — Permintaan user (via screenshot ResizerScreen): "kategorikan
+  jadi beberapa tab menu agar terlihat clean dan minimalis". Panel setting
+  `ResizerScreen` sebelumnya satu scroll panjang berisi 8 section berurutan
+  (Preset media sosial → Aspect ratio → Resolution → Mode resize → Kualitas/
+  bitrate → Watermark/logo → Caption → Rotasi → Flip → Frame rate → Bisukan
+  audio). Dikelompokkan jadi 5 tab via `ResizerSettingsTab` enum baru +
+  `SettingsTabBar` composable baru (segmented pill control ala iOS, reuse
+  token visual yang sudah ada di file — surfaceVariant utk track/unselected
+  persis FilterChip, gradient primary→secondary utk pill aktif persis brush
+  tombol CTA "Resize video" — sengaja tidak menambah warna/komponen baru):
+  **Preset** (Preset media sosial), **Ukuran** (Aspect ratio + Resolution +
+  Mode resize), **Kualitas** (Kualitas/bitrate + estimasi ukuran),
+  **Overlay** (Watermark/logo + Caption), **Lainnya** (Rotasi + Flip +
+  Frame rate + Bisukan audio). Progress bar/tombol "Resize video"/pesan
+  hasil (before/after) SENGAJA dibiarkan di luar sistem tab — selalu
+  tampil apa pun tab yang aktif, karena itu status/aksi persisten bukan
+  "setting" yang perlu dikategorikan. `selectedSettingsTab` direset ke
+  PRESET di 2 titik: `handlePickedVideo` (video baru dipilih manual) &
+  prefill effect "Edit ulang" dari Studio — supaya tab yang tersisa dari
+  sesi sebelumnya tidak nyangkut saat video baru dimuat. Scope SENGAJA
+  hanya `ResizerScreen` (satu-satunya screen yang discreenshot user) —
+  `BatchScreen` punya struktur setting yang mirip/duplikat (Aspect ratio/
+  Mode resize/Kualitas/Rotasi/Flip/Frame rate/Watermark, sekitar baris
+  2200-2500-an) tapi TIDAK ikut disentuh, sesuai Zero-Unnecessary-Refactor
+  — kategorisasi tab di sana, kalau memang diinginkan, adalah task/izin
+  terpisah, bukan diam-diam ikut dikerjakan sekalian. Brace/paren balance
+  whole-file diverifikasi ({}=1188/1188, ()=2394/2394). File disentuh:
+  `MainActivity.kt` (1 file, sesuai micro-batch limit).
 - **Batch 50** — Rename nama file APK GitHub Release: `VideoResizer-v...
   -release.apk` → `Vidsize-v...-release.apk`. Izin eksplisit diberikan
   user utk edit-parsial `.github/workflows/build.yml` (protected file,

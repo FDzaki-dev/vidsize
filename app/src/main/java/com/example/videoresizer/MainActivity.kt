@@ -2653,10 +2653,13 @@ private fun VideoEditorPreview(
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.clickable(
-                    indication = null,
-                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                ) { controlsVisible = true }
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(220.dp)
+                    .clickable(
+                        indication = null,
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                    ) { controlsVisible = true }
             ) {
                 AndroidView(
                     factory = { ctx ->
@@ -2666,8 +2669,7 @@ private fun VideoEditorPreview(
                         }
                     },
                     modifier = Modifier
-                        .fillMaxWidth()
-                        .height(220.dp)
+                        .matchParentSize()
                         .clip(RoundedCornerShape(12.dp))
                 )
                 // Fully-qualified call (not the bare `AnimatedVisibility(...)`

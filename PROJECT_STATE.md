@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 52**. This is the first-read file per the context
+Snapshot as of **Batch 53**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -105,6 +105,40 @@ dokumentasi, nama file APK Release). 1 item sisanya (rename repo GitHub)
 tetap aksi manual di luar ZIP — lihat pesan chat._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 53** — Root cause "gap kosong besar di bawah info Potong: ..."
+  (dilaporkan user 2x, gagal direproduksi dari review kode di Batch 51 &
+  52) AKHIRNYA ketemu berkat screenshot ke-3 yang di-crop lebih dekat:
+  kotak video preview di screenshot itu tampil BESAR & PERSEGI, persis
+  mengikuti rasio asli video sumber (1300×1300) — bukan ukuran tetap
+  220dp yang di-hardcode di kode (`AndroidView(...).height(220.dp)`).
+  Root cause: `Box` pembungkus `AndroidView(PlayerView)` di
+  `VideoEditorPreview` sebelumnya TIDAK punya ukuran sendiri (cuma
+  `Modifier.clickable`, tanpa `height`) — ukurannya jadi ikut mengukur
+  dari child terbesarnya (perilaku normal `Box` tanpa constraint sendiri).
+  `.height(220.dp)` dipasang di `AndroidView`-nya, bukan di `Box`-nya —
+  dan `PlayerView` (lewat `AspectRatioFrameLayout` internalnya) kadang
+  me-request ulang ukurannya sendiri mengikuti rasio video asli via
+  `requestLayout()` async setelah ukuran video dari decoder diketahui;
+  constraint 220dp dari Compose tidak konsisten dipertahankan pada
+  re-layout itu (kasus interop `AndroidView`+`PlayerView` yang cukup
+  dikenal). Efeknya: `Box` ikut membesar mengikuti `PlayerView`, `Card`
+  jadi punya reserved-space sebesar video asli (persegi besar,
+  match 1300×1300) — padahal karena isi visual videonya sendiri tampak
+  wajar (tidak error), efeknya secara visual malah terlihat seperti ada
+  "gap kosong" di ruang SISA di bawahnya sebelum teks detail, bukan
+  video-nya sendiri yang terlihat salah — makanya sebelumnya tidak
+  langsung kecurigaannya ke arah ukuran video-player.
+  Fix: `Box` sekarang PUNYA ukuran eksplisit sendiri
+  (`fillMaxWidth().height(220.dp)`, independen dari children), dan
+  `AndroidView` pakai `Modifier.matchParentSize()` (bukan set ukuran
+  sendiri lagi) — `matchParentSize()` memaksa `PlayerView` pas ke bounds
+  `Box` yang SUDAH FIXED duluan, jadi `PlayerView` tidak bisa lagi
+  mendikte ukuran parent-nya lewat `requestLayout()` apa pun yang ia
+  lakukan secara internal. Fix ini otomatis berlaku ke SEMUA pemanggil
+  `VideoEditorPreview` (ResizerScreen + 2 screen lain yang reuse
+  composable yang sama) karena memang satu shared bug di satu fungsi
+  shared — bukan scope creep, cuma efek samping wajar dari sifat kode
+  yang di-reuse. File disentuh: `MainActivity.kt` (1 file).
 - **Batch 52** — Follow-up polish atas tab Batch 51, dari feedback user
   (multi-select atas screenshot real): 3 dari 4 item dikerjakan dgn
   confidence tinggi, 1 item (gap kosong) di-declare BELUM bisa dipastikan

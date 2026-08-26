@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 51**. This is the first-read file per the context
+Snapshot as of **Batch 52**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -105,6 +105,59 @@ dokumentasi, nama file APK Release). 1 item sisanya (rename repo GitHub)
 tetap aksi manual di luar ZIP — lihat pesan chat._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 52** — Follow-up polish atas tab Batch 51, dari feedback user
+  (multi-select atas screenshot real): 3 dari 4 item dikerjakan dgn
+  confidence tinggi, 1 item (gap kosong) di-declare BELUM bisa dipastikan
+  dari source code review — lihat catatan di bawah.
+  1. **Transisi tab masih instan/kaku** → 5 blok `if (selectedSettingsTab
+     == X) { ... }` sibling (dari Batch 51) direstrukturisasi jadi SATU
+     `AnimatedContent(targetState = selectedSettingsTab) { tab -> when
+     (tab) { ... } }` dengan crossfade (`fadeIn(tween(220))
+     .togetherWith(fadeOut(tween(140)))`). Alasan pakai AnimatedContent
+     (bukan AnimatedVisibility per-blok): AnimatedVisibility di banyak
+     sibling sekaligus akan sempat menampilkan DUA konten bertumpuk selagi
+     fade in/out barengan (karena keduanya tetap sibling Column biasa,
+     bukan di-overlay 1 slot) — untuk 5 tab dengan tinggi konten yang
+     jauh beda (Preset pendek vs Overlay panjang) itu bakal kelihatan
+     "lompat" sesaat. AnimatedContent menjaga satu slot konten aktif,
+     jadi crossfade-nya bersih tanpa reflow. Konsekuensi struktural: tiap
+     tab yang isinya beberapa composable sejajar (Ukuran/Overlay/Lainnya)
+     sekarang WAJIB dibungkus 1 Column sendiri (spacedBy 20dp, samain apa
+     yang tadinya disediakan Column halaman terluar) karena slot konten
+     AnimatedContent bukan ColumnScope — tanpa pembungkus ini beberapa
+     composable sejajar bakal numpuk di titik yang sama (default Box
+     stacking). Preset/Kualitas sudah dari Batch 51 seluruh isinya 1
+     Column, jadi tidak perlu pembungkus tambahan.
+  2. **Chip "YouTube (16:9)" kepotong di tepi layar** → root cause-nya
+     memang selama ini `LazyRow` Preset media sosial tidak punya
+     `contentPadding` sama sekali, jadi chip terakhir mepet pas di tepi
+     layar tanpa jarak — secara visual identik dengan "terpotong" padahal
+     technically itu cuma ujung area scroll. Fix: `contentPadding =
+     PaddingValues(end = 20.dp)` KHUSUS di LazyRow itu saja (satu-satunya
+     yang di-flag user) — LazyRow lain (Resolution/Kualitas/Watermark
+     position/Caption position) SENGAJA tidak ikut disentuh, sesuai
+     Zero-Unnecessary-Refactor (user tidak melaporkan itu bermasalah).
+  3. **"Bikin floating / biar terasa luas"** → digabung jadi satu
+     perbaikan dengan #2 di atas (LazyRow yang sama) — user sendiri
+     menyebut "atau apa kek", jadi diambil interpretasi paling minim-
+     risiko yang langsung menjawab keluhan konkretnya (chip kepotong),
+     bukan menambah elevation/shadow baru yang tidak diminta eksplisit.
+  4. **BELUM DIKERJAKAN — gap/ruang kosong besar di bawah "Potong: ...".**
+     Audit ulang `VideoEditorPreview` (Card → Column padding 16dp,
+     spacedBy 12dp → player Box 220dp tetap, Row label waktu, Box
+     filmstrip 56dp tetap, Row detail teks) TIDAK menemukan elemen apa
+     pun yang secara struktural bisa menghasilkan gap sebesar yang
+     terlihat di screenshot — sudah investigasi ke-2 kalinya dengan hasil
+     sama (lihat juga histori lama soal "720×720 • Potong: ..." di
+     CHANGELOG, kalau masih ada). Perubahan Batch 52 di atas TIDAK
+     menyentuh `VideoEditorPreview` sama sekali (di luar scope tab), jadi
+     kalau gap itu masih muncul setelah update ini, itu murni bug lama
+     yang independen dari kerjaan tab — next step kalau masih terlihat:
+     screenshot yang di-zoom/crop KHUSUS ke area gap itu saja (bukan
+     screenshot full-halaman), supaya batas pastinya (elemen apa yang ada
+     TEPAT di atas & di bawah gap) bisa dipetakan ke baris kode yang
+     tepat, bukan nebak dari layout keseluruhan.
+  File disentuh: `MainActivity.kt` (1 file, sesuai micro-batch limit).
 - **Batch 51** — Permintaan user (via screenshot ResizerScreen): "kategorikan
   jadi beberapa tab menu agar terlihat clean dan minimalis". Panel setting
   `ResizerScreen` sebelumnya satu scroll panjang berisi 8 section berurutan

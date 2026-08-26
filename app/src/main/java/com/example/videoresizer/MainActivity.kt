@@ -11,6 +11,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.tween
@@ -18,6 +19,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -1087,263 +1089,103 @@ private fun ResizerScreen(
                     onSelect = { selectedSettingsTab = it }
                 )
 
-                if (selectedSettingsTab == ResizerSettingsTab.PRESET) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Filled.Public,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Preset media sosial", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    }
-                    Text(
-                        "Sekali tap untuk atur resolusi & bitrate persis seperti rekomendasi platform-nya.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(SocialPreset.ENTRIES) { preset ->
-                            FilterChip(
-                                selected = selectedSocialPreset == preset,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = preset
-                                    aspectRatio = preset.aspectRatio
-                                    resolution = ResolutionOption.CUSTOM
-                                    customWidth = preset.width
-                                    customHeight = preset.height
-                                    quality = QualityOption.CUSTOM
-                                    customBitrateKbps = preset.bitrateKbps
-                                },
-                                label = { Text(preset.label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                        }
-                    }
-                    selectedSocialPreset?.let { p ->
-                        Text(
-                            "Dipakai: ${p.width}×${p.height}, ~${p.bitrateKbps} kbps. Mengubah resolusi/kualitas manual di bawah akan melepas preset ini.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                }
-
-                if (selectedSettingsTab == ResizerSettingsTab.UKURAN) {
-                OptionSection(
-                    title = "Aspect ratio",
-                    options = AspectRatioOption.ENTRIES,
-                    labelOf = { it.label },
-                    selected = aspectRatio,
-                    onSelect = {
-                        aspectRatio = it
-                        selectedSocialPreset = null
-                        if (resolution == ResolutionOption.CUSTOM) resolution = ResolutionOption.ORIGINAL
-                    }
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Resolution", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(ResolutionOption.ENTRIES) { option ->
-                            val isSelected = option == resolution
-                            val label = if (option == ResolutionOption.CUSTOM && customWidth != null && customHeight != null) {
-                                "${customWidth}×${customHeight}"
-                            } else {
-                                option.label
-                            }
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
-                                    if (option == ResolutionOption.CUSTOM) {
-                                        showCustomResDialog = true
-                                    } else {
-                                        resolution = option
-                                    }
-                                },
-                                label = { Text(label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                        }
-                    }
-                }
-
-                OptionSection(
-                    title = "Mode resize",
-                    options = ResizeMode.ENTRIES,
-                    labelOf = { it.label },
-                    selected = resizeMode,
-                    onSelect = { resizeMode = it }
-                )
-                // UX FIX: "Crop" and "Stretch" alone don't tell a novice user
-                // what actually happens to their video — in particular that
-                // Stretch can visibly squash/distort it, which is easy to
-                // not notice until after the export finishes.
-                Text(
-                    if (resizeMode == ResizeMode.CROP) {
-                        "Crop: sisi video yang tidak muat akan dipotong, tanpa distorsi."
-                    } else {
-                        "Stretch: video ditekan/ditarik agar pas, gambar bisa terlihat gepeng."
+                androidx.compose.animation.AnimatedContent(
+                    targetState = selectedSettingsTab,
+                    transitionSpec = {
+                        fadeIn(animationSpec = tween(220)).togetherWith(fadeOut(animationSpec = tween(140)))
                     },
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                }
-
-                if (selectedSettingsTab == ResizerSettingsTab.KUALITAS) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Kualitas / bitrate", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    // UX: same reasoning as the Crop/Stretch caption above —
-                    // "Rendah/Sedang/Tinggi" alone doesn't tell a novice user
-                    // what they're trading off.
-                    Text(
-                        "Rendah = ukuran file lebih kecil, sedikit turun kualitas gambar. Tinggi = kualitas maksimal, ukuran file lebih besar.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        items(QualityOption.ENTRIES) { option ->
-                            val isSelected = option == quality
-                            val label = if (option == QualityOption.CUSTOM && customBitrateKbps != null) {
-                                "${customBitrateKbps} kbps"
-                            } else {
-                                option.label
+                    label = "ResizerSettingsTabContent"
+                ) { tab ->
+                    when (tab) {
+                        ResizerSettingsTab.PRESET -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    Icons.Filled.Public,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Preset media sosial", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                             }
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
-                                    if (option == QualityOption.CUSTOM) {
-                                        showCustomBitrateDialog = true
-                                    } else {
-                                        quality = option
-                                    }
-                                },
-                                label = { Text(label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            Text(
+                                "Sekali tap untuk atur resolusi & bitrate persis seperti rekomendasi platform-nya.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            // contentPadding(end) ditambah supaya chip terakhir ("YouTube
+                            // (16:9)") punya jarak dari tepi layar, bukan mepet-terpotong —
+                            // baris ini tetap horizontal-scrollable, cuma sekarang kelihatan
+                            // jelas ada ruang scroll, tidak terlihat seperti terpotong/cutoff.
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                contentPadding = PaddingValues(end = 20.dp)
+                            ) {
+                                items(SocialPreset.ENTRIES) { preset ->
+                                    FilterChip(
+                                        selected = selectedSocialPreset == preset,
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = preset
+                                            aspectRatio = preset.aspectRatio
+                                            resolution = ResolutionOption.CUSTOM
+                                            customWidth = preset.width
+                                            customHeight = preset.height
+                                            quality = QualityOption.CUSTOM
+                                            customBitrateKbps = preset.bitrateKbps
+                                        },
+                                        label = { Text(preset.label) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                            selectedLabelColor = Color.White,
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+                            }
+                            selectedSocialPreset?.let { p ->
+                                Text(
+                                    "Dipakai: ${p.width}×${p.height}, ~${p.bitrateKbps} kbps. Mengubah resolusi/kualitas manual di bawah akan melepas preset ini.",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                            )
-                        }
-                        // Not one of QualityOption.ENTRIES — this is a second
-                        // entry point into the exact same quality=CUSTOM/
-                        // customBitrateKbps state as the chips above, just
-                        // driven by a target file size instead of a bitrate
-                        // number. See TargetSizeDialog / requiredBitrateKbpsForTargetSize.
-                        item {
-                            FilterChip(
-                                selected = false,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
-                                    showTargetSizeDialog = true
-                                },
-                                label = { Text("Ukuran target (MB)") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                        }
-                    }
-                    // UX: gives a novice user a concrete before-you-commit
-                    // number instead of an abstract "Rendah/Sedang/Tinggi"
-                    // label — "will this actually fit in my WhatsApp/Story
-                    // upload limit" is exactly the question file size
-                    // controls exist to answer.
-                    val estimatedBytes = remember(quality, customBitrateKbps, aspectRatio, resolution, resizeMode, customWidth, customHeight, muteAudio, startMs, endMs, sourceWidth, sourceHeight) {
-                        VideoResizer.estimateOutputSizeBytes(
-                            ResizeRequest(
-                                sourceUri = Uri.EMPTY,
-                                outputFile = File(""),
-                                aspectRatio = aspectRatio,
-                                resolution = resolution,
-                                sourceWidth = sourceWidth,
-                                sourceHeight = sourceHeight,
-                                muteAudio = muteAudio,
-                                resizeMode = resizeMode,
-                                customWidth = customWidth,
-                                customHeight = customHeight,
-                                quality = quality,
-                                customBitrateKbps = customBitrateKbps
-                            ),
-                            durationMs = (endMs - startMs).coerceAtLeast(0L)
-                        )
-                    }
-                    Text(
-                        if (quality == QualityOption.ORIGINAL) {
-                            "Original: ukuran mengikuti hasil encoder bawaan, tidak bisa diprediksi di sini."
-                        } else if (estimatedBytes != null) {
-                            "Perkiraan ukuran: ~${formatFileSize(estimatedBytes)} (kasar, hasil asli bisa sedikit berbeda)."
-                        } else {
-                            "Pilih video untuk melihat perkiraan ukuran."
-                        },
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-                }
-
-                if (selectedSettingsTab == ResizerSettingsTab.OVERLAY) {
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(
-                                Icons.Filled.BrandingWatermark,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp),
-                                tint = MaterialTheme.colorScheme.primary
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Watermark / logo", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                        }
-                        if (watermarkUri == null) {
-                            TextButton(onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); pickWatermarkLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                            }) { Text("Pilih gambar") }
-                        } else {
-                            TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkUri = null }) {
-                                Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(16.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text("Hapus")
                             }
                         }
-                    }
-                    // Local val capture instead of !!: watermarkUri is Compose mutable
-                    // state, so it can't smart-cast from the null check below.
-                    val currentWatermarkUri = watermarkUri
-                    if (currentWatermarkUri != null) {
-                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                            AsyncThumbnail(uri = currentWatermarkUri)
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text("Posisi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    items(WatermarkPosition.ENTRIES) { pos ->
+
+                        ResizerSettingsTab.UKURAN -> Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            OptionSection(
+                                title = "Aspect ratio",
+                                options = AspectRatioOption.ENTRIES,
+                                labelOf = { it.label },
+                                selected = aspectRatio,
+                                onSelect = {
+                                    aspectRatio = it
+                                    selectedSocialPreset = null
+                                    if (resolution == ResolutionOption.CUSTOM) resolution = ResolutionOption.ORIGINAL
+                                }
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text("Resolution", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    items(ResolutionOption.ENTRIES) { option ->
+                                        val isSelected = option == resolution
+                                        val label = if (option == ResolutionOption.CUSTOM && customWidth != null && customHeight != null) {
+                                            "${customWidth}×${customHeight}"
+                                        } else {
+                                            option.label
+                                        }
                                         FilterChip(
-                                            selected = pos == watermarkPosition,
-                                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkPosition = pos },
-                                            label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) },
+                                            selected = isSelected,
+                                            onClick = {
+                                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
+                                                if (option == ResolutionOption.CUSTOM) {
+                                                    showCustomResDialog = true
+                                                } else {
+                                                    resolution = option
+                                                }
+                                            },
+                                            label = { Text(label) },
                                             colors = FilterChipDefaults.filterChipColors(
                                                 selectedContainerColor = MaterialTheme.colorScheme.primary,
                                                 selectedLabelColor = Color.White,
@@ -1354,117 +1196,290 @@ private fun ResizerScreen(
                                     }
                                 }
                             }
-                        }
-                        Text("Ukuran: ${watermarkScalePercent.roundToInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Slider(
-                            value = watermarkScalePercent,
-                            onValueChange = { watermarkScalePercent = it },
-                            valueRange = 5f..50f
-                        )
-                        Text("Transparansi: ${watermarkOpacityPercent.roundToInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Slider(
-                            value = watermarkOpacityPercent,
-                            onValueChange = { watermarkOpacityPercent = it },
-                            valueRange = 10f..100f
-                        )
-                    } else {
-                        Text(
-                            "Opsional: tempel logo/watermark PNG di salah satu sudut video hasil resize.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
 
-                // Caption overlay — short burned-in text (white + black
-                // outline, fixed style/size), positioned with the same
-                // WatermarkPosition picker the watermark section above uses.
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(
-                            Icons.Filled.ClosedCaption,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                            tint = MaterialTheme.colorScheme.primary
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Caption", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    }
-                    OutlinedTextField(
-                        value = captionText,
-                        onValueChange = { captionText = it },
-                        placeholder = { Text("Tulis caption singkat…") },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    if (captionText.isNotBlank()) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            items(WatermarkPosition.ENTRIES) { pos ->
-                                FilterChip(
-                                    selected = pos == captionPosition,
-                                    onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); captionPosition = pos },
-                                    label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) },
-                                    colors = FilterChipDefaults.filterChipColors(
-                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                        selectedLabelColor = Color.White,
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            OptionSection(
+                                title = "Mode resize",
+                                options = ResizeMode.ENTRIES,
+                                labelOf = { it.label },
+                                selected = resizeMode,
+                                onSelect = { resizeMode = it }
+                            )
+                            // UX FIX: "Crop" and "Stretch" alone don't tell a novice user
+                            // what actually happens to their video — in particular that
+                            // Stretch can visibly squash/distort it, which is easy to
+                            // not notice until after the export finishes.
+                            Text(
+                                if (resizeMode == ResizeMode.CROP) {
+                                    "Crop: sisi video yang tidak muat akan dipotong, tanpa distorsi."
+                                } else {
+                                    "Stretch: video ditekan/ditarik agar pas, gambar bisa terlihat gepeng."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        ResizerSettingsTab.KUALITAS -> Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Kualitas / bitrate", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                            // UX: same reasoning as the Crop/Stretch caption above —
+                            // "Rendah/Sedang/Tinggi" alone doesn't tell a novice user
+                            // what they're trading off.
+                            Text(
+                                "Rendah = ukuran file lebih kecil, sedikit turun kualitas gambar. Tinggi = kualitas maksimal, ukuran file lebih besar.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                items(QualityOption.ENTRIES) { option ->
+                                    val isSelected = option == quality
+                                    val label = if (option == QualityOption.CUSTOM && customBitrateKbps != null) {
+                                        "${customBitrateKbps} kbps"
+                                    } else {
+                                        option.label
+                                    }
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
+                                            if (option == QualityOption.CUSTOM) {
+                                                showCustomBitrateDialog = true
+                                            } else {
+                                                quality = option
+                                            }
+                                        },
+                                        label = { Text(label) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                            selectedLabelColor = Color.White,
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
                                     )
+                                }
+                                // Not one of QualityOption.ENTRIES — this is a second
+                                // entry point into the exact same quality=CUSTOM/
+                                // customBitrateKbps state as the chips above, just
+                                // driven by a target file size instead of a bitrate
+                                // number. See TargetSizeDialog / requiredBitrateKbpsForTargetSize.
+                                item {
+                                    FilterChip(
+                                        selected = false,
+                                        onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
+                                            showTargetSizeDialog = true
+                                        },
+                                        label = { Text("Ukuran target (MB)") },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    )
+                                }
+                            }
+                            // UX: gives a novice user a concrete before-you-commit
+                            // number instead of an abstract "Rendah/Sedang/Tinggi"
+                            // label — "will this actually fit in my WhatsApp/Story
+                            // upload limit" is exactly the question file size
+                            // controls exist to answer.
+                            val estimatedBytes = remember(quality, customBitrateKbps, aspectRatio, resolution, resizeMode, customWidth, customHeight, muteAudio, startMs, endMs, sourceWidth, sourceHeight) {
+                                VideoResizer.estimateOutputSizeBytes(
+                                    ResizeRequest(
+                                        sourceUri = Uri.EMPTY,
+                                        outputFile = File(""),
+                                        aspectRatio = aspectRatio,
+                                        resolution = resolution,
+                                        sourceWidth = sourceWidth,
+                                        sourceHeight = sourceHeight,
+                                        muteAudio = muteAudio,
+                                        resizeMode = resizeMode,
+                                        customWidth = customWidth,
+                                        customHeight = customHeight,
+                                        quality = quality,
+                                        customBitrateKbps = customBitrateKbps
+                                    ),
+                                    durationMs = (endMs - startMs).coerceAtLeast(0L)
                                 )
                             }
+                            Text(
+                                if (quality == QualityOption.ORIGINAL) {
+                                    "Original: ukuran mengikuti hasil encoder bawaan, tidak bisa diprediksi di sini."
+                                } else if (estimatedBytes != null) {
+                                    "Perkiraan ukuran: ~${formatFileSize(estimatedBytes)} (kasar, hasil asli bisa sedikit berbeda)."
+                                } else {
+                                    "Pilih video untuk melihat perkiraan ukuran."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
                         }
-                    } else {
-                        Text(
-                            "Opsional: teks singkat yang ikut ter-render permanen di video hasil resize.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+
+                        ResizerSettingsTab.OVERLAY -> Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(
+                                            Icons.Filled.BrandingWatermark,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                            tint = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text("Watermark / logo", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                                    }
+                                    if (watermarkUri == null) {
+                                        TextButton(onClick = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); pickWatermarkLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                        }) { Text("Pilih gambar") }
+                                    } else {
+                                        TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkUri = null }) {
+                                            Icon(Icons.Filled.Close, contentDescription = null, modifier = Modifier.size(16.dp))
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Hapus")
+                                        }
+                                    }
+                                }
+                                // Local val capture instead of !!: watermarkUri is Compose mutable
+                                // state, so it can't smart-cast from the null check below.
+                                val currentWatermarkUri = watermarkUri
+                                if (currentWatermarkUri != null) {
+                                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                                        AsyncThumbnail(uri = currentWatermarkUri)
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text("Posisi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                                items(WatermarkPosition.ENTRIES) { pos ->
+                                                    FilterChip(
+                                                        selected = pos == watermarkPosition,
+                                                        onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkPosition = pos },
+                                                        label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) },
+                                                        colors = FilterChipDefaults.filterChipColors(
+                                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                                            selectedLabelColor = Color.White,
+                                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Text("Ukuran: ${watermarkScalePercent.roundToInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Slider(
+                                        value = watermarkScalePercent,
+                                        onValueChange = { watermarkScalePercent = it },
+                                        valueRange = 5f..50f
+                                    )
+                                    Text("Transparansi: ${watermarkOpacityPercent.roundToInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    Slider(
+                                        value = watermarkOpacityPercent,
+                                        onValueChange = { watermarkOpacityPercent = it },
+                                        valueRange = 10f..100f
+                                    )
+                                } else {
+                                    Text(
+                                        "Opsional: tempel logo/watermark PNG di salah satu sudut video hasil resize.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            // Caption overlay — short burned-in text (white + black
+                            // outline, fixed style/size), positioned with the same
+                            // WatermarkPosition picker the watermark section above uses.
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Icon(
+                                        Icons.Filled.ClosedCaption,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(18.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text("Caption", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                                }
+                                OutlinedTextField(
+                                    value = captionText,
+                                    onValueChange = { captionText = it },
+                                    placeholder = { Text("Tulis caption singkat…") },
+                                    singleLine = true,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                if (captionText.isNotBlank()) {
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                        items(WatermarkPosition.ENTRIES) { pos ->
+                                            FilterChip(
+                                                selected = pos == captionPosition,
+                                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); captionPosition = pos },
+                                                label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) },
+                                                colors = FilterChipDefaults.filterChipColors(
+                                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                                    selectedLabelColor = Color.White,
+                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    Text(
+                                        "Opsional: teks singkat yang ikut ter-render permanen di video hasil resize.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+
+                        ResizerSettingsTab.LAINNYA -> Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                            OptionSection(
+                                title = "Rotasi",
+                                options = RotationOption.ENTRIES,
+                                labelOf = { it.label },
+                                selected = rotation,
+                                onSelect = { rotation = it }
+                            )
+
+                            OptionSection(
+                                title = "Flip / cermin",
+                                options = FlipOption.ENTRIES,
+                                labelOf = { it.label },
+                                selected = flip,
+                                onSelect = { flip = it }
+                            )
+
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                OptionSection(
+                                    title = "Frame rate",
+                                    options = FrameRateOption.ENTRIES,
+                                    labelOf = { it.label },
+                                    selected = frameRate,
+                                    onSelect = { frameRate = it }
+                                )
+                                if (frameRate != FrameRateOption.ORIGINAL) {
+                                    Text(
+                                        "Frame yang melebihi ${frameRate.fps} fps akan dibuang agar video terasa lebih halus/hemat ukuran; frame rate sumber yang lebih rendah tidak akan dipaksa naik.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text("Bisukan audio", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                                Switch(checked = muteAudio, onCheckedChange = { muteAudio = it })
+                            }
+                        }
                     }
-                }
-                }
-
-                if (selectedSettingsTab == ResizerSettingsTab.LAINNYA) {
-                OptionSection(
-                    title = "Rotasi",
-                    options = RotationOption.ENTRIES,
-                    labelOf = { it.label },
-                    selected = rotation,
-                    onSelect = { rotation = it }
-                )
-
-                OptionSection(
-                    title = "Flip / cermin",
-                    options = FlipOption.ENTRIES,
-                    labelOf = { it.label },
-                    selected = flip,
-                    onSelect = { flip = it }
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    OptionSection(
-                        title = "Frame rate",
-                        options = FrameRateOption.ENTRIES,
-                        labelOf = { it.label },
-                        selected = frameRate,
-                        onSelect = { frameRate = it }
-                    )
-                    if (frameRate != FrameRateOption.ORIGINAL) {
-                        Text(
-                            "Frame yang melebihi ${frameRate.fps} fps akan dibuang agar video terasa lebih halus/hemat ukuran; frame rate sumber yang lebih rendah tidak akan dipaksa naik.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Bisukan audio", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    Switch(checked = muteAudio, onCheckedChange = { muteAudio = it })
-                }
                 }
 
                 if (isProcessing) {

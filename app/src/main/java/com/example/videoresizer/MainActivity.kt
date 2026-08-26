@@ -14,6 +14,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -59,6 +60,8 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Fullscreen
+import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -2573,6 +2576,12 @@ private fun VideoEditorPreview(
     }
 
     var isPlaying by remember { mutableStateOf(false) }
+    // NEW FEATURE: maximize/minimize toggle — minimized (default) keeps the
+    // original fixed 220dp height; maximized grows the player to show the
+    // video at its real aspect ratio (computed below via BoxWithConstraints)
+    // instead of being squeezed into a fixed short box. Resets to minimized
+    // whenever a different video is loaded (keyed on uri via remember).
+    var isMaximized by remember(uri) { mutableStateOf(false) }
 
     // BUG FIX: since ResizerScreen (and this preview inside it) now stays
     // permanently composed even while Studio/Batch is open on top of it
@@ -2651,61 +2660,131 @@ private fun VideoEditorPreview(
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(220.dp)
-                    .clickable(
-                        indication = null,
-                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
-                    ) { controlsVisible = true }
-            ) {
-                AndroidView(
-                    factory = { ctx ->
-                        PlayerView(ctx).apply {
-                            player = exoPlayer
-                            useController = false // the filmstrip below is the real scrubber
-                        }
-                    },
-                    modifier = Modifier
-                        .matchParentSize()
-                        .clip(RoundedCornerShape(12.dp))
+            // NEW FEATURE: maximize/minimize. BoxWithConstraints exposes this
+            // Card's actual measured width (maxWidth) so the maximized height
+            // can be derived from the VIDEO's real aspect ratio instead of an
+            // arbitrary fixed number — a 9:16 clip maximizes tall, a 1:1 clip
+            // maximizes square, etc. Capped at 520dp so an extreme portrait
+            // video can't push the maximized box off-screen.
+            BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+                val videoAspectRatio = remember(sourceWidth, sourceHeight) {
+                    if (sourceWidth > 0 && sourceHeight > 0) sourceWidth.toFloat() / sourceHeight.toFloat() else 16f / 9f
+                }
+                val minimizedHeight = 220.dp
+                val maximizedHeight = remember(maxWidth, videoAspectRatio) {
+                    (maxWidth / videoAspectRatio).coerceAtMost(520.dp)
+                }
+                val playerHeight by animateDpAsState(
+                    targetValue = if (isMaximized) maximizedHeight else minimizedHeight,
+                    animationSpec = tween(280),
+                    label = "VideoPlayerHeight"
                 )
-                // Fully-qualified call (not the bare `AnimatedVisibility(...)`
-                // import): this Box sits inside the Card's outer Column, so
-                // Kotlin's implicit-receiver search also finds the
-                // ColumnScope.AnimatedVisibility extension from that
-                // enclosing scope and prefers it over the plain top-level
-                // composable — which then fails to compile because we're
-                // not directly in a ColumnScope here. Qualifying the call
-                // sidesteps the ambiguity entirely.
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = controlsVisible,
-                    enter = fadeIn(),
-                    exit = fadeOut()
+
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(playerHeight)
+                        .clickable(
+                            indication = null,
+                            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                        ) { controlsVisible = true }
                 ) {
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                            if (isPlaying) {
-                                exoPlayer.pause()
-                            } else {
-                                exoPlayer.seekTo(startMs)
-                                exoPlayer.play()
+                    AndroidView(
+                        factory = { ctx ->
+                            PlayerView(ctx).apply {
+                                player = exoPlayer
+                                useController = false // the filmstrip below is the real scrubber
                             }
-                            isPlaying = !isPlaying
-                            controlsVisible = true
                         },
                         modifier = Modifier
-                            .size(56.dp)
-                            .background(Color.Black.copy(alpha = 0.45f), shape = androidx.compose.foundation.shape.CircleShape)
+                            .matchParentSize()
+                            .clip(RoundedCornerShape(12.dp))
+                    )
+
+                    // Maximize/minimize toggle — top-end corner. Shares the
+                    // exact same auto-hide fade as the play button below (both
+                    // driven by the same `controlsVisible` state): per user
+                    // request, this control "wajib bisa fade out juga" instead
+                    // of sitting permanently opaque over the video.
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = controlsVisible,
+                        enter = fadeIn(),
+                        exit = fadeOut(),
+                        modifier = Modifier.align(Alignment.TopEnd)
                     ) {
-                        Icon(
-                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                            contentDescription = if (isPlaying) "Pause" else "Play",
-                            tint = Color.White
-                        )
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                isMaximized = !isMaximized
+                                controlsVisible = true
+                            },
+                            modifier = Modifier
+                                .padding(8.dp)
+                                .size(40.dp)
+                                .background(Color.Black.copy(alpha = 0.45f), shape = androidx.compose.foundation.shape.CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = if (isMaximized) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
+                                contentDescription = if (isMaximized) "Perkecil video" else "Perbesar video",
+                                tint = Color.White,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+
+                    // Fully-qualified call (not the bare `AnimatedVisibility(...)`
+                    // import): this Box sits inside the Card's outer Column, so
+                    // Kotlin's implicit-receiver search also finds the
+                    // ColumnScope.AnimatedVisibility extension from that
+                    // enclosing scope and prefers it over the plain top-level
+                    // composable — which then fails to compile because we're
+                    // not directly in a ColumnScope here. Qualifying the call
+                    // sidesteps the ambiguity entirely.
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = controlsVisible,
+                        enter = fadeIn(),
+                        exit = fadeOut()
+                    ) {
+                        IconButton(
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                if (isPlaying) {
+                                    exoPlayer.pause()
+                                } else {
+                                    // BUG FIX (reported: pressing play resets the
+                                    // clip back to the start every time): this used
+                                    // to unconditionally call seekTo(startMs) before
+                                    // every play(), which overwrote wherever the user
+                                    // had paused. Now it only seeks when the current
+                                    // position has actually fallen outside the
+                                    // selected trim range — either genuinely the
+                                    // first play (position starts at 0, before a
+                                    // non-zero startMs), the trim handles were
+                                    // dragged past a paused position, or playback
+                                    // already ran to the trim end (replay should
+                                    // restart, not silently no-op). Any ordinary
+                                    // pause-then-resume inside the trim range now
+                                    // keeps its exact position.
+                                    val pos = exoPlayer.currentPosition
+                                    if (pos < startMs || pos >= endMs) {
+                                        exoPlayer.seekTo(startMs)
+                                    }
+                                    exoPlayer.play()
+                                }
+                                isPlaying = !isPlaying
+                                controlsVisible = true
+                            },
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(Color.Black.copy(alpha = 0.45f), shape = androidx.compose.foundation.shape.CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                                contentDescription = if (isPlaying) "Pause" else "Play",
+                                tint = Color.White
+                            )
+                        }
                     }
                 }
             }

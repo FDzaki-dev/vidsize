@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 53**. This is the first-read file per the context
+Snapshot as of **Batch 54**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -105,6 +105,39 @@ dokumentasi, nama file APK Release). 1 item sisanya (rename repo GitHub)
 tetap aksi manual di luar ZIP — lihat pesan chat._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 54** — Dua permintaan sekaligus dari user, keduanya di
+  `VideoEditorPreview` (satu shared composable, dipakai 3 screen):
+  1. **Fitur baru: maximize/minimize video player.** Player yang tadinya
+     selalu 220dp tetap (fix Batch 53) sekarang dibungkus
+     `BoxWithConstraints` supaya tahu lebar sebenarnya, lalu tinggi
+     "maximize" dihitung dari ASPECT RATIO ASLI video (`sourceWidth` /
+     `sourceHeight`, sudah jadi parameter composable ini) — bukan angka
+     tetap sembarangan — di-cap `520.dp` biar video sangat portrait tidak
+     mendorong layout kelewat panjang. Transisi tinggi antara minimize
+     (220dp) ⇄ maximize dianimasikan via `animateDpAsState` (`tween(280)`).
+     Tombol toggle (ikon `Fullscreen`/`FullscreenExit`, pojok kanan-atas)
+     SENGAJA berbagi `controlsVisible` yang sama persis dengan tombol
+     play/pause yang sudah ada — jadi ikut fade in/out otomatis dengan
+     mekanisme auto-hide yang sama (bukan bikin state fade terpisah),
+     sesuai permintaan eksplisit "wajib bisa fade out juga". State
+     `isMaximized` di-reset ke false tiap video baru dimuat (keyed `uri`).
+  2. **Bug fix: tombol ⏯️ mereset video ke titik awal.** Root cause:
+     handler play SEBELUMNYA selalu memanggil `exoPlayer.seekTo(startMs)`
+     tanpa syarat setiap kali ditekan — jadi video yang di-pause di
+     detik manapun, begitu ditekan play lagi, langsung lompat balik ke
+     `startMs` (awal rentang trim), bukan lanjut dari posisi pause.
+     Fix: seek HANYA dilakukan kalau posisi saat ini (`exoPlayer.
+     currentPosition`) sudah di LUAR rentang trim aktif (`pos < startMs
+     || pos >= endMs`) — mencakup 3 kasus valid untuk tetap seek (play
+     pertama kali, handle trim digeser hingga posisi pause jadi di luar
+     rentang baru, atau playback sudah sampai ujung trim dan user mau
+     replay) — di luar itu (pause-lalu-lanjut biasa, di dalam rentang
+     trim), posisi persis dipertahankan. Diperiksa: `seekTo(startMs)`
+     cuma ada SATU tempat di seluruh file (`VideoEditorPreview` — sudah
+     shared ke 3 screen pemanggil), jadi permintaan user "berlaku pada
+     semua logika video yang serupa" otomatis terpenuhi tanpa perlu cari
+     tempat lain — tidak ada logika player/ExoPlayer kedua yang terpisah.
+  File disentuh: `MainActivity.kt` (1 file).
 - **Batch 53** — Root cause "gap kosong besar di bawah info Potong: ..."
   (dilaporkan user 2x, gagal direproduksi dari review kode di Batch 51 &
   52) AKHIRNYA ketemu berkat screenshot ke-3 yang di-crop lebih dekat:

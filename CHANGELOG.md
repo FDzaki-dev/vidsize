@@ -1,5 +1,62 @@
 # Changelog
 
+## Batch 55c: Fix #2 untuk output blank — canvas per-frame yang di-reset
+
+User kirim bukti screenshot: hasil kompresi GIF berupa gambar yang cuma ada
+sedikit strip warna di baris paling atas, sisanya putih/blank total — bukan
+crash, tapi output yang jelas rusak.
+
+### FIXED — root cause ke-2 (lebih meyakinkan dari fix Batch 55b)
+- Loop decode sebelumnya bikin `Bitmap`+`Canvas` BARU KOSONG di setiap
+  sample frame (`Bitmap.createBitmap(...)` di dalam loop `for`), lalu
+  `movie.draw()` dipanggil ke canvas kosong itu. Ini SALAH untuk banyak
+  GIF di dunia nyata: canvas GIF player yang sesungguhnya PERSISTEN antar
+  frame — banyak GIF (apalagi yang sudah dioptimasi, tapi juga GIF biasa)
+  di tiap timestamp cuma menggambar ULANG bagian yang BERUBAH saja,
+  mengandalkan konten frame sebelumnya yang MASIH ADA di canvas untuk
+  bagian yang tidak berubah. Kasih `Movie` canvas kosong tiap kali sama
+  saja membuang asumsi itu — bagian di luar area yang digambar ulang
+  tetap di kondisi awal (transparan, dirender putih oleh kebanyakan
+  viewer) di SETIAP frame — persis pola "strip atas ada isi, sisanya
+  putih" yang di-screenshot user.
+  Fix: SATU `Bitmap`+`Canvas` persisten dipakai untuk SEMUA sample —
+  digambar berurutan tanpa pernah dibersihkan di antaranya — lalu tiap
+  sample diambil sebagai SALINAN (`Bitmap.copy()`) dari kondisi canvas
+  saat itu, bukan referensi (karena canvas yang sama terus digambar
+  ulang untuk sample berikutnya). Fix ini aman dua arah: kalau ternyata
+  `Movie` SEBENARNYA sudah meng-composite penuh secara internal tiap
+  panggilan (bukan itu bug-nya), reuse canvas tidak mengubah apa pun
+  yang terlihat — tiap `draw()` tetap menggambar ulang isi penuh yang
+  sama seperti sebelumnya.
+
+### CATATAN — ini fix ke-2 untuk gejala yang sama
+- Batch 55b memperbaiki risiko lain (stream ditutup sebelum draw()
+  selesai) yang JUGA valid untuk diperbaiki, tapi screenshot user
+  menunjukkan pola spesifik (strip-lalu-blank) yang lebih cocok
+  dijelaskan oleh bug canvas-di-reset ini. Kedua fix tetap dipertahankan
+  (tidak saling bertentangan, dua lapis perbaikan berbeda pada bagian
+  kode yang sama).
+- Jaring pengaman `isUniformColor()` dari Batch 55b TETAP ada — tidak
+  diubah, masih relevan sebagai lapisan terakhir kalau kedua fix di atas
+  ternyata masih belum menutup semua kasus.
+- **Jujur soal keterbatasan verifikasi**: masih belum ada compiler/
+  device fisik di sisi Claude. Fix ini didasarkan pada screenshot bukti
+  konkret (bukan tebakan tanpa data lagi) + pemahaman standar cara kerja
+  GIF player (canvas persisten antar frame), jadi confidence-nya lebih
+  tinggi dari fix Batch 55b — tapi kalau MASIH terjadi setelah build+
+  install kali ini, kirim FILE GIF SUMBER yang dipakai (bukan cuma
+  screenshot hasilnya) supaya bisa diperiksa strukturnya langsung
+  (apakah dia pakai local color table/partial-frame update per frame,
+  dsb) alih-alih terus menebak dari gejala visual saja.
+
+### VERIFIED
+- Brace/paren balance `GifCompressor.kt`: `{}` 52/52, `()` 243/243,
+  `[]` 47/47. Brace-depth walk: akhir 0, tidak pernah negatif.
+
+### VERDICT
+Fix ke-2 diterapkan berdasarkan bukti screenshot user. File disentuh:
+`GifCompressor.kt` (1 file).
+
 ## Batch 55b: Fix risiko output blank/putih polos di "Kompres GIF"
 
 Feedback user: output GIF tidak boleh corrupt/blank putih sama sekali.

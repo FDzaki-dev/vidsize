@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 55b**. This is the first-read file per the context
+Snapshot as of **Batch 55c**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -44,7 +44,16 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
-- **Batch 55b (bugfix):** User report: output GIF dari "Kompres GIF" tidak
+- **Batch 55c (bugfix #2, dari bukti screenshot user):** Screenshot user
+  tunjukkan pola spesifik — strip warna tipis di baris paling atas,
+  sisanya putih polos total. Root cause: loop decode bikin canvas BARU
+  KOSONG tiap frame sample, padahal GIF player asli itu canvas-nya
+  PERSISTEN antar frame (banyak GIF cuma gambar ulang bagian yang
+  berubah). Fix: 1 canvas persisten dipakai untuk semua sample,
+  snapshot via `Bitmap.copy()` tiap kali. Aman dua arah (tidak
+  memperburuk kalau ternyata bukan itu bug-nya). 1 file
+  (`GifCompressor.kt`). Detail di Batch history + CHANGELOG.md.
+- **Batch 55b (bugfix #1):** User report: output GIF dari "Kompres GIF" tidak
   boleh corrupt/blank putih sama sekali. Root cause paling mungkin:
   `Movie.decodeStream()` + stream ditutup (`.use{}`) sebelum semua
   `movie.draw()` selesai dipanggil → diganti `Movie.decodeByteArray()`
@@ -127,6 +136,68 @@ dokumentasi, nama file APK Release). 1 item sisanya (rename repo GitHub)
 tetap aksi manual di luar ZIP — lihat pesan chat._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 55c** — User kirim BUKTI konkret (screenshot): hasil kompresi
+  GIF adalah gambar yang cuma punya strip warna tipis di baris paling
+  atas, sisanya putih polos total sampai bawah. Ini gejala yang jauh
+  lebih spesifik daripada laporan verbal Batch 55b, dan menunjuk ke root
+  cause KEDUA (independen dari fix Batch 55b, keduanya tetap valid &
+  dipertahankan bersamaan): loop decode sebelumnya membuat
+  `Bitmap.createBitmap()` + `Canvas` BARU KOSONG di SETIAP iterasi
+  sample frame, lalu `movie.draw()` dipanggil ke canvas kosong itu tiap
+  kali. Ini keliru untuk cara kerja GIF pada umumnya: permukaan gambar
+  GIF player sungguhan itu PERSISTEN antar frame — sangat banyak GIF di
+  dunia nyata (terutama yang sudah dioptimasi lewat tool semacam
+  gifsicle, tapi juga banyak GIF biasa) di tiap timestamp cuma
+  menggambar ULANG bagian yang BERUBAH saja dari frame sebelumnya,
+  mengandalkan sisa canvas yang SUDAH ADA isinya dari frame-frame
+  sebelumnya untuk bagian yang tidak berubah — bukan menggambar ulang
+  frame penuh dari nol tiap kali. Ngasih `Movie` canvas kosong-baru di
+  setiap panggilan `draw()` membuang total asumsi itu: bagian di luar
+  region yang di-redraw pada timestamp tertentu tetap di kondisi awal
+  bitmap (`ARGB_8888` baru = transparan penuh, RGBA 0,0,0,0), yang
+  dirender PUTIH oleh hampir semua viewer/galeri foto — persis pola yang
+  di-screenshot user.
+  Fix: SATU `Bitmap`+`Canvas` persisten dibuat SEKALI sebelum loop, lalu
+  dipakai ULANG untuk semua sample (`movie.setTime(t)` →
+  `movie.draw(canvas, ...)` berurutan TANPA pernah membersihkan canvas
+  di antaranya) — tiap sample yang mau disimpan diambil sebagai SALINAN
+  independen (`canvasBmp.copy(Bitmap.Config.ARGB_8888, false)`), bukan
+  referensi ke `canvasBmp` yang sama (karena `canvasBmp` itu terus
+  digambar ulang untuk sample-sample berikutnya — kalau disimpan sebagai
+  referensi, semua entry di `sampled` ujung-ujungnya nunjuk ke bitmap
+  YANG SAMA dan cuma nyimpan state TERAKHIR, bukan snapshot per-waktu).
+  Fix ini SENGAJA didesain aman dua arah tanpa perlu 100% yakin ini
+  benar-benar akar masalahnya: KALAU ternyata `Movie` sebenarnya SUDAH
+  meng-composite frame penuh secara internal di tiap panggilan
+  `setTime()`/`draw()` (skenario di mana canvas-reuse ini TIDAK
+  diperlukan), reuse canvas tidak mengubah hasil yang terlihat sama
+  sekali — tiap `draw()` akan tetap menggambar ulang konten penuh yang
+  identik seperti sebelumnya, cuma di atas canvas yang kebetulan tidak
+  di-reset. Jadi perubahan ini strictly aman/tidak-merugikan di kedua
+  skenario, bukan gambling di satu hipotesis saja.
+  Jaring pengaman `isUniformColor()` dari Batch 55b SENGAJA TIDAK diubah
+  — tetap dipertahankan sebagai lapisan terakhir kalau kedua fix di atas
+  (55b + 55c) ternyata masih belum menutup 100% kasus di device
+  tertentu.
+  **Kejujuran soal verifikasi**: masih tidak ada compiler/emulator/
+  device fisik di sisi Claude. TAPI beda dari Batch 55b (yang analisis
+  murni dari baca kode + pemahaman API), fix ini didasarkan pada BUKTI
+  VISUAL KONKRET dari user (pola spesifik strip-lalu-blank yang match
+  persis dengan penjelasan "canvas di-reset tiap frame") — jadi
+  confidence lebih tinggi dari sekadar analisis kode murni. Kalau
+  ternyata MASIH terjadi setelah build+install kali ini: kirim FILE GIF
+  SUMBER yang dipakai (bukan cuma screenshot hasil kompresinya) — supaya
+  strukturnya (apakah pakai local color table per frame / disposal
+  method tertentu / dsb) bisa diperiksa langsung, bukan cuma menebak
+  dari gejala visual output-nya lagi.
+  Brace/paren balance setelah fix: `GifCompressor.kt` `{}` 52/52,
+  `()` 243/243, `[]` 47/47; brace-depth walk akhir 0, tidak pernah
+  negatif.
+  File disentuh: `GifCompressor.kt` (1 file — `GifEncoder.kt` dan
+  `MainActivity.kt` tidak perlu diubah untuk fix ini, karena bug-nya
+  murni di loop decode `GifCompressor.kt`, sudah dikonfirmasi encoder
+  dan logic palet/quantize IDENTIK dengan `GifExporter.kt` yang sudah
+  terbukti jalan — lihat perbandingan langsung di histori Batch 55b).
 - **Batch 55b** — Feedback user: "output gif gak boleh corrupt/blank
   white sama sekali". Audit `GifCompressor.kt` (Batch 55) menemukan
   kandidat root-cause paling masuk akal: `Movie.decodeStream(stream)`

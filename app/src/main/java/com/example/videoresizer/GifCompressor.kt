@@ -201,22 +201,45 @@ object GifCompressor {
         val frameCount = (totalDurationMs / SAMPLE_INTERVAL_MS).toInt().coerceIn(1, MAX_SOURCE_FRAMES)
         val actualIntervalMs = totalDurationMs.toDouble() / frameCount
 
-        // --- Decode `frameCount` evenly-spaced frames, pre-scaled to outWidth×outHeight ---
+        // Batch 55c (bugfix): ONE persistent bitmap+canvas reused across
+        // every sampled frame — NOT a fresh blank one per sample (the
+        // previous version of this loop). A real GIF player's drawing
+        // surface PERSISTS between frames: plenty of real-world GIFs
+        // (especially ones already run through an optimizer, but also
+        // plenty of ordinary ones) only redraw the region that actually
+        // changed at a given timestamp, relying on whatever was already on
+        // the canvas for everything else. Handing Movie a brand-new blank
+        // canvas for every single sample discarded that assumption —
+        // anything outside whatever region got redrawn at that exact
+        // timestamp stayed at the canvas's blank/transparent init state
+        // (rendered as white by most viewers/galleries), which matches
+        // exactly the "top strip has real content, everything below it is
+        // blank" result reported against Batch 55b. This fix is safe
+        // either way: if Movie actually already composites every frame
+        // fully internally (i.e. this wasn't the bug), reusing the canvas
+        // changes nothing observable, since each draw() would repaint the
+        // same full content it always did.
+        val canvasBmp = Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888)
+        val canvas = Canvas(canvasBmp)
+        if (finalScale != 1f) canvas.scale(finalScale, finalScale)
+
+        // --- Sample `frameCount` evenly-spaced points in time, snapshotting the persistent canvas after each ---
         val sampled = ArrayList<Bitmap>(frameCount)
         for (i in 0 until frameCount) {
             val t = min((i * actualIntervalMs).toInt(), (totalDurationMs - 1).coerceAtLeast(0))
             movie.setTime(t)
-            val bmp = Bitmap.createBitmap(outWidth, outHeight, Bitmap.Config.ARGB_8888)
-            val canvas = Canvas(bmp)
-            if (finalScale != 1f) canvas.scale(finalScale, finalScale)
             movie.draw(canvas, 0f, 0f)
-            sampled.add(bmp)
+            // A genuine copy, not a reference — canvasBmp keeps getting
+            // drawn on for every later sample, so each kept snapshot needs
+            // to own its own pixel data.
+            sampled.add(canvasBmp.copy(Bitmap.Config.ARGB_8888, false))
             // Decoding is roughly the first 30% of total work; dedup is a
             // quick pass (30-35%), quantizing (35-90%) and LZW encoding
             // (90-100%) make up the rest — mirrors GifExporter's own
             // stage-weighted progress reporting.
             onProgress((((i + 1) * 30) / frameCount).coerceIn(0, 30))
         }
+        canvasBmp.recycle()
 
         if (sampled.isEmpty()) {
             return GifCompressResult.Failure("Tidak ada frame yang berhasil dibaca dari GIF ini.")

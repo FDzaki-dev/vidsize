@@ -31,8 +31,34 @@ object GifEncoder {
         delayCentiseconds: Int,
         loopForever: Boolean = true
     ) {
+        // Fans the one flat delay out across every frame and delegates to
+        // the per-frame-delay variant below — GifExporter's existing call
+        // site (named args, unchanged) still resolves to THIS overload, so
+        // its output is byte-for-byte identical to before this was added.
+        encode(out, width, height, palette, frames, List(frames.size) { delayCentiseconds }, loopForever)
+    }
+
+    /**
+     * Per-frame-delay variant (added Batch 55 for GifCompressor): lets the
+     * caller give each output frame its own delay instead of one flat value
+     * for the whole animation. Used when frames have been merged/dropped
+     * (e.g. GifCompressor's near-duplicate-frame dedup) and the surviving
+     * frame needs to cover the dropped frames' original screen-time so
+     * total playback duration/speed is preserved. [delays] must have one
+     * entry per frame in [frames].
+     */
+    fun encode(
+        out: OutputStream,
+        width: Int,
+        height: Int,
+        palette: IntArray,
+        frames: List<ByteArray>,
+        delays: List<Int>,
+        loopForever: Boolean = true
+    ) {
         require(palette.isNotEmpty() && palette.size <= 256) { "palette must have 1-256 entries" }
         require(width > 0 && height > 0) { "width/height must be positive" }
+        require(delays.size == frames.size) { "delays must have one entry per frame" }
 
         val colorBits = bitsForPaletteSize(palette.size)
         val tableSize = 1 shl colorBits
@@ -42,10 +68,10 @@ object GifEncoder {
         writeGlobalColorTable(out, palette, tableSize)
         if (loopForever) writeNetscapeLoopExtension(out)
 
-        for (frame in frames) {
-            writeGraphicControlExtension(out, delayCentiseconds)
+        for (i in frames.indices) {
+            writeGraphicControlExtension(out, delays[i])
             writeImageDescriptor(out, width, height)
-            writeLzwImageData(out, frame, colorBits)
+            writeLzwImageData(out, frames[i], colorBits)
         }
 
         out.write(0x3B) // GIF trailer

@@ -1,5 +1,193 @@
 # Changelog
 
+## Batch 55: Tab baru "Kompres GIF" — anti-crash, kualitas tetap HD
+
+Permintaan user: tambahkan tab khusus kompresi GIF, anti crash, kualitas
+output tetap HD.
+
+### ADDED
+- `GifCompressor.kt` (baru) — pipeline kompresi untuk file GIF yang SUDAH
+  ADA (beda dari `GifExporter` yang bikin GIF baru dari video):
+  - Decode via `android.graphics.Movie` (API 1, deprecated tapi masih ada
+    sampai API terbaru; satu-satunya API publik yang jangkau minSdk 24
+    project ini sekaligus kasih akses per-frame — `ImageDecoder` API
+    28+ only & render-driven).
+  - Kompresi via **dedup frame nyaris-identik**: frame yang bedanya di
+    bawah threshold dari frame TERAKHIR YANG DISIMPAN dibuang, delay-nya
+    digabung ke frame yang disimpan — total durasi animasi GIF hasil
+    tetap sama, cuma buang frame yang secara visual tidak beda.
+  - 2 level: **Ringan** (default; tidak resize sama sekali, cuma dedup —
+    "kualitas tetap HD" secara harfiah) dan **Maksimal** (dedup lebih
+    agresif + cap lebar 720px kalau sumber lebih besar).
+  - Anti-crash: tolak file >60MB sebelum decode, cap 300 frame
+    disimpan di memori sekaligus, backstop lebar decode 1280px absolut
+    independen dari level (dicapai via pre-scale Canvas — bitmap native
+    full-res tidak pernah dialokasikan), seluruh pipeline dibungkus
+    try/catch `OutOfMemoryError`/`Exception` → pesan ramah, bukan crash.
+- `GifEncoder.kt`: overload baru `encode(..., delays: List<Int>, ...)`
+  untuk delay per-frame (dibutuhkan dedup di atas). Overload lama
+  (`delayCentiseconds: Int`, dipakai `GifExporter`) didelegasikan ke
+  situ — **perilaku existing tidak berubah sama sekali**.
+- `MainActivity.kt`: `GifScreen` sekarang punya 2 mode via pill tab baru
+  (`GifScreenMode`/`GifModeTabBar`) — "Video ke GIF" (existing, tidak
+  disentuh) dan "Kompres GIF" (baru, `GifCompressPanel` + picker
+  `GetContent("image/gif")`). Studio: history entry baru
+  `kind = "GIF_COMPRESS"`; 4 titik display (ikon/Bagikan/Buka di Galeri/
+  teks detail) di-widen mencakup kind ini. Guard "keluar saat proses
+  jalan" (Batch 43) diperluas mencakup proses kompresi GIF juga.
+
+### VERIFIED — brace/paren balance + review manual (tidak ada compiler lokal)
+- `{}`/`()` balance whole-file: `MainActivity.kt` 1297/1297 & 2658/2658,
+  `GifCompressor.kt` 44/44 & 206/206, `GifEncoder.kt` 32/32 & 141/141.
+- Brace-DEPTH walk (bukan cuma total count) dari awal sampai akhir file
+  `MainActivity.kt`: depth akhir = 0, tidak pernah negatif di titik
+  manapun, semua fungsi top-level balik ke depth 0 (fungsi lokal baru
+  ada di depth 1, sama seperti pola `startResize`/`handlePickedVideo`
+  yang sudah ada). Satu bug ketukar (kurang 1 `}` sebelum `else {`
+  cabang Kompres) sempat ketemu & di-fix lewat pengecekan ini.
+- `GifExporter.kt` **tidak disentuh sama sekali** — diverifikasi fitur
+  "Video ke GIF" existing nol risiko regresi dari batch ini.
+
+### DEFERRED (sengaja, simetris dengan pola existing)
+- `GIF_COMPRESS` "Edit ulang" di Studio tidak dikabel ke alur re-generate
+  penuh — jatuh ke default branch, yang mana pre-check durasi video
+  sudah gagal dengan aman (pesan jelas, bukan crash/salah-buka layar).
+  Simetris dengan gap `kind="COMPRESS"` (video) dari Batch 19 — lihat
+  PROJECT_STATE.md "Known pending items".
+
+### DOCS SYNC (VIP)
+- CHANGELOG.md ini juga di-backfill Batch 51-54 (lihat 4 entri di bawah)
+  — ditemukan gap saat sinkronisasi VIP docs batch ini: keempatnya sudah
+  lengkap di PROJECT_STATE.md tapi belum pernah masuk CHANGELOG.md.
+  Diringkas dari PROJECT_STATE.md, bukan ditulis ulang dari nol — detail
+  penuh tetap ada di sana.
+- `README.md`: bagian baru mendeskripsikan "Video ke GIF" + "Kompres
+  GIF" (sebelumnya kedua fitur ini — termasuk yang sudah ada sejak Batch
+  9 — tidak pernah punya bagian dokumentasi sendiri di README; gap lama,
+  diperbaiki sekalian).
+- `FILE_MANIFEST.txt`: entri `GifCompressor.kt` baru + catatan update di
+  `GifEncoder.kt`/`MainActivity.kt`.
+
+### VERDICT
+Tab "Kompres GIF" **selesai** — fitur baru, anti-crash (4 guard eksplisit
+di atas), kualitas default tetap HD (level Ringan tidak resize). File
+kode disentuh: `GifCompressor.kt` (baru), `GifEncoder.kt`,
+`MainActivity.kt` (3 file, sesuai micro-batch limit). `GifExporter.kt`
+sengaja tidak disentuh.
+
+## Batch 54: Video player — fitur maximize/minimize + fix bug reset ke awal
+
+Dua permintaan sekaligus dari user, keduanya di `VideoEditorPreview`
+(satu shared composable, dipakai 3 screen: Resizer/GIF/Compressor).
+
+### ADDED
+- Fitur maximize/minimize video player: `BoxWithConstraints` + tinggi
+  "maximize" dihitung dari aspect ratio ASLI video (bukan angka tetap),
+  di-cap 520dp. Transisi minimize (220dp) ⇄ maximize dianimasikan via
+  `animateDpAsState` (`tween(280)`). Tombol toggle (ikon Fullscreen/
+  FullscreenExit) berbagi `controlsVisible` yang sama dengan tombol
+  play/pause — ikut fade in/out otomatis dengan mekanisme auto-hide yang
+  sudah ada, bukan state fade terpisah. `isMaximized` reset ke false
+  tiap video baru dimuat.
+
+### FIXED
+- Tombol play/pause mereset video ke titik awal alih-alih lanjut dari
+  posisi pause. Root cause: handler play sebelumnya selalu memanggil
+  `exoPlayer.seekTo(startMs)` tanpa syarat. Fix: seek HANYA kalau posisi
+  saat ini di LUAR rentang trim aktif (3 kasus valid: play pertama kali,
+  handle trim digeser hingga posisi pause di luar rentang baru, atau
+  playback sudah di ujung trim). Di luar itu, posisi pause dipertahankan
+  persis. `seekTo(startMs)` cuma ada 1 tempat di seluruh file (shared ke
+  3 screen), jadi fix otomatis berlaku merata.
+
+### VERDICT
+Kedua permintaan selesai. File disentuh: `MainActivity.kt` (1 file).
+
+## Batch 53: Fix root cause gap kosong besar di bawah info "Potong: ..."
+
+Root cause akhirnya ketemu di percobaan ke-3 (setelah Batch 51 & 52 gagal
+reproduksi) berkat screenshot yang di-crop lebih dekat.
+
+### FIXED
+- Root cause: `Box` pembungkus `AndroidView(PlayerView)` di
+  `VideoEditorPreview` sebelumnya TIDAK punya ukuran sendiri (`.height
+  (220.dp)` terpasang di `AndroidView`, bukan `Box`-nya) — `PlayerView`
+  (lewat `AspectRatioFrameLayout` internal) kadang me-request ulang
+  ukurannya sendiri mengikuti rasio video asli via `requestLayout()`
+  async, dan constraint 220dp dari Compose tidak konsisten bertahan pada
+  re-layout itu (kasus interop `AndroidView`+`PlayerView` yang dikenal).
+  Efek: `Box` ikut membesar mengikuti video (mis. 1300×1300), terlihat
+  seperti "gap kosong" di ruang sisa sebelum teks detail.
+  Fix: `Box` sekarang punya ukuran eksplisit sendiri
+  (`fillMaxWidth().height(220.dp)`), `AndroidView` pakai
+  `Modifier.matchParentSize()` — `PlayerView` tidak bisa lagi mendikte
+  ukuran parent-nya. Berlaku otomatis ke semua 3 pemanggil
+  `VideoEditorPreview` (shared bug di satu fungsi shared, bukan scope
+  creep).
+
+### VERDICT
+Bug lama (dilaporkan user 2x) akhirnya tuntas. File disentuh:
+`MainActivity.kt` (1 file).
+
+## Batch 52: Follow-up polish tab Batch 51 (transisi, chip kepotong)
+
+Follow-up dari feedback user (multi-select atas screenshot real): 3 dari
+4 item dikerjakan, 1 item (gap kosong) di-declare belum bisa dipastikan
+dari review kode saat itu — root cause-nya baru ketemu di Batch 53.
+
+### CHANGED
+- Transisi antar-tab (Batch 51) yang tadinya instan/kaku (5 blok `if`
+  sibling) direstrukturisasi jadi satu `AnimatedContent` dengan crossfade
+  (`fadeIn(tween(220)).togetherWith(fadeOut(tween(140)))`) — dipilih
+  ketimbang `AnimatedVisibility` per-blok karena itu bisa menampilkan 2
+  konten bertumpuk sesaat selagi fade barengan. Konsekuensi: tiap tab
+  yang isinya beberapa composable sejajar (Ukuran/Overlay/Lainnya) kini
+  wajib dibungkus 1 `Column` sendiri.
+- Chip "YouTube (16:9)" kepotong di tepi layar → root cause: `LazyRow`
+  Preset media sosial tidak punya `contentPadding`. Fix:
+  `contentPadding = PaddingValues(end = 20.dp)` khusus di situ (LazyRow
+  lain sengaja tidak disentuh, tidak dilaporkan bermasalah).
+
+### DEFERRED
+- Gap kosong di bawah "Potong: ..." — audit ulang `VideoEditorPreview`
+  tidak menemukan penyebab struktural saat itu (investigasi ke-2 dengan
+  hasil sama seperti Batch sebelumnya). Ketemu & di-fix di Batch 53
+  setelah screenshot yang lebih ter-zoom.
+
+### VERDICT
+3/4 item selesai, 1 item dilanjut ke Batch 53. File disentuh:
+`MainActivity.kt` (1 file).
+
+## Batch 51: Kategorisasi panel setting ResizerScreen jadi 5 tab
+
+Permintaan user (via screenshot): "kategorikan jadi beberapa tab menu
+agar terlihat clean dan minimalis".
+
+### CHANGED
+- Panel setting `ResizerScreen` (sebelumnya 1 scroll panjang, 8 section
+  berurutan) dikelompokkan jadi 5 tab via `ResizerSettingsTab` enum +
+  `SettingsTabBar` composable baru (segmented pill ala iOS, reuse token
+  visual yang sudah ada — surfaceVariant utk track, gradient
+  primary→secondary utk pill aktif, sama persis brush tombol CTA "Resize
+  video"): **Preset**, **Ukuran** (Aspect ratio + Resolution + Mode
+  resize), **Kualitas**, **Overlay** (Watermark + Caption), **Lainnya**
+  (Rotasi + Flip + Frame rate + Bisukan audio). Progress bar/tombol
+  export/pesan hasil sengaja di luar sistem tab (status/aksi persisten).
+  `selectedSettingsTab` direset ke PRESET di 2 titik (video baru dipilih
+  manual, prefill "Edit ulang" dari Studio).
+
+### SCOPE
+- Sengaja hanya `ResizerScreen` — `BatchScreen` punya struktur setting
+  mirip tapi TIDAK ikut disentuh (Zero-Unnecessary-Refactor; kategorisasi
+  tab di sana adalah task terpisah kalau memang diinginkan).
+
+### VERIFIED
+- Brace/paren balance whole-file: `{}` 1188/1188, `()` 2394/2394.
+
+### VERDICT
+Selesai. File disentuh: `MainActivity.kt` (1 file, sesuai micro-batch
+limit).
+
 ## Batch 50: Rename nama file APK GitHub Release — VideoResizer → Vidsize
 
 Izin eksplisit diberikan user utk edit `.github/workflows/build.yml`

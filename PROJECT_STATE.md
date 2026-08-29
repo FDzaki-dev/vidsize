@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 54**. This is the first-read file per the context
+Snapshot as of **Batch 55**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -44,6 +44,18 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 55 (fitur baru):** Tab "Kompres GIF" di `GifScreen` — kompresi
+  file GIF yang SUDAH ADA (bukan bikin GIF baru dari video, itu tab
+  "Video ke GIF" yang sudah ada, tidak disentuh). Anti-crash (cap ukuran
+  file input, cap jumlah frame, cap lebar decode, semua tahap dibungkus
+  try/catch OOM/Exception → pesan ramah bukan crash) + kualitas default
+  tetap HD (level Ringan tidak resize sama sekali, cuma buang frame
+  duplikat). Detail penuh di Batch history di bawah + CHANGELOG.md.
+  _(Catatan: bullet Batch 44-53 di section ini sebelumnya tidak
+  di-backfill oleh sesi lampau — gap lama, bukan dari sesi ini. Section
+  "Batch history" di bawah adalah sumber yang benar-benar ter-update
+  tiap batch; section ini sejak lama lebih berfungsi sebagai ringkasan
+  beberapa entri terbaru, bukan log lengkap.)_
 - **Batch 43 (audit + fix):** Back/cancel konsistensi. Audit seluruh
   screen (Resizer/Batch/GIF/Compressor/Studio) + semua 13 `AlertDialog`:
   ResizerScreen & CompressorScreen SUDAH benar (confirm dulu sebelum
@@ -105,6 +117,86 @@ dokumentasi, nama file APK Release). 1 item sisanya (rename repo GitHub)
 tetap aksi manual di luar ZIP — lihat pesan chat._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 55** — Permintaan user: "tambahkan tab khusus kompresi GIF yang
+  anti crash + kualitas output tetap HD". `GifScreen` sebelumnya cuma
+  punya 1 mode ("Video ke GIF", via `GifExporter`) — sekarang punya 2,
+  dipilih lewat pill tab baru (`GifScreenMode`/`GifModeTabBar`, visual
+  identik `SettingsTabBar` Batch 51 tapi diketik ulang khusus, BUKAN
+  men-generic-kan `SettingsTabBar` yang sudah ada — nol risiko ke tab
+  ResizerScreen). Mode baru "Kompres GIF" mengompres file GIF YANG SUDAH
+  ADA (dipilih via `ActivityResultContracts.GetContent("image/gif")`,
+  bukan `PickVisualMedia` — perlu filter GIF spesifik yang `ImageOnly`
+  tidak bisa) — pipeline baru `GifCompressor.kt`, TERPISAH total dari
+  `GifExporter.kt` (yang mana **tidak disentuh sama sekali** batch ini).
+  Teknik kompresi (2 level, `GifCompressionLevel.RINGAN`/`MAKSIMAL`,
+  pola sama seperti `CompressionLevel` video Batch 19):
+  1. **Dedup frame nyaris-identik** — decode via `android.graphics.Movie`
+     (API 1, deprecated tapi belum dihapus, satu-satunya API publik yang
+     jangkau minSdk 24 project ini DAN kasih akses per-frame — `Image
+     Decoder` alternatifnya API 28+ only & render-driven, bukan "kasih
+     bitmap frame ke-N"), sample tiap ~40ms (Movie cuma expose
+     `duration()` total, bukan timestamp per-frame). Frame yang beda
+     rata-rata pixelnya di bawah threshold level dari frame TERAKHIR
+     YANG DISIMPAN (bukan frame sebelumnya berurutan — cegah "boiling
+     frog drift") dibuang, delay-nya digabung ke frame yang disimpan
+     (total durasi/kecepatan animasi GIF hasil tetap sama). Ini butuh
+     `GifEncoder.encode()` nambah 1 overload delay-per-frame (`delays:
+     List<Int>`) — overload lama (`delayCentiseconds: Int`, dipakai
+     `GifExporter`) didelegasikan ke situ TANPA PERUBAHAN PERILAKU
+     (named-arg call site GifExporter otomatis resolve ke overload lama,
+     byte-for-byte sama seperti sebelum batch ini).
+  2. **Cap lebar opsional** — HANYA di level Maksimal (720px). Level
+     Ringan (default) TIDAK PERNAH resize — "kualitas output tetap HD"
+     secara harfiah: resolusi keluar = resolusi masuk, kecuali kena
+     backstop anti-crash di bawah.
+  Anti-crash (semua eksplisit diminta user): (a) tolak file >60MB di
+  awal sebelum decode, (b) cap 300 frame yang di-sample/disimpan di
+  memori sekaligus (sama peran `GifExporter.MAX_FRAMES`), (c) backstop
+  lebar decode 1280px ABSOLUT independen dari level (bahkan Ringan) —
+  dicapai dgn PRE-SCALE Canvas sebelum `movie.draw()`, jadi bitmap
+  native full-res TIDAK PERNAH dialokasikan sama sekali untuk sumber
+  yang sangat besar, (d) seluruh pipeline dibungkus try/catch
+  `OutOfMemoryError` + `Exception` generik → `GifCompressResult.Failure`
+  dengan pesan ramah, tidak pernah propagate jadi crash.
+  Palet warna & quantize nearest-color: algoritma SAMA PERSIS dengan
+  `GifExporter.buildPalette`/`quantizeFrame`, tapi SENGAJA DIDUPLIKASI
+  (bukan di-share lewat widen-visibility) — supaya `GifExporter.kt` bisa
+  tetap 100% tidak disentuh (nol risiko ke fitur "Video ke GIF" yang
+  sudah jalan), fungsi kecil & sudah terbukti benar jadi duplikasi murah/
+  aman dibanding coupling lintas-file untuk kasus ini.
+  Studio integration: history entry baru `kind = "GIF_COMPRESS"`.
+  `onEditAgain`'s dispatch (baris ~351) SENGAJA TIDAK ditambah cabang
+  baru untuk kind ini — biarkan jatuh ke default (video) branch, yang
+  mana `stillPlayable` pre-check (`MediaMetadataRetriever` gagal baca
+  durasi dari file GIF) sudah otomatis gagal dengan aman → `onEditFailed`
+  → pesan "tidak lagi bisa diakses", BUKAN crash. Ini persis pola yang
+  sudah diterima untuk gap `kind="COMPRESS"` (Batch 19, lihat "Known
+  pending items") — sengaja dibiarkan simetris, bukan lupa. 4 tempat LAIN
+  di `StudioScreen` (ikon/`onShare`/`onOpenInGallery`/teks detail) DI-
+  WIDEN mencakup `GIF_COMPRESS` (karena keempatnya murni "ini kan cuma
+  file .gif juga" — beda dgn Edit-ulang yang butuh alur re-generate
+  penuh). Guard "keluar saat proses jalan" (`showExitWhileProcessingConfirm`,
+  fix Batch 43) DIPERLUAS `isProcessing || compressIsProcessing` supaya
+  kompresi GIF yang sedang jalan juga terlindungi, tidak cuma tab convert.
+  Micro-batch: 3 file KODE (`GifCompressor.kt` baru, `GifEncoder.kt`
+  +overload, `MainActivity.kt` — tab/state/wiring). `GifExporter.kt`
+  tidak disentuh sama sekali (lihat alasan duplikasi di atas). Brace/
+  paren balance whole-file diverifikasi ({}=1297/1297 MainActivity.kt,
+  {}=44/44 GifCompressor.kt, {}=32/32 GifEncoder.kt) + brace-DEPTH walk
+  (bukan cuma total count) diverifikasi kembali ke 0 di akhir file & tiap
+  fungsi lokal baru ketemu di depth 1 yang benar (pola sama seperti
+  `startResize`/`handlePickedVideo` yang sudah ada) — sempat ketemu 1 bug
+  brace-tertukar (kurang 1 `}` sebelum `else {` cabang Compress) lewat
+  pengecekan ini sebelum di-fix, dicatat di sini sebagai bukti proses
+  verifikasinya jalan, bukan sekadar declare "sudah dicek".
+  CHANGELOG.md Batch 51-54 juga di-backfill batch ini (gap lama, sudah
+  tercatat lengkap di PROJECT_STATE.md tapi belum masuk CHANGELOG.md —
+  ditemukan saat sinkronisasi VIP docs, langsung diperbaiki sekalian
+  sesuai aturan Zero Stale Info).
+  File disentuh: `GifCompressor.kt` (baru), `GifEncoder.kt`,
+  `MainActivity.kt` — 3 file kode. Docs VIP (`PROJECT_STATE.md`,
+  `CHANGELOG.md`, `README.md`, `FILE_MANIFEST.txt`) disinkronkan
+  bersamaan, di luar hitungan limit file kode.
 - **Batch 54** — Dua permintaan sekaligus dari user, keduanya di
   `VideoEditorPreview` (satu shared composable, dipakai 3 screen):
   1. **Fitur baru: maximize/minimize video player.** Player yang tadinya
@@ -834,6 +926,21 @@ tetap aksi manual di luar ZIP — lihat pesan chat._
   unchanged. If multi-select ever needs the same list-style treatment,
   that's new scope, not an extension of the existing single-pick screen.
 
+## Defaults a new reader should know (cont'd — GifCompressor, Batch 55)
+- **"Kompres GIF" is a THIRD, separate GIF pipeline** alongside
+  `GifExporter` (video→GIF) — `GifCompressor.kt` decodes an EXISTING GIF
+  via `android.graphics.Movie` (deprecated API, deliberately kept — see
+  Batch 55 history entry for why it's still the right call at this
+  project's minSdk 24). `GifExporter.kt` was not touched to build this;
+  the palette/quantize functions are intentionally duplicated in
+  `GifCompressor.kt` rather than shared.
+- **`GifEncoder.encode()` now has 2 overloads** — the original flat
+  `delayCentiseconds: Int` one (still what `GifExporter` calls,
+  unchanged behavior) and a new `delays: List<Int>` one (what
+  `GifCompressor` calls, for its frame-dedup delay-merging). If GIF
+  encoding ever needs touching again, check which overload a call site
+  resolves to before assuming "the" delay parameter.
+
 ## Defaults a new reader should know (cont'd — Compressor, Batch 19)
 - **Compressor is a separate pipeline call, not a mode of `resize()`** —
   `VideoResizer.compress()`/`CompressRequest`/`CompressionLevel` are all
@@ -847,6 +954,18 @@ tetap aksi manual di luar ZIP — lihat pesan chat._
   source in, source (or trimmed clip) out, just re-encoded smaller.
 
 ## Known pending items (not yet actioned)
+- 🟡 **GIF_COMPRESS "Edit ulang" not wired (Batch 55, sengaja, simetris
+  dengan item COMPRESS di bawah)** — `kind = "GIF_COMPRESS"` jatuh ke
+  default (non-GIF) branch di `onEditAgain`, tapi `stillPlayable`
+  pre-check di `StudioScreen` (coba baca durasi via
+  `MediaMetadataRetriever` dari `entry.sourceUri`, yang untuk entry ini
+  adalah file GIF bukan video) sudah gagal dengan aman lebih dulu →
+  `onEditFailed` → pesan jelas, BUKAN crash & BUKAN salah-buka Resizer
+  dengan data video yang salah. Kalau nanti mau didukung penuh: butuh
+  `GifCompressPrefill` data class (uri + level) + cabang ke-3 di
+  `onEditAgain` yang buka `Screen.GIF` dengan `screenMode =
+  GifScreenMode.COMPRESS` — deferred sesuai micro-batching rule (Batch
+  55 sengaja fokus 1 fitur: tab kompresi itu sendiri).
 - 🟡 **Compressor "Edit ulang" not wired (Batch 19)** — a `kind =
   "COMPRESS"` Studio history entry falls into `onEditAgain`'s default
   (non-GIF) branch today, which reopens **Resizer** with mostly-default

@@ -1,5 +1,55 @@
 # Changelog
 
+## Batch 55b: Fix risiko output blank/putih polos di "Kompres GIF"
+
+Feedback user: output GIF tidak boleh corrupt/blank putih sama sekali.
+
+### FIXED — root cause paling mungkin
+- `GifCompressor.kt` sebelumnya decode via `Movie.decodeStream(inputStream)`
+  di dalam blok `.use { }`, yang MENUTUP stream itu tepat setelah
+  `decodeStream()` return — padahal `movie.draw()` dipanggil BERKALI-KALI
+  SETELAH itu (satu kali per frame yang di-sample, jauh di bawah). Kalau
+  `Movie` menyimpan referensi apa pun ke stream yang sudah ditutup itu
+  (bukan data yang fully self-contained), setiap `draw()` berikutnya
+  berisiko diam-diam tidak menggambar apa-apa — persis gejala "output
+  blank/putih". Fix: baca seluruh file ke `ByteArray` lebih dulu (dibatasi
+  `MAX_INPUT_BYTES` yang sudah ada, ≤60MB), lalu decode via
+  `Movie.decodeByteArray(bytes, 0, bytes.size)` — data GIF jadi sepenuhnya
+  berdiri sendiri di memori, tidak bergantung stream yang masih hidup sama
+  sekali.
+  _(`readBytes()` di sini SENGAJA dipakai meski aturan project melarang
+  `readBytes()` untuk Release Downloader — beda kasus: itu larangan utk
+  ukuran download jaringan yang a-priori tak terbatas, ini file lokal yang
+  SUDAH dicek ukurannya ≤60MB lebih dulu.)_
+
+### ADDED — jaring pengaman tambahan
+- Safety check baru: kalau SEMUA frame hasil sample ternyata satu warna
+  polos merata (bukan pola wajar untuk GIF asli manapun, bahkan yang
+  sederhana), proses digagalkan dengan pesan jelas ("frame yang terbaca
+  kosong/polos, coba file GIF lain") alih-alih diam-diam lanjut meng-encode
+  hasil yang blank/rusak sebagai "berhasil". `isUniformColor()` — sample
+  pixel dgn stride yang sama seperti pengecekan dedup lainnya.
+
+### JUJUR SOAL VERIFIKASI (tidak ada compiler/device di sisi ini)
+- Perbaikan ini didasarkan pada analisis paling masuk akal dari
+  siklus-hidup stream/Movie API (root cause paling mungkin untuk gejala
+  spesifik "blank/putih", bukan sekadar re-guess acak), + `Movie.
+  decodeByteArray` adalah API yang lebih defensif/self-contained secara
+  desain. TAPI belum ada compiler/emulator/device fisik di sisi Claude
+  untuk mengonfirmasi 100% ini akan memperbaiki kasus SPESIFIK yang
+  dialami user — kalau setelah build+install masih ada file GIF tertentu
+  yang hasil kompresinya blank/putih, kirim file GIF sumbernya (atau
+  screenshot pesan error yang muncul, karena sekarang harusnya gagal
+  dengan pesan jelas, bukan diam-diam blank) supaya root cause bisa
+  dipersempit lebih jauh dari device asli.
+- Brace/paren balance `GifCompressor.kt` setelah fix: `{}` 52/52, `()`
+  235/235, `[]` 47/47. Brace-depth walk: akhir 0, tidak pernah negatif.
+
+### VERDICT
+Fix diterapkan + jaring pengaman baru. File disentuh: `GifCompressor.kt`
+(1 file — `GifEncoder.kt`/`MainActivity.kt` dari Batch 55 tidak perlu
+diubah lagi untuk fix ini).
+
 ## Batch 55: Tab baru "Kompres GIF" — anti-crash, kualitas tetap HD
 
 Permintaan user: tambahkan tab khusus kompresi GIF, anti crash, kualitas

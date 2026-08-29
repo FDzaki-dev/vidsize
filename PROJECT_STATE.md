@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 55**. This is the first-read file per the context
+Snapshot as of **Batch 55b**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -44,6 +44,16 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 55b (bugfix):** User report: output GIF dari "Kompres GIF" tidak
+  boleh corrupt/blank putih sama sekali. Root cause paling mungkin:
+  `Movie.decodeStream()` + stream ditutup (`.use{}`) sebelum semua
+  `movie.draw()` selesai dipanggil → diganti `Movie.decodeByteArray()`
+  (data fully in-memory, tidak bergantung stream hidup). + jaring
+  pengaman baru: gagal dgn pesan jelas kalau semua frame ternyata polos
+  satu warna, bukan diam-diam lanjut. 1 file (`GifCompressor.kt`). Detail
+  penuh di Batch history + CHANGELOG.md. **Belum ada device/compiler di
+  sisi Claude untuk konfirmasi 100%** — kalau masih kejadian, kirim file
+  GIF sumbernya biar bisa dipersempit lebih jauh.
 - **Batch 55 (fitur baru):** Tab "Kompres GIF" di `GifScreen` — kompresi
   file GIF yang SUDAH ADA (bukan bikin GIF baru dari video, itu tab
   "Video ke GIF" yang sudah ada, tidak disentuh). Anti-crash (cap ukuran
@@ -117,6 +127,54 @@ dokumentasi, nama file APK Release). 1 item sisanya (rename repo GitHub)
 tetap aksi manual di luar ZIP — lihat pesan chat._
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 55b** — Feedback user: "output gif gak boleh corrupt/blank
+  white sama sekali". Audit `GifCompressor.kt` (Batch 55) menemukan
+  kandidat root-cause paling masuk akal: `Movie.decodeStream(stream)`
+  dipanggil di dalam `context.contentResolver.openInputStream(uri)?.use
+  { ... }`, yang menutup stream itu SEGERA setelah `decodeStream()`
+  return — sementara `movie.draw()` baru dipanggil BELAKANGAN, berkali-
+  kali (1x per frame di-sample) di loop setelahnya. Kalau `Movie` tidak
+  100% self-contained setelah decode (ada kemungkinan ia menyimpan
+  referensi balik ke stream, tergantung implementasi Skia versi
+  Android), stream yang sudah ditutup itu bisa bikin SETIAP `draw()`
+  berikutnya diam-diam gagal menggambar apa pun — Bitmap hasil
+  `Bitmap.createBitmap()` yang tidak pernah benar-benar digambari tetap
+  "valid" secara teknis (makanya tidak crash), tapi isinya kosong →
+  persis gejala "blank/putih" yang dilaporkan. Fix: baca seluruh file ke
+  `ByteArray` dulu (`readBytes()`, dibatasi `MAX_INPUT_BYTES` yang sudah
+  ada dari Batch 55, ≤60MB — beda kasus dari larangan `readBytes()` utk
+  Release Downloader yang soal ukuran download jaringan tak terbatas,
+  bukan file lokal yang sudah dicek ukurannya), lalu
+  `Movie.decodeByteArray(bytes, 0, bytes.size)` — Movie jadi berdiri
+  sendiri penuh di memori, nol ketergantungan ke stream yang bisa
+  ditutup.
+  **Jaring pengaman tambahan** (independen dari root-cause di atas, biar
+  tidak ada jalan lain buat GIF blank lolos jadi "sukses"): kalau SEMUA
+  frame yang di-sample ternyata satu warna polos merata (`isUniform
+  Color()`, sample strided sama seperti pengecekan dedup), proses
+  digagalkan dengan pesan jelas ("frame yang terbaca kosong/polos, coba
+  file lain") — bukan lanjut meng-encode hasil rusak sebagai "berhasil".
+  Ini prinsip yang sama dgn "anti-crash": kalau tidak yakin outputnya
+  benar, GAGAL DENGAN JELAS, jangan diam-diam kirim hasil buruk.
+  **Kejujuran soal verifikasi**: fix ini analisis paling masuk akal dari
+  siklus-hidup stream/Movie API (bukan tebakan acak — targetnya persis
+  gejala yang dilaporkan: bukan crash, tapi output kosong/putih, yang
+  cocok dengan pola "canvas dibuat tapi tidak pernah benar-benar
+  digambari"), dan `decodeByteArray` memang secara desain API lebih
+  defensif (data self-contained, no stream lifetime risk sama sekali).
+  TAPI Claude tidak punya compiler/emulator/device fisik untuk
+  mengonfirmasi 100% ini sudah menutup kasus SPESIFIK yang user alami —
+  kalau masih terjadi setelah build+install, kirim file GIF sumber yang
+  bermasalah (atau screenshot pesan error, karena sekarang seharusnya
+  gagal dengan pesan jelas alih-alih diam-diam blank) supaya bisa
+  dipersempit lebih jauh dari device asli, bukan tebak-tebak lagi dari
+  sisi ini.
+  Brace/paren balance setelah fix: `GifCompressor.kt` `{}` 52/52, `()`
+  235/235, `[]` 47/47; brace-depth walk akhir 0, tidak pernah negatif.
+  File disentuh: `GifCompressor.kt` (1 file — `GifEncoder.kt`/
+  `MainActivity.kt` dari Batch 55 tidak perlu diubah untuk fix ini,
+  karena bug-nya murni di sisi decode `GifCompressor.kt`, bukan di
+  encoder/UI).
 - **Batch 55** — Permintaan user: "tambahkan tab khusus kompresi GIF yang
   anti crash + kualitas output tetap HD". `GifScreen` sebelumnya cuma
   punya 1 mode ("Video ke GIF", via `GifExporter`) — sekarang punya 2,

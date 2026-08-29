@@ -155,9 +155,28 @@ object GifCompressor {
             return GifCompressResult.Failure("File GIF terlalu besar (maks ${MAX_INPUT_BYTES / (1024 * 1024)}MB) untuk dikompres di perangkat ini.")
         }
 
-        val movie = context.contentResolver.openInputStream(sourceUri)?.use { stream ->
-            Movie.decodeStream(stream)
-        } ?: return GifCompressResult.Failure("File yang dipilih bukan GIF yang valid.")
+        // Batch 55b (bugfix): read the whole file into memory FIRST, then
+        // decode via decodeByteArray — NOT decodeStream(inputStream) closed
+        // via `.use{}` right after the call. Movie.draw() is called many
+        // times AFTER decode (once per sampled frame, further down) — if
+        // decodeStream() keeps any lazy reference into the stream rather
+        // than fully self-contained data, closing that stream immediately
+        // (as `.use{}` does) risks every later draw() call silently
+        // rendering nothing, which is exactly the "blank white output"
+        // failure mode reported against the first version of this file.
+        // decodeByteArray has no such risk — the byte array is fully
+        // materialized and owns its own data, independent of any stream.
+        // This readBytes() is bounded by MAX_INPUT_BYTES (already checked
+        // above, ≤60MB) — a different risk profile from the Release
+        // Downloader's "DILARANG readBytes()" rule, which is about an
+        // a-priori-unbounded network download, not a pre-size-checked
+        // local file.
+        val sourceBytesArray = runCatching {
+            context.contentResolver.openInputStream(sourceUri)?.use { it.readBytes() }
+        }.getOrNull() ?: return GifCompressResult.Failure("File GIF tidak bisa dibaca.")
+
+        val movie = Movie.decodeByteArray(sourceBytesArray, 0, sourceBytesArray.size)
+            ?: return GifCompressResult.Failure("File yang dipilih bukan GIF yang valid.")
 
         val srcWidth = movie.width()
         val srcHeight = movie.height()
@@ -201,6 +220,18 @@ object GifCompressor {
 
         if (sampled.isEmpty()) {
             return GifCompressResult.Failure("Tidak ada frame yang berhasil dibaca dari GIF ini.")
+        }
+
+        // Anti-corrupt/blank-output safety net: if EVERY sampled frame came
+        // back a single uniform color, that's not a real animated-GIF
+        // frame (even simple GIFs have some pixel variation) — it's the
+        // signature of Movie.draw() silently failing to render anything on
+        // this device/file combo. Rather than silently encoding that as a
+        // "successful" but blank/white-looking GIF, fail loudly here with
+        // a clear message instead.
+        if (sampled.all { isUniformColor(it) }) {
+            sampled.forEach { it.recycle() }
+            return GifCompressResult.Failure("Gagal membaca isi GIF ini di perangkat ini (frame yang terbaca kosong/polos). Coba file GIF lain.")
         }
 
         // --- Dedup near-identical consecutive frames, merging delay onto the kept one ---
@@ -260,6 +291,29 @@ object GifCompressor {
             runCatching { outputFile.delete() }
             GifCompressResult.Failure(e.message ?: "Gagal menulis file GIF.")
         }
+    }
+
+    /**
+     * True if every sampled pixel in [bmp] is the exact same color. Used
+     * only as a "did rendering actually happen" signal (see the check right
+     * after the decode loop above) — a real GIF frame, even a simple one,
+     * essentially never comes back perfectly uniform across a whole strided
+     * sample; a canvas that Movie.draw() failed to render onto does.
+     */
+    private fun isUniformColor(bmp: Bitmap): Boolean {
+        val w = bmp.width
+        val h = bmp.height
+        if (w <= 0 || h <= 0) return true
+        val pixels = IntArray(w * h)
+        bmp.getPixels(pixels, 0, w, 0, 0, w, h)
+        val first = pixels[0]
+        val stride = max(1, pixels.size / 2000)
+        var i = 0
+        while (i < pixels.size) {
+            if (pixels[i] != first) return false
+            i += stride
+        }
+        return true
     }
 
     /**

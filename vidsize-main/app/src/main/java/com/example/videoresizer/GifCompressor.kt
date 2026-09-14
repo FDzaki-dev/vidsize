@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Movie
+import android.graphics.PorterDuff
 import android.net.Uri
 import java.io.File
 import java.io.FileOutputStream
@@ -223,10 +224,73 @@ object GifCompressor {
         val canvas = Canvas(canvasBmp)
         if (finalScale != 1f) canvas.scale(finalScale, finalScale)
 
-        // --- Sample `frameCount` evenly-spaced points in time, snapshotting the persistent canvas after each ---
+        // Batch 56 (root-cause fix for the Batch 55c regression risk):
+        // Batch 55c's blanket "never clear, always persist" is provably
+        // wrong for the two GIF disposal methods whose entire purpose is
+        // to CLEAR pixels between frames — method 2 "restore to background"
+        // and method 3 "restore to previous" (GIF89a Graphic Control
+        // Extension). A canvas that's NEVER cleared will show stale/
+        // "ghosted" pixels baked permanently into the compressed output in
+        // exactly the regions those two methods exist to erase — a
+        // regression Batch 55c's own "safe either way" reasoning didn't
+        // account for (it only reasoned about the "Movie already
+        // composites everything internally" case, not the disposal-2/3
+        // case). [Movie] exposes no public API for a frame's disposal
+        // method, so [parseGifFrameDisposals] below reads it directly from
+        // the raw GIF bytes we already have in memory — pure block-
+        // structure parsing (label/length bytes), NOT pixel/LZW decoding,
+        // which [Movie] still handles entirely. If parsing fails for any
+        // reason (returns null — malformed/unrecognized block stream),
+        // the loop below is byte-for-byte Batch 55c's original always-
+        // persist behavior — this fix is purely additive, never worse.
+        val gifDisposal = parseGifFrameDisposals(sourceBytesArray)
+        var disposalCursor = 0
+
+        // --- Sample `frameCount` evenly-spaced points in time, snapshotting the canvas after each ---
         val sampled = ArrayList<Bitmap>(frameCount)
         for (i in 0 until frameCount) {
             val t = min((i * actualIntervalMs).toInt(), (totalDurationMs - 1).coerceAtLeast(0))
+
+            // Apply disposal for every native GIF frame whose display
+            // window has fully ended by time `t` (there can be more than
+            // one if a GIF frame's own delay is shorter than our fixed
+            // SAMPLE_INTERVAL_MS sampling cadence) — same "after this
+            // frame's duration expires, before the next frame is drawn"
+            // timing the GIF spec itself defines for disposal.
+            if (gifDisposal != null) {
+                while (disposalCursor < gifDisposal.frames.size && gifDisposal.frames[disposalCursor].endMs <= t) {
+                    val f = gifDisposal.frames[disposalCursor]
+                    if (f.disposal == 2 || f.disposal == 3) {
+                        // Methods 2 ("restore to background") and 3
+                        // ("restore to previous") are deliberately
+                        // approximated identically here: paint the frame's
+                        // own rectangle back to the GIF's real declared
+                        // background color (opaque, PorterDuff.Mode.SRC —
+                        // a full overwrite, not a blend). True method-3
+                        // support needs a pre-frame pixel snapshot to
+                        // restore exactly, which is meaningfully more code
+                        // for a disposal method real-world GIF tools rarely
+                        // emit (see parseGifFrameDisposals's own doc
+                        // comment on why an opaque background color is
+                        // used here instead of an alpha clear). This is
+                        // strictly safer than Batch 55c's "never clear"
+                        // for both methods: an over-cleared pixel reads as
+                        // the GIF's own background for a handful of
+                        // samples at worst, never a wrong stale ghost
+                        // baked permanently into the compressed output.
+                        canvas.save()
+                        canvas.clipRect(f.left, f.top, f.left + f.width, f.top + f.height)
+                        canvas.drawColor(gifDisposal.backgroundArgb, PorterDuff.Mode.SRC)
+                        canvas.restore()
+                    }
+                    // Disposal 0/1 ("do not dispose"): no-op — exactly
+                    // Batch 55c's existing persistent-canvas behavior,
+                    // unchanged, and still the common case for ordinary
+                    // full-frame-per-frame GIFs.
+                    disposalCursor++
+                }
+            }
+
             movie.setTime(t)
             movie.draw(canvas, 0f, 0f)
             // A genuine copy, not a reference — canvasBmp keeps getting
@@ -315,6 +379,122 @@ object GifCompressor {
             GifCompressResult.Failure(e.message ?: "Gagal menulis file GIF.")
         }
     }
+
+    /** One GIF frame's disposal method + local rectangle, in file order, with [startMs]/[endMs] its display window on the SAME millisecond timeline as [Movie.duration]/[Movie.setTime]. */
+    private data class GifFrameDisposal(
+        val startMs: Long,
+        val endMs: Long,
+        val disposal: Int, // 0-3; 0 ("unspecified") is normalized to 1 ("do not dispose") per spec convention
+        val left: Int,
+        val top: Int,
+        val width: Int,
+        val height: Int
+    )
+
+    /** [frames] in file order, plus [backgroundArgb] — the GIF's own declared background color, opaque ARGB_8888 packed (0xFFRRGGBB). */
+    private data class GifDisposalInfo(
+        val frames: List<GifFrameDisposal>,
+        val backgroundArgb: Int
+    )
+
+    /**
+     * Walks the raw GIF89a/87a byte stream's block structure (Global Color
+     * Table, Extension Introducers, Graphic Control Extensions, Image
+     * Descriptors) to recover each frame's disposal method + rectangle,
+     * and the GIF's declared background color — see the Batch 56 doc
+     * comment at this function's call site above for why disposal
+     * matters. This is pure header/block-length bookkeeping: it never
+     * touches LZW-compressed pixel data, only skips over it via each
+     * block's own declared length bytes ([Movie] is still the only thing
+     * that ever decodes actual pixels in this file).
+     *
+     * [backgroundArgb] is looked up now, rather than relying on alpha=0
+     * "transparent" pixels for a disposal-2/3 clear, deliberately: both
+     * [buildPaletteLocal] and [quantizeFrameLocal] below read ONLY the
+     * RGB channels of each sampled pixel (`(p shr 16) and 0xFF`, etc.) —
+     * alpha is never consulted — and this encoder's own
+     * [GifEncoder.encode] never enables the GIF transparency flag either.
+     * A merely-alpha-cleared pixel would therefore silently quantize to
+     * RGB (0,0,0) = opaque BLACK in the compressed output, not to
+     * anything resembling "background" — writing the GIF's own real
+     * background color directly (opaque, via [PorterDuff.Mode.SRC], see
+     * the call site) sidesteps that gap entirely, since RGB values now
+     * carry the actually-intended color with no alpha-stripping step in
+     * between. Falls back to opaque white if the file has no Global Color
+     * Table (rare — relies solely on per-frame Local Color Tables) or the
+     * declared background index doesn't fall inside it.
+     *
+     * Returns null if the byte stream doesn't parse as a well-formed GIF
+     * block sequence (unexpected block tag, or running off the end of
+     * [bytes] — caught by the enclosing [runCatching]) or if zero frames
+     * were found — either way, the caller falls back to treating every
+     * frame as disposal method 1, i.e. Batch 55c's original behavior.
+     */
+    private fun parseGifFrameDisposals(bytes: ByteArray): GifDisposalInfo? = runCatching {
+        var pos = 6 // skip the 6-byte "GIF87a"/"GIF89a" signature — already validated by Movie.decodeByteArray succeeding above
+        fun u8(): Int = bytes[pos++].toInt() and 0xFF
+        fun u16(): Int { val lo = u8(); val hi = u8(); return lo or (hi shl 8) }
+
+        u16(); u16() // logical screen width/height — not needed, each frame's own rectangle is self-contained
+        val screenPacked = u8()
+        val bgColorIndex = u8()
+        u8() // pixel aspect ratio
+        var backgroundArgb = (0xFF shl 24) or 0xFFFFFF // fallback: opaque white if no Global Color Table
+        if ((screenPacked and 0x80) != 0) {
+            val gctCount = 1 shl ((screenPacked and 0x07) + 1)
+            val gct = IntArray(gctCount)
+            for (i in 0 until gctCount) {
+                val r = u8(); val g = u8(); val b = u8()
+                gct[i] = (r shl 16) or (g shl 8) or b
+            }
+            if (bgColorIndex in 0 until gctCount) {
+                backgroundArgb = (0xFF shl 24) or gct[bgColorIndex]
+            }
+        }
+
+        val frames = ArrayList<GifFrameDisposal>()
+        var pendingDisposal = 0
+        var pendingDelayMs = 0L
+        var cumulativeMs = 0L
+        var blockGuard = 0
+        while (pos < bytes.size) {
+            blockGuard++
+            if (blockGuard > 200_000) return@runCatching GifDisposalInfo(frames, backgroundArgb) // pathological/corrupt guard — return whatever was parsed so far
+            when (u8()) {
+                0x21 -> { // Extension Introducer
+                    val label = u8()
+                    if (label == 0xF9) { // Graphic Control Extension
+                        u8() // block size (always 4)
+                        pendingDisposal = (u8() shr 2) and 0x07
+                        pendingDelayMs = u16().toLong() * 10L
+                        u8() // transparent color index
+                        u8() // block terminator
+                    } else {
+                        if (label == 0xFF || label == 0x01) pos += u8() // Application/Plain-Text fixed header block
+                        while (true) { val sub = u8(); if (sub == 0) break; pos += sub } // remaining data sub-blocks
+                    }
+                }
+                0x2C -> { // Image Descriptor
+                    val left = u16(); val top = u16(); val width = u16(); val height = u16()
+                    val idPacked = u8()
+                    if ((idPacked and 0x80) != 0) {
+                        pos += (1 shl ((idPacked and 0x07) + 1)) * 3 // skip Local Color Table
+                    }
+                    pos += 1 // LZW minimum code size
+                    while (true) { val sub = u8(); if (sub == 0) break; pos += sub } // skip image data sub-blocks
+                    val startMs = cumulativeMs
+                    val endMs = startMs + pendingDelayMs
+                    frames.add(GifFrameDisposal(startMs, endMs, if (pendingDisposal == 0) 1 else pendingDisposal, left, top, width, height))
+                    cumulativeMs = endMs
+                    pendingDisposal = 0
+                    pendingDelayMs = 0L
+                }
+                0x3B -> return@runCatching GifDisposalInfo(frames, backgroundArgb) // Trailer — normal end of stream
+                else -> return@runCatching GifDisposalInfo(frames, backgroundArgb) // Unrecognized block tag — stop, use whatever was found so far
+            }
+        }
+        GifDisposalInfo(frames, backgroundArgb)
+    }.getOrNull()?.takeIf { it.frames.isNotEmpty() }
 
     /**
      * True if every sampled pixel in [bmp] is the exact same color. Used

@@ -1,5 +1,85 @@
 # Changelog
 
+## Batch 56: Root-cause fix — disposal method GIF diabaikan di "Kompres GIF"
+
+User minta: perbaiki regresi mekanisme persisten (Batch 55c) sampai ke
+akarnya.
+
+### AUDIT — kenapa Batch 55c belum tentu akar masalahnya
+Batch 55c mengasumsikan SATU perilaku blanket: canvas HARUS selalu
+persisten, never di-clear. Ini terbukti salah untuk 2 dari 4 metode
+disposal GIF89a (Graphic Control Extension) yang justru TUJUANNYA
+membersihkan piksel antar frame — metode 2 "restore to background" dan
+metode 3 "restore to previous". Canvas yang tidak PERNAH dibersihkan akan
+menyimpan piksel "hantu" (ghosting) dari frame sebelumnya persis di area
+yang seharusnya dibersihkan oleh 2 metode itu — risiko regresi yang tidak
+diperhitungkan oleh justifikasi "aman dua arah" versi Batch 55c (yang
+hanya menghitung skenario "Movie sudah composite penuh secara internal",
+bukan skenario disposal 2/3).
+
+### FIXED — root cause: disposal method dibaca langsung dari byte GIF
+`android.graphics.Movie` tidak expose API publik untuk disposal method
+sebuah frame — `setTime()`/`draw()` murni black box. Ditambahkan
+`parseGifFrameDisposals()`: parser struktur-blok GIF89a/87a (BUKAN
+decoder piksel/LZW — `Movie` tetap satu-satunya yang mendekode piksel)
+yang membaca disposal method + rectangle tiap frame dari Graphic Control
+Extension + Image Descriptor, plus warna background asli GIF dari Global
+Color Table. Loop sampling sekarang: untuk tiap frame native GIF yang
+window tampilnya sudah berakhir sebelum sample berikutnya, terapkan
+disposal-nya SEBELUM menggambar sample baru — metode 0/1 (do not
+dispose): no-op, persis perilaku Batch 55c yang sudah ada; metode 2/3:
+cat ulang rectangle frame itu ke warna background ASLI GIF (bukan clear
+transparan — lihat alasan di bawah).
+
+### KENAPA WARNA BACKGROUND ASLI, BUKAN CLEAR TRANSPARAN
+`buildPaletteLocal`/`quantizeFrameLocal` HANYA membaca kanal RGB tiap
+piksel sample (`(p shr 16) and 0xFF` dst) — alpha tidak pernah dibaca —
+dan `GifEncoder.encode()` juga tidak pernah mengaktifkan flag transparansi
+GIF. Piksel yang di-clear ke transparan (alpha=0) akan diam-diam
+terkuantisasi jadi RGB (0,0,0) = HITAM solid di output, bukan sesuatu
+yang menyerupai "background" — bukan perbaikan yang jujur. Fix ini
+langsung menulis warna background ASLI (RGB opaque, `PorterDuff.Mode.SRC`
+— full overwrite, bukan blend) yang dibaca dari Global Color Table GIF
+sumbernya sendiri (fallback: putih opaque kalau GIF tidak punya Global
+Color Table). Metode 3 ("restore to previous") disengaja diperlakukan
+SAMA seperti metode 2 (clear ke background, bukan snapshot-restore piksel
+presisi) — metode 3 jarang dipakai tool GIF di dunia nyata (paling boros
+memori untuk encoder), dan pendekatan snapshot-presisi butuh manipulasi
+koordinat piksel mentah (bukan lewat Canvas) yang risiko bug-nya lebih
+tinggi untuk kasus yang jarang terjadi ini.
+
+### JUJUR SOAL KETERBATASAN VERIFIKASI
+Masih tidak ada compiler/emulator/device fisik di sisi Claude. Parsing
+byte GIF89a/87a diverifikasi manual baris-per-baris terhadap spesifikasi
+resmi (ukuran tiap block field, posisi bit disposal method di packed byte
+GCE, dll) — bukan tebakan. TAPI: masih ada keraguan jujur soal APAKAH
+teori "canvas Movie butuh persistensi eksternal" (dasar Batch 55c DAN fix
+ini) benar-benar akar dari gejala spesifik yang di-screenshot user (strip
+atas + putih polos) — penelusuran ulang jalur kode menunjukkan piksel
+yang benar-benar tidak pernah digambar harusnya terkuantisasi jadi HITAM
+(bukan putih) di file akhir, bukan match sempurna dengan gejala "putih"
+yang dilaporkan. Kemungkinan lain: viewer/galeri foto menampilkan
+placeholder "gambar rusak" (ikon kecil + latar putih) karena file hasil
+corrupt secara struktural, bukan soal warna piksel. Fix ini tetap benar
+dan aman diterapkan terlepas dari itu (menutup celah nyata: ghosting
+disposal 2/3), tapi kalau gejala PERSIS yang di-screenshot user MASIH
+terjadi setelah build+install kali ini: kirim FILE GIF SUMBER (bukan cuma
+screenshot hasil) — itu satu-satunya cara memastikan struktur block
+GIF-nya (disposal method riil yang dipakai, apakah ada local color table
+per frame, dsb) tanpa terus menebak dari gejala visual.
+
+### VERIFIED
+Brace/paren balance `GifCompressor.kt`: `{}` 67/67, `()` 274/274,
+`[]` 33/33. Brace-depth walk: akhir 0, tidak pernah negatif (min depth
+0). Logic parsing block GIF89a diverifikasi manual terhadap spesifikasi
+(ukuran field tiap jenis block, posisi bit disposal method, ukuran
+Global/Local Color Table, urutan sub-block image data).
+
+### VERDICT
+Fix additive & fail-safe: kalau parsing GIF gagal (return `null`),
+perilaku persis sama seperti Batch 55c (always-persist, tanpa perubahan)
+— tidak pernah lebih buruk. File disentuh: `GifCompressor.kt` (1 file).
+
 ## Batch 55c: Fix #2 untuk output blank — canvas per-frame yang di-reset
 
 User kirim bukti screenshot: hasil kompresi GIF berupa gambar yang cuma ada

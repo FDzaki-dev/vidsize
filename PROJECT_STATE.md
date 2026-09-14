@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 55c**. This is the first-read file per the context
+Snapshot as of **Batch 56**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -9,6 +9,23 @@ baca juga **MICRO_POLISH_GUIDE.md** (standing playbook permanen, ditanam
 Batch 35) sebelum mulai.
 
 ## Standing rules (permanent — read first, applies to every future session without exception)
+
+- **[BRANDING_NAME: Vidsize] [TERMUX_ROOT: VideoResizer]** (ditambahkan
+  Batch 56, koreksi user). TERMUX_ROOT = `rootProject.name` di
+  `settings.gradle.kts` — TANPA hyphen. JANGAN pakai `REPO = "Video-resizer"`
+  dari `AppUpdater.kt` — itu slug GitHub (dengan hyphen) untuk Releases API
+  URL, BUKAN nama folder project lokal. Kedua nilai ini beda sumber, jangan
+  disamakan lagi.
+- **ZIP repack WAJIB FLAT, tanpa folder pembungkus** (ditegaskan Batch 56,
+  koreksi keras user — "jangan nested"). Isi ZIP harus langsung
+  `build.gradle.kts`, `app/`, `settings.gradle.kts`, dst di ROOT arsip —
+  BUKAN dibungkus satu folder induk (mis. `vidsize-main/...`). Skrip
+  Termux (`unzip -o "$LATEST_ZIP" -d "$PROJ_DIR/"`) mengasumsikan isi ZIP
+  landing LANGSUNG di `$PROJ_DIR`, bukan di subfolder nested — kalau ada
+  pembungkus, project jadi nested SALAH DI $PROJ_DIR/<pembungkus>/... dan
+  build gagal. Cek wajib sebelum kirim ZIP: `unzip -Z1 file.zip` — baris
+  pertama harus nama file/folder proyek langsung (`build.gradle.kts`,
+  `app/`, dst), BUKAN satu nama folder tunggal yang membungkus semuanya.
 
 - **Embedded Micro-Polish Guide rule (added Batch 35).** `MICRO_POLISH_GUIDE.md`
   di root adalah playbook permanen hasil embed dari upload user
@@ -44,6 +61,32 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 56 (root-cause fix, atas permintaan user "perbaiki regresi
+  mekanisme persisten sampai ke akarnya"):** Audit Batch 55c menemukan
+  gap: canvas persisten-selamanya itu SALAH untuk 2 dari 4 metode
+  disposal GIF89a (metode 2 "restore to background" + metode 3 "restore
+  to previous" — TUJUANNYA justru membersihkan piksel antar frame; canvas
+  yang tidak pernah di-clear akan ghosting di area itu). `Movie` tidak
+  expose disposal method lewat API publik, jadi ditambahkan
+  `parseGifFrameDisposals()` — parser struktur-blok GIF89a/87a (bukan
+  decoder piksel, cuma baca Graphic Control Extension + Image Descriptor
+  + Global Color Table) yang menerapkan disposal yang BENAR per frame:
+  metode 0/1 tetap no-op (persis Batch 55c), metode 2/3 di-cat ulang ke
+  warna background ASLI GIF (bukan clear transparan — `buildPaletteLocal`/
+  `quantizeFrameLocal` cuma baca RGB, alpha diabaikan, jadi clear
+  transparan akan diam-diam jadi hitam solid, bukan background). Fail-safe
+  penuh: parsing gagal → persis perilaku Batch 55c, tidak pernah lebih
+  buruk. **Catatan jujur**: audit ulang jalur kode menunjukkan keraguan
+  BARU soal apakah teori dasar Batch 55c/56 (canvas butuh persistensi
+  eksternal) benar-benar menjelaskan gejala "putih polos" yang
+  di-screenshot user — piksel yang benar-benar kosong seharusnya
+  terkuantisasi HITAM di pipeline ini, bukan putih; kemungkinan lain
+  (viewer menampilkan placeholder "gambar rusak" karena file corrupt
+  struktural) belum tertutup oleh fix manapun sejauh ini. Fix ini tetap
+  sah diterapkan (menutup celah ghosting yang nyata), tapi kalau gejala
+  PERSIS yang di-screenshot masih terjadi: kirim FILE GIF SUMBER (bukan
+  screenshot hasil) di sesi berikutnya. 1 file (`GifCompressor.kt`).
+  Detail di Batch history + CHANGELOG.md.
 - **Batch 55c (bugfix #2, dari bukti screenshot user):** Screenshot user
   tunjukkan pola spesifik — strip warna tipis di baris paling atas,
   sisanya putih polos total. Root cause: loop decode bikin canvas BARU
@@ -131,11 +174,90 @@ Batch 35) sebelum mulai.
   Deliberately not bumped further — see "Defaults a new reader should know".
 
 ## Pending Queue (not done this batch — do next, in this order)
-_Kosong. Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI,
-dokumentasi, nama file APK Release). 1 item sisanya (rename repo GitHub)
-tetap aksi manual di luar ZIP — lihat pesan chat._
+_Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
+nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
+manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 56]** Tunggu konfirmasi user pasca build+
+install apakah gejala "Kompres GIF" (strip warna di atas, sisanya
+putih/blank) sudah tuntas. KALAU MASIH terjadi: minta user kirim FILE GIF
+SUMBER yang dipakai (bukan screenshot hasil kompresinya) — lihat
+"Catatan jujur" di Batch 56 (Current version + Batch history) untuk
+kenapa file sumber sekarang jadi kunci: audit kode menunjukkan piksel
+kosong seharusnya terkuantisasi hitam bukan putih di pipeline ini, jadi
+ada kemungkinan nyata akar masalahnya BUKAN (hanya) soal disposal
+method/persistensi canvas — perlu struktur GIF asli untuk memastikan,
+bukan tebak lagi dari gejala visual.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 56** — User: "perbaiki regresi terhadap mekanisme persistent
+  sampai ke akarnya". Audit Batch 55c: blanket "canvas selalu persisten,
+  never di-clear" itu benar untuk disposal method 0/1 GIF89a ("do not
+  dispose") tapi PROVABLY SALAH untuk method 2 ("restore to background")
+  dan method 3 ("restore to previous") — dua method yang TUJUANNYA justru
+  membersihkan piksel antar frame. Canvas yang tidak pernah di-clear akan
+  ghosting (piksel frame lama nyangkut) persis di area yang harusnya
+  dibersihkan 2 method itu — gap yang tidak dihitung justifikasi "aman
+  dua arah" Batch 55c (yang cuma menghitung skenario "Movie sudah
+  composite penuh secara internal", bukan skenario disposal 2/3).
+  Fix: `android.graphics.Movie` tidak expose disposal method lewat API
+  publik apa pun (`setTime()`/`draw()` black box murni) — jadi
+  ditambahkan `parseGifFrameDisposals()`, parser byte-level struktur GIF
+  (Global Color Table, Graphic Control Extension, Image Descriptor) yang
+  SAMA SEKALI BUKAN decoder piksel/LZW (`Movie` tetap satu-satunya yang
+  mendekode piksel di file ini) — cuma jalan block-by-block baca ukuran
+  tiap field lalu skip, untuk merekonstruksi disposal method + rectangle
+  tiap frame + warna background asli GIF. Loop sampling: untuk tiap frame
+  native yang window tampilnya sudah lewat sebelum sample berikutnya,
+  terapkan disposal method-nya DULU sebelum `movie.draw()` sample baru —
+  method 0/1: no-op (persis perilaku Batch 55c, tidak berubah); method
+  2/3: `canvas.clipRect()` ke rectangle frame itu lalu `canvas.drawColor
+  (backgroundArgb, PorterDuff.Mode.SRC)` (full overwrite opaque, bukan
+  blend) memakai warna background YANG SEBENARNYA dideklarasikan GIF
+  sumbernya (dibaca dari Global Color Table + background color index),
+  bukan clear ke transparan — sengaja, karena `buildPaletteLocal`/
+  `quantizeFrameLocal` di file ini HANYA membaca kanal RGB tiap piksel
+  (`(p shr 16) and 0xFF` dst, alpha tidak pernah disentuh) dan
+  `GifEncoder.encode()` tidak pernah mengaktifkan flag transparansi GIF —
+  piksel yang di-clear ke alpha=0 akan diam-diam terkuantisasi jadi RGB
+  (0,0,0) HITAM SOLID di file output, bukan sesuatu yang menyerupai
+  "background" sama sekali, jadi "clear transparan" bukan fix yang jujur
+  di pipeline ini. Method 3 disengaja diperlakukan SAMA seperti method 2
+  (clear-ke-background, bukan snapshot-restore piksel presisi) — method 3
+  jarang dipakai tool GIF (paling boros memori untuk di-encode), dan
+  snapshot-restore presisi butuh manipulasi koordinat piksel Bitmap
+  mentah (di luar Canvas, rawan mismatch skala kalau `finalScale != 1f`)
+  untuk kasus yang jarang terjadi — trade-off yang tidak sepadan.
+  Fail-safe: kalau `parseGifFrameDisposals()` gagal parse (byte stream
+  tidak valid/tidak dikenali — ditangkap `runCatching`, return `null`),
+  loop jatuh balik PERSIS ke perilaku Batch 55c (always-persist, tanpa
+  perubahan) — fix ini murni aditif, tidak pernah membuat lebih buruk.
+  **Kejujuran soal verifikasi (masih tidak ada compiler/emulator/device
+  fisik di sisi Claude)**: parsing byte GIF89a/87a diverifikasi manual
+  baris-per-baris terhadap spesifikasi resmi (ukuran field tiap jenis
+  block, posisi bit disposal method di packed byte GCE, ukuran Global/
+  Local Color Table dari 3 bit rendah packed byte, dst) — bukan tebakan.
+  TAPI audit ulang jalur kode kali ini menemukan keraguan BARU yang belum
+  ada di Batch 55b/55c: kalau teori "canvas Movie butuh persistensi
+  eksternal" itu benar dan sebuah piksel benar-benar tidak pernah
+  digambar sama sekali, piksel itu HARUSNYA terkuantisasi HITAM (bukan
+  PUTIH) di pipeline final ini — tidak match sempurna dengan gejala
+  "putih polos" yang di-screenshot user Batch 55c. Kemungkinan lain yang
+  belum tertutup fix manapun: file GIF hasil corrupt secara STRUKTURAL
+  (bukan soal warna piksel sama sekali) sehingga viewer/galeri foto
+  menampilkan placeholder "gambar rusak" bawaannya sendiri (ikon kecil +
+  latar putih — pola visual yang match persis dengan screenshot yang
+  dilaporkan). Fix Batch 56 ini tetap sah & aman diterapkan terlepas dari
+  itu (menutup celah ghosting disposal 2/3 yang nyata dan independen),
+  TAPI kalau gejala PERSIS yang di-screenshot user MASIH terjadi setelah
+  build+install kali ini: prioritas sesi berikutnya adalah minta FILE GIF
+  SUMBER (bukan screenshot hasil kompresinya) — lihat [RESUME POINT] di
+  Pending Queue di atas.
+  Brace/paren balance setelah fix: `GifCompressor.kt` `{}` 67/67,
+  `()` 274/274, `[]` 33/33; brace-depth walk akhir 0, tidak pernah
+  negatif (min depth 0).
+  File disentuh: `GifCompressor.kt` (1 file — `GifEncoder.kt`/
+  `MainActivity.kt` tidak perlu diubah, disposal handling ini murni
+  internal ke loop decode `GifCompressor.kt`).
 - **Batch 55c** — User kirim BUKTI konkret (screenshot): hasil kompresi
   GIF adalah gambar yang cuma punya strip warna tipis di baris paling
   atas, sisanya putih polos total sampai bawah. Ini gejala yang jauh
@@ -1069,6 +1191,16 @@ tetap aksi manual di luar ZIP — lihat pesan chat._
   `GifCompressor` calls, for its frame-dedup delay-merging). If GIF
   encoding ever needs touching again, check which overload a call site
   resolves to before assuming "the" delay parameter.
+- **Decode loop is disposal-method-aware since Batch 56** —
+  `parseGifFrameDisposals()` reads each source frame's GIF89a disposal
+  method + rectangle + the GIF's own background color directly from the
+  raw bytes (`Movie` exposes none of this). The persistent canvas from
+  Batch 55c is only ever left alone for disposal 0/1; disposal 2/3 gets
+  its rectangle repainted to the GIF's real background color
+  (`PorterDuff.Mode.SRC`, opaque — NOT a transparent clear, since
+  `buildPaletteLocal`/`quantizeFrameLocal` never read alpha, only RGB).
+  If this loop is touched again, keep that RGB-only constraint in mind —
+  any future "clear" needs an opaque color, not alpha=0.
 
 ## Defaults a new reader should know (cont'd — Compressor, Batch 19)
 - **Compressor is a separate pipeline call, not a mode of `resize()`** —

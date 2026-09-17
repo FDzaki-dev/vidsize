@@ -212,7 +212,64 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
-🟡 **[RESUME POINT — Batch 57]** Batch 56's "Kompres GIF" bug-chase
+🟡 **[RESUME POINT — Batch 58]** Task: "ubah total layout aplikasi jadi
+super generik kayak aplikasi populer sejenisnya di Play Store". Discovery
+sebelum Batch 58: app ini SEBELUMNYA tidak punya halaman Home sama sekali
+— landing langsung ke ResizerScreen (editor), 4 tool lain (Compress/Batch/
+GIF/Studio) disembunyikan di overflow "More" tercampur dengan theme
+switcher. Itu pola yang tidak generik dibanding app video-tool populer di
+Play Store (yang biasanya punya dashboard grid tool di Home).
+
+**Sudah dikerjakan Batch 58 (1 file, `MainActivity.kt`, additive — tidak
+ada screen lama yang isinya diubah):**
+- `Screen.HOME` baru + `HomeScreen`/`HomeToolCard` composable baru: title
+  bar polos + grid 2 kolom 5 tool card (Resize/Kompres/GIF/Batch/Riwayat),
+  pola generik standar app Play Store sejenis. Sengaja theme-agnostic (tak
+  pakai glass gradient) walau tema aktif = glass, biar Home terasa seperti
+  dashboard biasa.
+- HOME jadi state awal `screen` (ganti dari MAIN) — digambar sebagai
+  overlay di depan ResizerScreen, pola persis sama seperti Batch/GIF/
+  Compressor/Studio (base tetap termount, tidak kehilangan state).
+  `isForeground = screen == Screen.MAIN` tidak perlu diubah — sudah otomatis
+  false saat HOME.
+- 4 tool card Home panggil `onOpen*` yang sudah ada persis (Compressor/GIF/
+  Batch/Studio tidak disentuh sama sekali). Card "Resize/Edit Video" →
+  `screen = Screen.MAIN` (buka ResizerScreen, tidak berubah).
+- `onBack` di BatchScreen/GifScreen/CompressorScreen/StudioScreen diarahkan
+  ulang dari `Screen.MAIN` → `Screen.HOME` (BackHandler tiap screen itu
+  cuma panggil `onBack()` yang sudah diupdate ini — tidak perlu sentuh
+  BackHandler-nya sendiri). `StudioScreen.onEditAgain`/`onEditFailed` TETAP
+  ke `Screen.MAIN` (sengaja, itu buka editor dengan prefill, bukan "back").
+- `ResizerScreen` dapat parameter baru `onOpenHome`, dipakai di
+  `navigationIcon` TopAppBar-nya (ikon `ArrowBack` baru — sebelumnya tidak
+  ada navigationIcon sama sekali karena dulu dia root).
+- Import baru: `LazyVerticalGrid`/`GridCells` (grid Home),
+  `Icons.Filled.Crop` (icon card Resize) — `material-icons-extended` sudah
+  ada di `app/build.gradle.kts`, tidak perlu dependency baru.
+- Verifikasi: brace/paren/bracket balance dicek (0/0/0 selisih) — TIDAK ada
+  compiler di sandbox ini, sama seperti batch-batch sebelumnya; sinyal
+  compile nyata pertama tetap CI run berikutnya.
+
+**BELUM dikerjakan (di luar scope 1-batch ini, sengaja — micro-batching
+rule):** kalau maksud user "generik" juga mencakup hal-hal berikut, itu
+scope baru untuk batch selanjutnya, bukan bagian dari task ini:
+1. **Tema default masih "Midnight Blue Glass"** (gradient kaca gelap) —
+   tidak generik secara visual. Task ini soal *layout/navigasi*, jadi tema
+   sengaja tidak disentuh. Kalau user juga mau warna/tema-nya diganti ke
+   Material3 polos standar (bukan cuma Home yang theme-agnostic), itu
+   instruksi baru eksplisit.
+2. **Layout INTERNAL tiap tool** (tab setting ResizerScreen, trim editor,
+   grid Studio, form BatchScreen/CompressorScreen/GifScreen) belum diubah
+   sama sekali — cuma pintu masuk/navigasi top-level yang diganti jadi
+   dashboard generik. Kalau user mau isi tiap screen itu juga dirombak
+   biar makin mirip app populer (misal form single-column simpel, bottom
+   sheet picker, dst.), itu task terpisah per screen (guard 3-file/batch).
+3. User perlu build+install ZIP ini dan konfirmasi Home dashboard tampil
+   benar (grid tidak terpotong, tap card membuka tool yang benar, tombol
+   back dari tiap tool balik ke Home) sebelum lanjut ke item 1/2 di atas.
+
+🟡 **[RESUME POINT — Batch 57, masih menunggu konfirmasi user, belum
+terkait Batch 58]** Batch 56's "Kompres GIF" bug-chase
 (disposal method/canvas persistence) sudah MOOT — seluruh fitur "Kompres
 GIF" dihapus Batch 57 atas permintaan eksplisit user, jadi bug itu tidak
 relevan lagi, tidak perlu dilanjutkan. 2 hal yang perlu dikonfirmasi user
@@ -231,6 +288,13 @@ sesi berikutnya:
    "Kompres GIF"): itu instruksi baru yang eksplisit, belum dieksekusi.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 58** — Permintaan user: "ubah total layout aplikasi jadi super
+  generik kayak aplikasi populer sejenisnya yang beredar di Play Store".
+  Ditangani sebagai penambahan `HomeScreen` (dashboard grid 2 kolom, 5
+  tool card) sebagai landing page baru di depan `ResizerScreen` — lihat
+  detail lengkap teknis di [RESUME POINT — Batch 58] di atas. Semua screen
+  lama (Resizer/Compressor/Batch/GIF/Studio) tidak diubah isinya, hanya
+  jalur navigasi masuk/keluarnya. 1 file diubah (`MainActivity.kt`).
 - **Batch 57** — 2 permintaan user: (1) "fix regresi persisten pada theme
   yang di select user", (2) "cabut dan musnahkan semua dependency yang
   berhubungan dengan Gif karena dinilai gagal dalam menyelesaikan masalah

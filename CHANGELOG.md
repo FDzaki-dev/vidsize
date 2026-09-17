@@ -1,5 +1,30 @@
 # Changelog
 
+## Batch 58: Home dashboard generik (landing page baru, layout total)
+
+User minta: "ubah total layout aplikasi jadi super generik kayak aplikasi
+populer sejenisnya yang beredar di Play Store".
+
+Sebelum batch ini app tidak punya Home sama sekali — landing langsung ke
+`ResizerScreen` (editor), 4 tool lain disembunyikan di overflow "More".
+Ditangani dengan menambah `HomeScreen`/`HomeToolCard` baru: title bar polos
++ grid 2 kolom 5 tool card (Resize/Kompres/GIF/Batch/Riwayat) — pola
+dashboard generik standar app video-tool di Play Store.
+
+- `Screen.HOME` jadi state awal (ganti `Screen.MAIN`), digambar sebagai
+  overlay di depan `ResizerScreen`, pola sama seperti overlay Batch/GIF/
+  Compressor/Studio yang sudah ada — base tetap termount, tidak ada state
+  yang hilang.
+- `onBack` di BatchScreen/GifScreen/CompressorScreen/StudioScreen
+  diarahkan ulang ke `Screen.HOME` (sebelumnya `Screen.MAIN`).
+  `StudioScreen.onEditAgain`/`onEditFailed` sengaja tetap ke `Screen.MAIN`.
+- `ResizerScreen` dapat `navigationIcon` (ArrowBack) baru untuk balik ke
+  Home — sebelumnya screen ini adalah root, tidak punya tombol back.
+- Additive murni: tidak ada isi/logika screen lama yang diubah. 1 file
+  (`MainActivity.kt`). Detail teknis penuh + item yang SENGAJA belum
+  dikerjakan (tema default, layout internal tiap tool) ada di
+  PROJECT_STATE.md [RESUME POINT — Batch 58].
+
 ## Batch 57: Fix persistensi theme (root cause) + cabut total "Kompres GIF"
 
 User minta 2 hal: (1) perbaiki regresi persisten pada theme yang dipilih

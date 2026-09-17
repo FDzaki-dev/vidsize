@@ -34,6 +34,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
@@ -48,6 +50,7 @@ import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Gif
@@ -101,7 +104,7 @@ import java.util.Locale
 import java.util.UUID
 
 private enum class ThemePreference { SYSTEM, LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS }
-private enum class Screen { MAIN, STUDIO, BATCH, GIF, COMPRESSOR }
+private enum class Screen { HOME, MAIN, STUDIO, BATCH, GIF, COMPRESSOR }
 
 // Kategorisasi panel setting ResizerScreen jadi tab (diminta user: "kategorikan
 // jadi beberapa tab menu agar terlihat clean dan minimalis"). Murni state UI
@@ -278,7 +281,7 @@ private fun VideoResizerApp(
     themePref: ThemePreference,
     onThemePrefChange: (ThemePreference) -> Unit
 ) {
-    var screen by remember { mutableStateOf(Screen.MAIN) }
+    var screen by remember { mutableStateOf(Screen.HOME) }
     var prefill by remember { mutableStateOf<PrefillSettings?>(null) }
     var gifPrefill by remember { mutableStateOf<GifPrefill?>(null) }
     var studioMessage by remember { mutableStateOf<String?>(null) }
@@ -302,6 +305,7 @@ private fun VideoResizerApp(
         ResizerScreen(
             themePref = themePref,
             onThemePrefChange = onThemePrefChange,
+            onOpenHome = { screen = Screen.HOME },
             onOpenStudio = { screen = Screen.STUDIO },
             onOpenBatch = { screen = Screen.BATCH },
             onOpenGif = { screen = Screen.GIF },
@@ -312,6 +316,23 @@ private fun VideoResizerApp(
             studioMessage = studioMessage,
             onStudioMessageShown = { studioMessage = null }
         )
+        // Batch 58: generic tool-grid dashboard, drawn as the front-most
+        // overlay when screen == HOME (same "stays mounted underneath,
+        // overlay on top" pattern as every other screen here) — the new
+        // default landing page in front of ResizerScreen.
+        AnimatedVisibility(
+            visible = screen == Screen.HOME,
+            enter = fadeIn(tween(IOS_PUSH_MS, easing = IosPushEasing)),
+            exit = fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
+        ) {
+            HomeScreen(
+                onOpenResizer = { screen = Screen.MAIN },
+                onOpenCompressor = { screen = Screen.COMPRESSOR },
+                onOpenGif = { screen = Screen.GIF },
+                onOpenBatch = { screen = Screen.BATCH },
+                onOpenStudio = { screen = Screen.STUDIO }
+            )
+        }
         AnimatedVisibility(
             visible = screen == Screen.BATCH,
             enter = slideInHorizontally(
@@ -324,7 +345,7 @@ private fun VideoResizerApp(
             ) + fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
         ) {
             BatchScreen(
-                onBack = { screen = Screen.MAIN }
+                onBack = { screen = Screen.HOME }
             )
         }
         AnimatedVisibility(
@@ -339,7 +360,7 @@ private fun VideoResizerApp(
             ) + fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
         ) {
             GifScreen(
-                onBack = { screen = Screen.MAIN },
+                onBack = { screen = Screen.HOME },
                 prefill = gifPrefill,
                 onPrefillConsumed = { gifPrefill = null }
             )
@@ -356,7 +377,7 @@ private fun VideoResizerApp(
             ) + fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
         ) {
             CompressorScreen(
-                onBack = { screen = Screen.MAIN }
+                onBack = { screen = Screen.HOME }
             )
         }
         AnimatedVisibility(
@@ -371,7 +392,7 @@ private fun VideoResizerApp(
             ) + fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
         ) {
             StudioScreen(
-                onBack = { screen = Screen.MAIN },
+                onBack = { screen = Screen.HOME },
                 onEditAgain = { entry ->
                     if (entry.kind == "GIF") {
                         // Separate prefill path (see GifPrefill doc comment)
@@ -422,12 +443,158 @@ private fun VideoResizerApp(
     }
 }
 
+// Batch 58: generic tool-grid dashboard — the standard "title bar + 2-column
+// grid of tool cards" home layout used by most video-utility apps on the
+// Play Store. Purely additive: it's a new front door drawn in front of the
+// existing screens (see VideoResizerApp above); none of Resizer/Compressor/
+// Batch/GIF/Studio's own internals change. Deliberately theme-agnostic (no
+// glass gradient) so it reads as a plain, familiar dashboard in every theme.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun HomeScreen(
+    onOpenResizer: () -> Unit,
+    onOpenCompressor: () -> Unit,
+    onOpenGif: () -> Unit,
+    onOpenBatch: () -> Unit,
+    onOpenStudio: () -> Unit
+) {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text("Vidsize", fontWeight = FontWeight.SemiBold) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    titleContentColor = MaterialTheme.colorScheme.onBackground
+                )
+            )
+        },
+        containerColor = MaterialTheme.colorScheme.background
+    ) { padding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+                .padding(horizontal = 16.dp)
+        ) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "Semua alat video dalam satu aplikasi",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                item {
+                    HomeToolCard(
+                        icon = Icons.Filled.Crop,
+                        label = "Resize / Edit Video",
+                        desc = "Ubah ukuran, rasio, watermark",
+                        onClick = onOpenResizer
+                    )
+                }
+                item {
+                    HomeToolCard(
+                        icon = Icons.Filled.Compress,
+                        label = "Kompres Video",
+                        desc = "Perkecil ukuran file",
+                        onClick = onOpenCompressor
+                    )
+                }
+                item {
+                    HomeToolCard(
+                        icon = Icons.Filled.Gif,
+                        label = "Video ke GIF",
+                        desc = "Ekspor jadi GIF",
+                        onClick = onOpenGif
+                    )
+                }
+                item {
+                    HomeToolCard(
+                        icon = Icons.Filled.Layers,
+                        label = "Batch Export",
+                        desc = "Proses banyak video sekaligus",
+                        onClick = onOpenBatch
+                    )
+                }
+                item {
+                    HomeToolCard(
+                        icon = Icons.Filled.PhotoLibrary,
+                        label = "Riwayat",
+                        desc = "Lihat hasil ekspor sebelumnya",
+                        onClick = onOpenStudio
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun HomeToolCard(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    desc: String,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    Card(
+        onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() },
+        modifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(16.dp),
+            verticalArrangement = Arrangement.SpaceBetween
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(40.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.primaryContainer),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+            }
+            Column {
+                Text(
+                    label,
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    desc,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+        }
+    }
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun ResizerScreen(
     themePref: ThemePreference,
     onThemePrefChange: (ThemePreference) -> Unit,
+    onOpenHome: () -> Unit,
     onOpenStudio: () -> Unit,
     onOpenBatch: () -> Unit,
     onOpenGif: () -> Unit,
@@ -938,6 +1105,14 @@ private fun ResizerScreen(
         modifier = Modifier.fillMaxSize().background(screenBackground),
         topBar = {
             TopAppBar(
+                navigationIcon = {
+                    // Batch 58: this screen is no longer the app's root —
+                    // HomeScreen is now in front of it — so it needs an
+                    // explicit way back to the dashboard.
+                    IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onOpenHome() }) {
+                        Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali ke beranda")
+                    }
+                },
                 title = {
                     // BUG FIX (Batch 23): with 6 action icons now in this
                     // bar (update/compress/batch/gif/studio/theme, since

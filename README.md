@@ -62,23 +62,19 @@ History and thumbnails live in the app's private cache/SharedPreferences —
 clearing the app's storage from Android settings clears Studio's history too,
 but anything already published to Gallery > Movies is unaffected either way.
 
-## Video ke GIF & Kompres GIF
-A separate screen (own top-bar icon, not part of the main resize flow)
-with two modes selected via a pill tab at the top:
-- **Video ke GIF** (since Batch 9): pick a video, trim it, choose fps and
-  output width, get a GIF built from scratch by a dependency-free
-  GIF89a/LZW encoder (`GifEncoder.kt`/`GifExporter.kt`) — no external GIF
-  library.
-- **Kompres GIF** (Batch 55): pick an *existing* GIF file and shrink it.
-  Two levels — **Ringan** (default) only removes near-duplicate frames
-  and never resizes, so output stays the same resolution as the source;
-  **Maksimal** removes more aggressively and caps width at 720px if the
-  source is bigger. Guarded against oversized/pathological input files
-  (size cap, frame-count cap, an absolute decode-width safety backstop,
-  and the whole pipeline wrapped so a failure shows a message instead of
-  crashing the app) — see `GifCompressor.kt`.
+## Video ke GIF
+A separate screen (own top-bar icon, not part of the main resize flow):
+pick a video, trim it, choose fps and output width, get a GIF built from
+scratch by a dependency-free GIF89a/LZW encoder (`GifEncoder.kt`/
+`GifExporter.kt`) — no external GIF library.
 
-Both modes save their result to **Studio** and offer Share / Buka di
+Batch 55 briefly added a second mode, "Kompres GIF" (pick an existing GIF
+file and shrink it via `GifCompressor.kt`) — removed entirely in Batch 57
+after repeated regressions across Batch 55b/55c/56 (see PROJECT_STATE.md/
+CHANGELOG.md for the full history). The screen is back to its original
+single-purpose "Video ke GIF" flow.
+
+This mode saves its result to **Studio** and offers Share / Buka di
 Galeri, same as the rest of the app.
 
 ## Dark mode

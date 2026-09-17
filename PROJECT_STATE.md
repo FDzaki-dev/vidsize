@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 56**. This is the first-read file per the context
+Snapshot as of **Batch 57**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -61,6 +61,41 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 57 (2 permintaan user sekaligus):**
+  1. **Fix persistensi theme (root cause, konkret — bukan tebakan
+     platform):** `themePref` di `MainActivity.onCreate` dulu murni
+     `remember { mutableStateOf(MIDNIGHT_BLUE_GLASS) }` — TIDAK ADA kode
+     mana pun yang membaca/menulis ke storage. Setiap restart app (dan
+     setiap recreate Activity, termasuk rotasi layar, karena state ini
+     hidup langsung di `setContent`) diam-diam reset pilihan user balik ke
+     default. Fix: baca/tulis SharedPreferences "video_resizer_prefs" key
+     "theme_preference" (file prefs yang sama yang sudah dipakai
+     ResizerScreen/StudioScreen — tidak bikin file baru). Defensif via
+     `runCatching { ThemePreference.valueOf(...) }` kalau value kesimpan
+     korup/dari versi enum lama.
+  2. **"Kompres GIF" DIHAPUS TOTAL** (permintaan eksplisit user: "cabut
+     dan musnahkan semua dependency yang berhubungan dengan Gif" — setelah
+     3 batch fix gagal total, 55b→55c→56, dinilai gagal menyelesaikan
+     masalah berantai-nya). `GifCompressor.kt` dihapus. `GifEncoder.kt`
+     kembali ke 1 overload (varian `delays:List<Int>` dicabut, cuma
+     dipakai GifCompressor). Di `MainActivity.kt`: `GifScreenMode`/
+     `GifModeTabBar`/`GifFilePickerCard`/`GifCompressPanel` + seluruh
+     state/handler `compress*` di dalam `GifScreen` dicabut bersih —
+     `GifScreen` balik jadi satu-mode "Video ke GIF" persis sebelum
+     Batch 55. **`GifExporter.kt`/fitur "Video ke GIF" TIDAK disentuh**
+     (pipeline terpisah total, tidak pernah dilaporkan bermasalah — lihat
+     "Keputusan scope" di Batch history). **`Screen.COMPRESSOR`/
+     `CompressorScreen` (fitur kompres VIDEO, bukan GIF) JUGA TIDAK
+     disentuh** — dicek langsung isinya, nama mirip tapi fitur 100%
+     berbeda, tidak ada hubungan dengan "Gif" sama sekali. History lama
+     `kind="GIF_COMPRESS"` di Studio TETAP tampil benar (logic display cuma
+     string-compare, sengaja dipertahankan) — user lama tidak kehilangan
+     riwayat, cuma sudah tidak bisa membuat yang baru.
+  Brace/paren balance: `MainActivity.kt` {} 1137/1137 () 2206/2206
+  [] 11/11 depth 0; `GifEncoder.kt` {} 29/29 () 117/117 [] 7/7 depth 0.
+  File disentuh: `MainActivity.kt`, `GifEncoder.kt` (edit) +
+  `GifCompressor.kt` (hapus) — 3 file kode. Detail di Batch history +
+  CHANGELOG.md.
 - **Batch 56 (root-cause fix, atas permintaan user "perbaiki regresi
   mekanisme persisten sampai ke akarnya"):** Audit Batch 55c menemukan
   gap: canvas persisten-selamanya itu SALAH untuk 2 dari 4 metode
@@ -177,18 +212,109 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
-🟡 **[RESUME POINT — Batch 56]** Tunggu konfirmasi user pasca build+
-install apakah gejala "Kompres GIF" (strip warna di atas, sisanya
-putih/blank) sudah tuntas. KALAU MASIH terjadi: minta user kirim FILE GIF
-SUMBER yang dipakai (bukan screenshot hasil kompresinya) — lihat
-"Catatan jujur" di Batch 56 (Current version + Batch history) untuk
-kenapa file sumber sekarang jadi kunci: audit kode menunjukkan piksel
-kosong seharusnya terkuantisasi hitam bukan putih di pipeline ini, jadi
-ada kemungkinan nyata akar masalahnya BUKAN (hanya) soal disposal
-method/persistensi canvas — perlu struktur GIF asli untuk memastikan,
-bukan tebak lagi dari gejala visual.
+🟡 **[RESUME POINT — Batch 57]** Batch 56's "Kompres GIF" bug-chase
+(disposal method/canvas persistence) sudah MOOT — seluruh fitur "Kompres
+GIF" dihapus Batch 57 atas permintaan eksplisit user, jadi bug itu tidak
+relevan lagi, tidak perlu dilanjutkan. 2 hal yang perlu dikonfirmasi user
+sesi berikutnya:
+1. Theme sekarang persisten lintas restart/rotasi (SharedPreferences) —
+   tunggu konfirmasi user setelah build+install bahwa pilihan tema memang
+   sudah tidak reset lagi.
+2. **Scope keputusan Batch 57 yang perlu dikonfirmasi**: user minta
+   "musnahkan SEMUA dependency yang berhubungan dengan Gif" — yang
+   dihapus HANYA `GifCompressor.kt`/mode "Kompres GIF". `GifExporter.kt`
+   (fitur "Video ke GIF") dan `Screen.COMPRESSOR`/`CompressorScreen`
+   (fitur kompres VIDEO, nama mirip tapi tidak ada hubungan dengan Gif)
+   SENGAJA dipertahankan karena keduanya tidak pernah dilaporkan
+   bermasalah — lihat justifikasi lengkap di Batch history Batch 57. KALAU
+   user sebenarnya mau "Video ke GIF" juga dihapus total (bukan cuma
+   "Kompres GIF"): itu instruksi baru yang eksplisit, belum dieksekusi.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 57** — 2 permintaan user: (1) "fix regresi persisten pada theme
+  yang di select user", (2) "cabut dan musnahkan semua dependency yang
+  berhubungan dengan Gif karena dinilai gagal dalam menyelesaikan masalah
+  berantai nya".
+
+  **(1) Theme persistence.** Ini BEDA KARAKTER total dari kasus GIF
+  (Batch 55b/55c/56): bukan soal perilaku Android internal yang
+  undocumented/tidak bisa dipastikan tanpa device — ini bug yang 100%
+  bisa dipastikan benar cuma dari baca kode. `MainActivity.onCreate`:
+  `var themePref by remember { mutableStateOf(ThemePreference.
+  MIDNIGHT_BLUE_GLASS) }` — grep menyeluruh ke seluruh `themePref`/
+  `onThemePrefChange` di file ini membuktikan TIDAK ADA satu baris pun
+  yang membaca dari atau menulis ke SharedPreferences/DataStore/storage
+  apa pun. `onThemePrefChange` cuma reassign state Compose in-memory.
+  Karena state ini hidup langsung di `setContent` (bukan ViewModel),
+  setiap `onCreate` jalan lagi (app restart, ATAU Activity recreate akibat
+  rotasi layar — tidak ada `android:configChanges` untuk orientation di
+  Manifest) balik ke nilai hardcoded default. Fix: baca SharedPreferences
+  "video_resizer_prefs" (file yang SAMA dipakai ResizerScreen/
+  StudioScreen — sengaja tidak bikin file prefs baru) key
+  "theme_preference" saat inisialisasi state, tulis di setiap
+  `onThemePrefChange`. Dibungkus `runCatching { ThemePreference.
+  valueOf(saved) }.getOrNull()` supaya value tersimpan yang korup atau
+  dari nama enum versi lama tidak crash — fallback ke default lama.
+
+  **(2) Cabut "Kompres GIF" total.** Audit SEBELUM eksekusi (krusial —
+  nama-nama mirip di codebase ini gampang salah tebak): `Screen` enum
+  punya `GIF` dan `COMPRESSOR` sebagai 2 entri terpisah. Screen.COMPRESSOR/
+  `CompressorScreen` DICEK LANGSUNG isinya — itu fitur KOMPRES VIDEO
+  (pakai `CompressionLevel`/pipeline video biasa), TIDAK ADA hubungan
+  dengan GIF sama sekali, cuma kebetulan nama mirip
+  ("Compressor"/"GifCompressor"). Kalau sampai ke-hapus, itu akan
+  menghancurkan fitur video yang bekerja normal dan TIDAK PERNAH
+  dilaporkan bermasalah — pelanggaran STABILITY WINS yang tidak perlu.
+  DIPERTAHANKAN, tidak disentuh sama sekali.
+  Fitur "Kompres GIF" yang SEBENARNYA ternyata hidup sebagai mode kedua
+  DI DALAM `GifScreen` (bukan Screen enum terpisah) — `GifScreenMode.
+  {CONVERT, COMPRESS}` + tab pill `GifModeTabBar`, ditambahkan Batch 55.
+  Yang dihapus:
+  - `GifCompressor.kt` — dihapus total (file).
+  - `GifEncoder.kt` — overload `encode(..., delays: List<Int>, ...)`
+    dicabut (cuma dipakai GifCompressor), digabung balik ke 1 overload
+    `delayCentiseconds: Int` — persis badan fungsi pre-Batch-55.
+    `GifExporter.kt`'s call site (named args) tetap valid tanpa perubahan
+    apa pun di file itu.
+  - `MainActivity.kt`, di dalam `GifScreen`: enum `GifScreenMode`,
+    composable `GifModeTabBar`/`GifFilePickerCard`/`GifCompressPanel`
+    dihapus total; state block `screenMode` + 11 var `compress*` +
+    `pickGifLauncher` + fungsi `startGifCompress()`/`cancelGifCompress()`
+    dicabut; `BackHandler`/`AlertDialog` exit-confirm guard yang tadinya
+    `isProcessing || compressIsProcessing` disusutkan balik ke
+    `isProcessing` saja; TopAppBar title yang tadinya kondisional
+    (CONVERT vs COMPRESS) di-hardcode balik ke "Video ke GIF"; struktur
+    `if (screenMode==CONVERT) {...} else { GifCompressPanel(...) }`
+    dibongkar — isi cabang CONVERT jadi konten langsung Column (tidak
+    dibungkus `if` apa pun lagi), cabang `else`+`GifCompressPanel` dicabut
+    total. Trace brace-depth manual (Python) dipakai untuk memastikan
+    titik potong yang benar sebelum eksekusi delete (bukan tebak dari
+    indentasi) — lihat proses di histori chat kalau perlu diverifikasi.
+  - `GifExporter.kt` ("Video ke GIF") **TIDAK disentuh sama sekali** —
+    pipeline terpisah total dari GifCompressor sejak awal (Batch 55's
+    sendiri sudah menegaskan "deliberately not sharing code"), dan tidak
+    pernah ada laporan bug untuk fitur ini. Menghapusnya akan jadi
+    kerusakan yang tidak diminta terhadap fitur yang bekerja normal.
+  - Studio history: entry lama dengan `kind="GIF_COMPRESS"` — logic
+    display (icon Gif, label "GIF Terkompresi", widened kind-check di 4
+    tempat) SENGAJA TIDAK disentuh. Ini cuma string-compare terhadap
+    field String biasa di `VideoHistoryEntry`, TIDAK bergantung pada tipe
+    apa pun dari `GifCompressor.kt` — riwayat lama user yang sudah ada di
+    device tetap tampil benar walau fiturnya sendiri sudah tidak ada
+    (tidak bisa membuat entry baru lagi, tapi yang lama tidak hilang/
+    rusak tampilannya). Zero-regression untuk data user yang sudah ada.
+  **Verified**: brace/paren balance FULL FILE `MainActivity.kt` — {} 1137/
+  1137, () 2206/2206, [] 11/11, brace-depth walk akhir 0 (tak pernah
+  negatif); `GifEncoder.kt` — {} 29/29, () 117/117, [] 7/7, depth 0.
+  Grep project-wide akhir: 0 referensi aktif tersisa ke
+  `GifCompressor`/`GifCompressionLevel`/`GifCompressResult`/
+  `GifScreenMode`/`GifModeTabBar`/`GifFilePickerCard`/`GifCompressPanel`
+  di luar 2 baris komentar historis (harmless). Tidak ada dependency
+  Gradle terkait GIF (`app/build.gradle.kts` di-grep, nihil — encoder
+  sejak awal ditulis manual justru untuk menghindari dependency pihak
+  ketiga).
+  File disentuh: `MainActivity.kt`, `GifEncoder.kt` (edit) +
+  `GifCompressor.kt` (hapus) = 3 file kode.
 - **Batch 56** — User: "perbaiki regresi terhadap mekanisme persistent
   sampai ke akarnya". Audit Batch 55c: blanket "canvas selalu persisten,
   never di-clear" itu benar untuk disposal method 0/1 GIF89a ("do not
@@ -1177,30 +1303,17 @@ bukan tebak lagi dari gejala visual.
   unchanged. If multi-select ever needs the same list-style treatment,
   that's new scope, not an extension of the existing single-pick screen.
 
-## Defaults a new reader should know (cont'd — GifCompressor, Batch 55)
-- **"Kompres GIF" is a THIRD, separate GIF pipeline** alongside
-  `GifExporter` (video→GIF) — `GifCompressor.kt` decodes an EXISTING GIF
-  via `android.graphics.Movie` (deprecated API, deliberately kept — see
-  Batch 55 history entry for why it's still the right call at this
-  project's minSdk 24). `GifExporter.kt` was not touched to build this;
-  the palette/quantize functions are intentionally duplicated in
-  `GifCompressor.kt` rather than shared.
-- **`GifEncoder.encode()` now has 2 overloads** — the original flat
-  `delayCentiseconds: Int` one (still what `GifExporter` calls,
-  unchanged behavior) and a new `delays: List<Int>` one (what
-  `GifCompressor` calls, for its frame-dedup delay-merging). If GIF
-  encoding ever needs touching again, check which overload a call site
-  resolves to before assuming "the" delay parameter.
-- **Decode loop is disposal-method-aware since Batch 56** —
-  `parseGifFrameDisposals()` reads each source frame's GIF89a disposal
-  method + rectangle + the GIF's own background color directly from the
-  raw bytes (`Movie` exposes none of this). The persistent canvas from
-  Batch 55c is only ever left alone for disposal 0/1; disposal 2/3 gets
-  its rectangle repainted to the GIF's real background color
-  (`PorterDuff.Mode.SRC`, opaque — NOT a transparent clear, since
-  `buildPaletteLocal`/`quantizeFrameLocal` never read alpha, only RGB).
-  If this loop is touched again, keep that RGB-only constraint in mind —
-  any future "clear" needs an opaque color, not alpha=0.
+## Defaults a new reader should know (cont'd — GifCompressor, Batch 55, REMOVED Batch 57)
+- **"Kompres GIF" (GifCompressor.kt, the Movie-based existing-GIF
+  compressor) no longer exists** — removed entirely in Batch 57 at the
+  user's explicit request, after 3 straight batches (55b/55c/56) failed
+  to fully resolve its decode-corruption reports. Full technical history
+  (why it existed, every fix attempt, and the final removal) is in the
+  Batch 55/55b/55c/56/57 entries below and in CHANGELOG.md — kept for the
+  record, not as current-architecture guidance. `GifEncoder.kt` is back
+  to its original single `encode(..., delayCentiseconds: Int, ...)`
+  overload. `GifExporter.kt` ("Video ke GIF") was never part of this and
+  needs no special handling — it's the one remaining GIF pipeline.
 
 ## Defaults a new reader should know (cont'd — Compressor, Batch 19)
 - **Compressor is a separate pipeline call, not a mode of `resize()`** —

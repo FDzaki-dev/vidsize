@@ -1,5 +1,73 @@
 # Changelog
 
+## Batch 57: Fix persistensi theme (root cause) + cabut total "Kompres GIF"
+
+User minta 2 hal: (1) perbaiki regresi persisten pada theme yang dipilih
+user, (2) musnahkan semua dependency yang berhubungan dengan "Gif" karena
+dinilai gagal menyelesaikan masalah berantai-nya (setelah Batch 55b/55c/56).
+
+### FIXED #1 — Theme tidak pernah persisten (root cause pasti, bukan tebakan)
+Beda karakter total dari kasus GIF: ini bug yang bisa dipastikan 100% benar
+cuma dari membaca kode, tanpa perlu compiler/device. `MainActivity.onCreate`:
+`themePref` adalah `remember { mutableStateOf(MIDNIGHT_BLUE_GLASS) }` murni
+in-memory — grep menyeluruh membuktikan TIDAK ADA baris kode mana pun yang
+membaca dari atau menulis ke SharedPreferences/DataStore. `onThemePrefChange`
+cuma reassign state Compose. Karena state ini hidup langsung di `setContent`
+(bukan disurvive lewat ViewModel/rememberSaveable), setiap `onCreate` jalan
+ulang — app restart, ATAU Activity di-recreate akibat rotasi layar — diam-diam
+reset pilihan user balik ke default hardcoded. Fix: baca/tulis SharedPreferences
+`"video_resizer_prefs"` (file yang sama dengan ResizerScreen/StudioScreen) key
+`"theme_preference"`, dibungkus `runCatching` supaya value korup/nama enum lama
+tidak crash.
+
+### FIXED #2 — "Kompres GIF" dihapus total
+Audit dulu sebelum eksekusi (krusial — ada 2 fitur bernama mirip di codebase
+ini): `Screen.COMPRESSOR`/`CompressorScreen` DICEK LANGSUNG isinya — ternyata
+itu fitur kompres VIDEO, sama sekali tidak berhubungan dengan GIF, cuma
+kebetulan nama mirip ("Compressor" vs "GifCompressor"). DIPERTAHANKAN, tidak
+disentuh — menghapusnya akan merusak fitur video yang bekerja normal dan
+tidak pernah dilaporkan bermasalah, pelanggaran zero-regression yang tidak
+perlu. Fitur "Kompres GIF" yang sebenarnya ternyata hidup sebagai mode kedua
+DI DALAM `GifScreen` (`GifScreenMode.COMPRESS`, ditambahkan Batch 55).
+
+Dihapus:
+- `GifCompressor.kt` — file dihapus total.
+- `GifEncoder.kt` — overload `encode(..., delays: List<Int>, ...)` (cuma
+  dipakai GifCompressor) dicabut, digabung balik ke 1 overload
+  `delayCentiseconds: Int` — persis badan fungsi pre-Batch-55.
+  `GifExporter.kt`'s call site tetap valid tanpa perubahan.
+- `MainActivity.kt` di dalam `GifScreen`: `GifScreenMode`/`GifModeTabBar`/
+  `GifFilePickerCard`/`GifCompressPanel` + state `compress*` (11 var) +
+  `pickGifLauncher` + `startGifCompress()`/`cancelGifCompress()` dicabut;
+  `BackHandler`/`AlertDialog` exit-guard disusutkan balik ke `isProcessing`
+  saja; TopAppBar title di-hardcode balik ke "Video ke GIF"; struktur
+  `if(CONVERT){...}else{GifCompressPanel(...)}` dibongkar jadi konten
+  langsung (brace-depth ditelusuri manual pakai script Python sebelum
+  eksekusi delete, untuk memastikan titik potong yang benar).
+
+TIDAK disentuh (scope deliberately dibatasi):
+- `GifExporter.kt` ("Video ke GIF") — pipeline terpisah sejak awal, tidak
+  pernah dilaporkan bermasalah. Menghapusnya = kerusakan tidak diminta.
+- Studio history `kind="GIF_COMPRESS"` — logic tampilnya cuma string-compare
+  ke field String biasa, tidak bergantung tipe apa pun dari GifCompressor.kt.
+  Riwayat lama user tetap tampil benar (tidak bisa bikin baru lagi, tapi yang
+  lama tidak hilang).
+
+### VERIFIED
+`MainActivity.kt` brace/paren balance FULL FILE: `{}` 1137/1137, `()` 2206/2206,
+`[]` 11/11, brace-depth walk akhir 0 (tak pernah negatif). `GifEncoder.kt`:
+`{}` 29/29, `()` 117/117, `[]` 7/7, depth 0. Grep project-wide akhir: 0
+referensi aktif tersisa ke `GifCompressor`/`GifCompressionLevel`/
+`GifCompressResult`/`GifScreenMode`/`GifModeTabBar`/`GifFilePickerCard`/
+`GifCompressPanel` di luar 2 baris komentar historis. Tidak ada dependency
+Gradle terkait GIF di `app/build.gradle.kts` (encoder ditulis manual sejak
+awal justru untuk menghindari dependency pihak ketiga).
+
+### VERDICT
+File disentuh: `MainActivity.kt`, `GifEncoder.kt` (edit) + `GifCompressor.kt`
+(hapus) = 3 file kode, plus dokumentasi (PROJECT_STATE.md/README.md/
+FILE_MANIFEST.txt/CHANGELOG.md).
+
 ## Batch 56: Root-cause fix — disposal method GIF diabaikan di "Kompres GIF"
 
 User minta: perbaiki regresi mekanisme persisten (Batch 55c) sampai ke

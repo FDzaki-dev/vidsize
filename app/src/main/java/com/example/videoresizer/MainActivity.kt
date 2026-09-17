@@ -122,7 +122,29 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
-            var themePref by remember { mutableStateOf(ThemePreference.MIDNIGHT_BLUE_GLASS) }
+            // Batch 57 (root-cause fix — user: "regresi persisten pada theme
+            // yang di select user"): this used to be `remember { mutableStateOf(
+            // ThemePreference.MIDNIGHT_BLUE_GLASS) }` with NOTHING reading from
+            // or writing to storage anywhere — onThemePrefChange only ever
+            // updated this in-memory Compose state. Not a platform-behavior
+            // guess like the GIF issue: this one is a plain, deterministic
+            // "persistence was never wired up" bug, confirmed by reading every
+            // call site of `themePref`/`onThemePrefChange` in this file. Every
+            // app restart (and every activity recreation, e.g. rotation, since
+            // this state lives directly in onCreate's setContent) silently
+            // reset the user's choice back to the hardcoded default. Reuses
+            // the same "video_resizer_prefs" SharedPreferences file already
+            // used elsewhere in this Activity (see ResizerScreen/StudioScreen)
+            // rather than starting a second prefs file for one more key.
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val themePrefsStore = remember { context.getSharedPreferences("video_resizer_prefs", android.content.Context.MODE_PRIVATE) }
+            var themePref by remember {
+                mutableStateOf(
+                    themePrefsStore.getString("theme_preference", null)
+                        ?.let { saved -> runCatching { ThemePreference.valueOf(saved) }.getOrNull() }
+                        ?: ThemePreference.MIDNIGHT_BLUE_GLASS
+                )
+            }
             val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
             val resolvedStyle = when (themePref) {
                 ThemePreference.SYSTEM -> if (systemDark) com.example.videoresizer.ui.theme.AppThemeStyle.MIDNIGHT_BLUE_GLASS else com.example.videoresizer.ui.theme.AppThemeStyle.LIGHT
@@ -135,7 +157,10 @@ class MainActivity : ComponentActivity() {
 
             VideoResizerTheme(style = resolvedStyle, dynamicColor = false) {
                 Surface(color = MaterialTheme.colorScheme.background) {
-                    VideoResizerApp(themePref = themePref, onThemePrefChange = { themePref = it })
+                    VideoResizerApp(themePref = themePref, onThemePrefChange = {
+                        themePref = it
+                        themePrefsStore.edit().putString("theme_preference", it.name).apply()
+                    })
                 }
             }
         }
@@ -4226,225 +4251,6 @@ private fun openGifInGallery(context: android.content.Context, uri: Uri) {
     }
 }
 
-private enum class GifScreenMode(val label: String) {
-    CONVERT("Video ke GIF"),
-    COMPRESS("Kompres GIF")
-}
-
-// Tab pill kecil (2 opsi) khusus GifScreen (Batch 55). Visual sama persis
-// dengan SettingsTabBar milik ResizerScreen (Batch 51: track surfaceVariant,
-// pill aktif gradient primary→secondary) tapi diketik ulang untuk
-// GifScreenMode secara sengaja alih-alih men-generic-kan SettingsTabBar yang
-// sudah ada — pola yang sama dipakai project ini sejak Batch 51 (fitur tab
-// serupa di screen lain sengaja tidak digabung/di-generalize kecuali diminta
-// eksplisit), supaya nol risiko ke sistem tab ResizerScreen yang sudah
-// berjalan.
-@Composable
-private fun GifModeTabBar(
-    selected: GifScreenMode,
-    onSelect: (GifScreenMode) -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(4.dp),
-        horizontalArrangement = Arrangement.spacedBy(4.dp)
-    ) {
-        GifScreenMode.values().forEach { mode ->
-            val isSelected = mode == selected
-            Box(
-                modifier = Modifier
-                    .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .then(
-                        if (isSelected) {
-                            Modifier.background(
-                                brush = Brush.horizontalGradient(
-                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
-                                )
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
-                    .clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onSelect(mode)
-                    }
-                    .padding(vertical = 10.dp),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    mode.label,
-                    style = MaterialTheme.typography.labelMedium,
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-        }
-    }
-}
-
-/** GIF counterpart of VideoPickerCard (Batch 55) — same visual, GIF-specific icon/copy, launches a system document/photo picker filtered to image/gif instead of the in-app VideoPickerScreen. */
-@Composable
-private fun GifFilePickerCard(onPickClick: () -> Unit) {
-    val haptic = LocalHapticFeedback.current
-    Card(
-        onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPickClick() },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        shape = MaterialTheme.shapes.large,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.padding(24.dp).fillMaxWidth(),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Gif,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(40.dp)
-            )
-            Text("Ketuk untuk pilih file GIF", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Text("Dari penyimpanan perangkat", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
-        }
-    }
-}
-
-/**
- * "Kompres GIF" tab body (Batch 55) — pure UI, all state/business-logic
- * (picking, running GifCompressor, saving to Studio) lives in GifScreen and
- * is passed down as params/callbacks, same separation StudioEntryCard
- * already uses for its parent StudioScreen.
- */
-@Composable
-private fun GifCompressPanel(
-    sourceUri: Uri?,
-    sourceBytes: Long,
-    sourceWidth: Int,
-    sourceHeight: Int,
-    level: GifCompressionLevel,
-    onLevelChange: (GifCompressionLevel) -> Unit,
-    onPickClick: () -> Unit,
-    isProcessing: Boolean,
-    progress: Int,
-    onCancel: () -> Unit,
-    onStartCompress: () -> Unit,
-    message: String?,
-    resultFile: File?,
-    resultBytes: Long,
-    galleryUri: Uri?,
-    onShare: () -> Unit,
-    onOpenGallery: () -> Unit
-) {
-    val haptic = LocalHapticFeedback.current
-    if (sourceUri == null) {
-        GifFilePickerCard(onPickClick = onPickClick)
-    } else {
-        Column(verticalArrangement = Arrangement.spacedBy(20.dp)) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                shape = MaterialTheme.shapes.large,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(Icons.Filled.Gif, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(32.dp))
-                    Spacer(Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            if (sourceWidth > 0 && sourceHeight > 0) "${sourceWidth}×${sourceHeight}px" else "GIF dipilih",
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(formatFileSize(sourceBytes), color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                    }
-                    TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPickClick() }, enabled = !isProcessing) {
-                        Text("Ganti")
-                    }
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Tingkat kompresi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(GifCompressionLevel.ENTRIES) { opt ->
-                        FilterChip(
-                            selected = level == opt,
-                            onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onLevelChange(opt) },
-                            label = { Text(opt.label) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White,
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        )
-                    }
-                }
-                Text(level.description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-
-            if (isProcessing) {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    LinearProgressIndicator(
-                        progress = { progress / 100f },
-                        modifier = Modifier.fillMaxWidth().height(6.dp)
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text("Mengompres… $progress%", color = MaterialTheme.colorScheme.onBackground)
-                        OutlinedButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onCancel() }) { Text("Batalkan") }
-                    }
-                }
-            } else {
-                Button(
-                    onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onStartCompress() },
-                    modifier = Modifier.fillMaxWidth().height(52.dp)
-                ) {
-                    Text("Kompres GIF")
-                }
-            }
-
-            message?.let { msg ->
-                Text(msg, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onBackground)
-            }
-
-            if (resultFile != null) {
-                if (resultBytes > 0 && sourceBytes > 0) {
-                    val savedPercent = ((1.0 - resultBytes.toDouble() / sourceBytes.toDouble()) * 100.0).coerceIn(0.0, 99.0).roundToInt()
-                    Text(
-                        "Ukuran turun $savedPercent% (${formatFileSize(sourceBytes)} → ${formatFileSize(resultBytes)}).",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    modifier = Modifier.horizontalScroll(rememberScrollState())
-                ) {
-                    Button(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onShare() }) { Text("Bagikan") }
-                    if (galleryUri != null) {
-                        OutlinedButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onOpenGallery() }) { Text("Buka di Galeri") }
-                    }
-                }
-            }
-        }
-    }
-}
-
 /**
  * Standalone "Video ke GIF" screen. Deliberately not folded into
  * ResizerScreen: GIF export is a completely different pipeline
@@ -4455,10 +4261,10 @@ private fun GifCompressPanel(
  * Reuses VideoPickerCard/VideoEditorPreview/FilmstripExtractor from the
  * main resizer flow for a consistent picking/trimming experience.
  *
- * Batch 55: gained a 2nd mode, "Kompres GIF" (compress an existing GIF file
- * rather than build a new one from video) — see GifScreenMode/
- * GifModeTabBar/GifCompressPanel above and GifCompressor.kt for the actual
- * pipeline. The original "Video ke GIF" flow below is completely untouched.
+ * Batch 57: the "Kompres GIF" second mode this screen briefly gained in
+ * Batch 55 (compress an existing GIF file via GifCompressor.kt) has been
+ * removed entirely — see PROJECT_STATE.md Batch 57 for why. This screen is
+ * back to exactly its original single-purpose "Video ke GIF" flow.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -4485,135 +4291,6 @@ private fun GifScreen(
     var galleryUri by remember { mutableStateOf<Uri?>(null) }
     var message by remember { mutableStateOf<String?>(null) }
     var activeJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-
-    // --- Batch 55: "Kompres GIF" tab — fully separate state from the
-    // "Video ke GIF" state block above, so switching tabs never touches or
-    // resets the other tab's in-progress work (both stay alive underneath,
-    // same "nothing loses state" principle as Screen-level overlays; see
-    // VideoResizerApp's own comment on that).
-    var screenMode by remember { mutableStateOf(GifScreenMode.CONVERT) }
-    var compressSourceUri by remember { mutableStateOf<Uri?>(null) }
-    var compressSourceBytes by remember { mutableLongStateOf(0L) }
-    var compressSourceWidth by remember { mutableIntStateOf(0) }
-    var compressSourceHeight by remember { mutableIntStateOf(0) }
-    var compressLevel by remember { mutableStateOf(GifCompressionLevel.RINGAN) }
-    var compressIsProcessing by remember { mutableStateOf(false) }
-    var compressProgress by remember { mutableIntStateOf(0) }
-    var compressResultFile by remember { mutableStateOf<File?>(null) }
-    var compressResultBytes by remember { mutableLongStateOf(0L) }
-    var compressGalleryUri by remember { mutableStateOf<Uri?>(null) }
-    var compressMessage by remember { mutableStateOf<String?>(null) }
-    var compressActiveJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
-
-    // GetContent(mime="image/gif") rather than PickVisualMedia — needs to
-    // filter to GIF specifically, which PickVisualMedia.ImageOnly can't do
-    // (it's all image/* mimetypes). No new permission needed: SAF/GetContent
-    // pickers grant a scoped read Uri automatically, same as every other
-    // picker already in this file.
-    val pickGifLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.GetContent()
-    ) { uri: Uri? ->
-        if (uri != null) {
-            runCatching {
-                context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-            }
-            compressResultFile = null
-            compressResultBytes = 0L
-            compressGalleryUri = null
-            compressMessage = null
-            val sizeBytes = runCatching {
-                context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
-            }.getOrNull() ?: -1L
-            if (sizeBytes <= 0) {
-                compressMessage = "File GIF ini tidak bisa dibaca."
-            } else {
-                compressSourceUri = uri
-                compressSourceBytes = sizeBytes
-                // Bounds-only probe (inJustDecodeBounds) purely for the
-                // "WxH" display line — no pixel data is decoded, so this is
-                // cheap and carries none of GifCompressor's own memory risk.
-                val opts = android.graphics.BitmapFactory.Options().apply { inJustDecodeBounds = true }
-                runCatching {
-                    context.contentResolver.openInputStream(uri)?.use { stream ->
-                        android.graphics.BitmapFactory.decodeStream(stream, null, opts)
-                    }
-                }
-                compressSourceWidth = opts.outWidth.coerceAtLeast(0)
-                compressSourceHeight = opts.outHeight.coerceAtLeast(0)
-            }
-        }
-    }
-
-    fun startGifCompress() {
-        val uri = compressSourceUri ?: return
-        compressIsProcessing = true
-        compressProgress = 0
-        compressMessage = null
-        compressResultFile = null
-        compressGalleryUri = null
-        val outFile = File(context.cacheDir, "gifcompress_${UUID.randomUUID()}.gif")
-        compressActiveJob = scope.launch {
-            val result = withContext(Dispatchers.Default) {
-                GifCompressor.compress(
-                    context = context,
-                    sourceUri = uri,
-                    level = compressLevel,
-                    outputFile = outFile,
-                    onProgress = { p -> scope.launch(Dispatchers.Main) { compressProgress = p } }
-                )
-            }
-            compressIsProcessing = false
-            when (result) {
-                is GifCompressResult.Success -> {
-                    val publicUri = withContext(Dispatchers.IO) {
-                        PublicMovieExporter.publishImage(context, outFile, outFile.name)
-                    }
-                    compressResultFile = outFile
-                    compressResultBytes = result.outputBytes
-                    compressGalleryUri = publicUri
-                    val savedPercent = if (result.sourceBytes > 0) {
-                        ((1.0 - result.outputBytes.toDouble() / result.sourceBytes.toDouble()) * 100.0).coerceIn(0.0, 99.0).roundToInt()
-                    } else 0
-                    compressMessage = if (publicUri != null) {
-                        "Selesai. Tersimpan di Galeri, ukuran turun $savedPercent% (${formatFileSize(result.outputBytes)})."
-                    } else {
-                        "Selesai (${formatFileSize(result.outputBytes)}, turun $savedPercent%), tapi gagal disalin ke galeri publik. Tetap tersedia lewat tombol Bagikan di bawah."
-                    }
-                    withContext(Dispatchers.IO) {
-                        VideoHistoryStore.add(
-                            context,
-                            VideoHistoryEntry(
-                                id = UUID.randomUUID().toString(),
-                                createdAt = System.currentTimeMillis(),
-                                outputFilePath = outFile.absolutePath,
-                                thumbnailPath = outFile.absolutePath,
-                                sourceUri = uri.toString(),
-                                aspectRatioName = AspectRatioOption.ORIGINAL.name,
-                                resolutionName = ResolutionOption.ORIGINAL.name,
-                                rotationName = RotationOption.NONE.name,
-                                muteAudio = false,
-                                trimStartMs = 0L,
-                                trimEndMs = result.outputDurationMs,
-                                publicUri = publicUri?.toString(),
-                                kind = "GIF_COMPRESS",
-                                gifFps = 0,
-                                gifWidthPx = result.outputWidth
-                            )
-                        )
-                    }
-                }
-                is GifCompressResult.Failure -> {
-                    compressMessage = "Gagal mengompres GIF: ${result.reason}"
-                }
-            }
-        }
-    }
-
-    fun cancelGifCompress() {
-        compressActiveJob?.cancel()
-        compressIsProcessing = false
-        compressMessage = "Dibatalkan."
-    }
 
     // Shared by the picker launcher below and the prefill effect further
     // down — both need "duration/width/height of this uri, or null if it
@@ -4669,7 +4346,6 @@ private fun GifScreen(
         val loaded = loadSourceMetadata(p.uri)
         if (loaded != null) {
             val (d, w, h) = loaded
-            screenMode = GifScreenMode.CONVERT
             selectedUri = p.uri
             durationMs = d
             sourceWidth = w
@@ -4719,13 +4395,8 @@ private fun GifScreen(
     // isProcessing; back while idle behaves exactly as before (immediate
     // onBack(), no dialog).
     var showExitWhileProcessingConfirm by remember { mutableStateOf(false) }
-    // Batch 55: widened to `|| compressIsProcessing` — this guard used to
-    // only know about the CONVERT tab's job; without this, backing out of
-    // the screen mid-"Kompres GIF" would silently kill that job with zero
-    // warning, reopening exactly the gap Batch 43 closed for the convert
-    // flow.
     androidx.activity.compose.BackHandler(enabled = true) {
-        if (isProcessing || compressIsProcessing) showExitWhileProcessingConfirm = true else onBack()
+        if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
     }
     if (showExitWhileProcessingConfirm) {
         AlertDialog(
@@ -4738,8 +4409,6 @@ private fun GifScreen(
                     showExitWhileProcessingConfirm = false
                     activeJob?.cancel()
                     isProcessing = false
-                    compressActiveJob?.cancel()
-                    compressIsProcessing = false
                     onBack()
                 }) { Text("Batalkan proses", color = MaterialTheme.colorScheme.error) }
             },
@@ -4755,11 +4424,11 @@ private fun GifScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (screenMode == GifScreenMode.CONVERT) "Video ke GIF" else "Kompres GIF") },
+                title = { Text("Video ke GIF") },
                 navigationIcon = {
                     IconButton(onClick = {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        if (isProcessing || compressIsProcessing) showExitWhileProcessingConfirm = true else onBack()
+                        if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
                     }) {
                         Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali")
                     }
@@ -4777,11 +4446,6 @@ private fun GifScreen(
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            GifModeTabBar(
-                selected = screenMode,
-                onSelect = { screenMode = it }
-            )
-            if (screenMode == GifScreenMode.CONVERT) {
             if (selectedUri == null || durationMs <= 0) {
                 VideoPickerCard(
                     onPickClick = { showVideoPicker = true }
@@ -4992,31 +4656,6 @@ private fun GifScreen(
                     }
                 }
                 }
-            }
-            } else {
-                GifCompressPanel(
-                    sourceUri = compressSourceUri,
-                    sourceBytes = compressSourceBytes,
-                    sourceWidth = compressSourceWidth,
-                    sourceHeight = compressSourceHeight,
-                    level = compressLevel,
-                    onLevelChange = { compressLevel = it },
-                    onPickClick = { pickGifLauncher.launch("image/gif") },
-                    isProcessing = compressIsProcessing,
-                    progress = compressProgress,
-                    onCancel = { cancelGifCompress() },
-                    onStartCompress = { startGifCompress() },
-                    message = compressMessage,
-                    resultFile = compressResultFile,
-                    resultBytes = compressResultBytes,
-                    galleryUri = compressGalleryUri,
-                    onShare = {
-                        compressResultFile?.let { f -> shareGifFile(context, f) }
-                    },
-                    onOpenGallery = {
-                        compressGalleryUri?.let { u -> openGifInGallery(context, u) }
-                    }
-                )
             }
         }
     }

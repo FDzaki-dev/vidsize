@@ -531,6 +531,10 @@ the GitHub Actions route above is much faster in practice.
 
 ## Project & CI notes (baca ini dulu sebelum ubah setup build/git)
 
+- **Ikon & format tanggal (Batch 63)**: ikon berarah (`ArrowBack`, `ArrowForward`, `Sort`, `BrandingWatermark`) WAJIB
+  `Icons.AutoMirrored.Filled.*` (import `androidx.compose.material.icons.automirrored.filled.*`), bukan `Icons.Filled.*` (deprecated).
+  `SimpleDateFormat` tidak boleh disimpan sebagai satu instance bersama — pakai `ThreadLocal` (lihat `pickerDateFormat`).
+  Filter SpotBugs `exclude.xml` kini menyaring sumber `LazyDsl.kt` (kode inline Compose); hasil mentah tetap ada di SARIF.
 - **Laporan lint (Batch 62)**: XML lint menulis `<issue` lalu baris baru, jadi isu dihitung dengan `grep -cE '<issue([[:space:]]|$)'`
   dan diurai dari XML (bukan dari `.txt`). Status lint pada laporan run #2/#3 ("LULUS (0 isu)") salah hitung = NOT VERIFIED.
 - **Haptic (Batch 61)**: `LocalHapticFeedback` di-override SEKALI di akar `MainActivity.setContent` oleh

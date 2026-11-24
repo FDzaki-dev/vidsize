@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 62**. This is the first-read file per the context
+Snapshot as of **Batch 63**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,10 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 63 (3 berkas non-docs):** 9 situs ikon -> `Icons.AutoMirrored.Filled.*` (`MainActivity.kt` x7, `VideoPickerScreen.kt` x2), 3 peringatan
+  kompilator ditutup (cast tak perlu, `val message` membayangi, param `themePref` `ResizerScreen` dihapus), `pickerDateFormat` jadi
+  `ThreadLocal`, `exclude.xml` + sumber `LazyDsl.kt` (kode inline Compose, bukan proyek). Versi/tag/keystore/signing/Stale Run Guard
+  TIDAK berubah.
 - **Batch 62 (3 berkas non-docs):** penghitung isu lint di `android-artifact.yml` diperbaiki (dulu SELALU 0 = "LULUS" palsu di run #2/#3),
   `CrashLogger.kt` guard API 28 `longVersionCode`, `Haptics.kt` mencatat `SecurityException`. Versi/tag/keystore/signing/Stale Run
   Guard TIDAK berubah.
@@ -239,6 +243,22 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 63]** Triase run #4: ikon AutoMirrored (9 situs), 3 peringatan kompilator, `SimpleDateFormat` ThreadLocal, filter
+SpotBugs `LazyDsl.kt` -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #5 diharapkan: peringatan
+kompilator 13 -> 1 (sisa `setTransformationRequest` `VideoResizer.kt:508`), SpotBugs 226 -> 157 bila filter `<Source name="LazyDsl.kt"/>` bekerja
+(bila tetap 225, filter tak cocok dengan SourceFile kelas sintetis -> baca SARIF, jangan perluas filter tanpa bukti). Bila build GAGAL
+"Unresolved reference" pada `Icons.AutoMirrored.Filled.BrandingWatermark`: pesan deprecated di laporan terpotong ("...Filled.Brandin"),
+nama diasumsikan benar -> kembalikan HANYA situs itu (import `MainActivity.kt` baris 46 + pemakaian ~1532) ke `Icons.Filled.BrandingWatermark`.
+(2) Lint 0 isu run #4 konsisten dengan fix `NewApi` Batch 62 tetapi artifact hanya memuat `.txt` (XML mentah tak terlihat) — bila laporan
+berikutnya memuat isu lint, triase dengan membaca kode di titiknya. (3) Sisa kandidat (belum berubah): pengecualian ditelan tanpa jejak
+mentah di `PublicMovieExporter.kt`/`MainActivity.kt` (detekt `SwallowedException`; aturan ArchUnit "mandiri" melarang `PublicMovieExporter.kt`
+memanggil `CrashLogger.kt` -> perlu keputusan arsitektur); `AppUpdater.download()` belum OkHttp+Okio (sudah streaming 8 KB; butuh dependency
+baru, tak bisa diverifikasi tanpa CI); `setTransformationRequest` deprecated (Media3 1.4.1 — cek API pengganti versi terpasang).
+(4) SpotBugs yang DIBACA = false positive codegen, jangan diubah: `NP_NULL_ON_SOME_PATH` `VideoResizer.kt`, `SA_LOCAL_SELF_ASSIGNMENT`
+`MainActivity.kt:4947`, `OBL_UNSATISFIED_OBLIGATION` `AppUpdater.kt:158` (bukti di CHANGELOG Batch 63). Belum dibaca: `RV_RETURN_VALUE_IGNORED`,
+`REC_CATCH_EXCEPTION`, `BC_BAD_CAST_TO_ABSTRACT_COLLECTION`, `MS_EXPOSE_REP`. Tidak diverifikasi di sandbox: kompilasi Kotlin (tak ada
+kotlinc/Gradle/SDK), build/tes/lint/SpotBugs/detekt sungguhan. Resume point Batch 62 & 61 & 60 & 59 & 58 di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 62]** Penghitung lint laporan CI + guard API `CrashLogger` + log `Haptics` -> **SELESAI di ZIP, NOT VERIFIED
 di CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #4 menampilkan temuan lint SUNGGUHAN untuk pertama kalinya — triase tiap
 temuan dengan membaca kode di titiknya; status lint run #2/#3 ("LULUS") JANGAN dipercaya. Bila lint masih "LULUS (0 isu)"

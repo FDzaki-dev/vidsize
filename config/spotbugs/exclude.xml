@@ -12,6 +12,11 @@
   - NM_METHOD_NAMING_CONVENTION: fungsi @Composable WAJIB berawalan huruf besar (pedoman API Compose) — aturan
     penamaan, bukan cacat; tak ada perbaikan yang valid.
   - Kelas hasil generate: ComposableSingletons (Compose compiler), R, BuildConfig — bukan kode proyek.
+  - Batch 63 (bukti laporan run #4): sumber `LazyDsl.kt` — EI_EXPOSE_REP2 x51 (LazyDsl.kt:0) dan
+    NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE x17 (LazyDsl.kt:149). Berkas `LazyDsl.kt` TIDAK ada di pohon
+    sumber proyek (find = kosong); itu fungsi `inline` Compose Foundation (LazyListScope.items dst.) yang tubuhnya
+    disalin kompilator Kotlin ke kelas sintetis proyek, jadi tak ada yang bisa diperbaiki di kode proyek. Disaring
+    HANYA lewat nama sumber `LazyDsl.kt`; temuan `MainActivity.kt`/`VideoPickerScreen.kt` (termasuk baris :0) TIDAK disaring.
 -->
 <FindBugsFilter>
   <Match>
@@ -25,5 +30,8 @@
   </Match>
   <Match>
     <Class name="~.*\.BuildConfig"/>
+  </Match>
+  <Match>
+    <Source name="LazyDsl.kt"/>
   </Match>
 </FindBugsFilter>

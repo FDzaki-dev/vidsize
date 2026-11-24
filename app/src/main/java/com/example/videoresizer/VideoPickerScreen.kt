@@ -18,7 +18,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Folder
@@ -26,7 +26,7 @@ import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.MovieFilter
 import androidx.compose.material.icons.filled.PlayCircleOutline
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -162,9 +162,13 @@ private fun formatPickerSize(bytes: Long): String {
 
 // Indonesian day/month labels ("24 Juli, 2026"), matching the app's existing
 // Indonesian-language UI strings rather than the device's raw locale.
-private val pickerDateFormat = SimpleDateFormat("d MMMM, yyyy", Locale("in", "ID"))
+// SimpleDateFormat TIDAK thread-safe: satu instance per thread (ThreadLocal) agar aman bila pemanggil berpindah
+// thread (temuan SpotBugs STCAL_INVOKE_ON_STATIC_DATE_FORMAT_INSTANCE run #4).
+private val pickerDateFormat = object : ThreadLocal<SimpleDateFormat>() {
+    override fun initialValue(): SimpleDateFormat = SimpleDateFormat("d MMMM, yyyy", Locale("in", "ID"))
+}
 private fun formatPickerDate(epochSec: Long): String =
-    runCatching { pickerDateFormat.format(Date(epochSec * 1000)) }.getOrDefault("-")
+    runCatching { pickerDateFormat.get().format(Date(epochSec * 1000)) }.getOrDefault("-")
 
 private fun sortedVideos(videos: List<DeviceVideo>, sort: PickerSort): List<DeviceVideo> = when (sort) {
     PickerSort.NEWEST -> videos.sortedByDescending { it.dateAddedSec }
@@ -422,7 +426,7 @@ internal fun VideoPickerScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = { if (openFolder != null) openFolder = null else onCancel() }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },
                 actions = {
@@ -431,7 +435,7 @@ internal fun VideoPickerScreen(
                     }
                     Box {
                         IconButton(onClick = { showSortMenu = true }) {
-                            Icon(Icons.Filled.Sort, contentDescription = "Urutkan")
+                            Icon(Icons.AutoMirrored.Filled.Sort, contentDescription = "Urutkan")
                         }
                         DropdownMenu(expanded = showSortMenu, onDismissRequest = { showSortMenu = false }) {
                             PickerSort.entries.forEach { option ->

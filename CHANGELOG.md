@@ -1,5 +1,49 @@
 # Changelog
 
+## Batch 63: Triase laporan CI run #4 — ikon AutoMirrored, 3 peringatan kompilator, SimpleDateFormat thread-safe, filter LazyDsl
+
+User mengunggah `Vidsize_v62.zip` + `Vidsize_laporan-untuk-claude_run4.zip` tanpa teks (hasil push Batch 62, commit 8b939ef);
+langkah diambil dari [RESUME POINT — Batch 62].
+
+Hasil run #4: semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); detekt 37 (= run #3 38 dikurangi
+`SwallowedException` `Haptics.kt:42` yang ditutup Batch 62, sesuai harapan); SpotBugs 226 dan peringatan kompilator 13 IDENTIK
+dengan run #2/#3; lintDebug "LULUS (0 isu)" kini memakai penghitung yang sudah diperbaiki Batch 62 dan konsisten dengan
+tertutupnya `NewApi` `CrashLogger.kt` (satu-satunya temuan lint run #1), tetapi artifact hanya memuat `.txt`, jadi XML lint
+mentah tidak terlihat -> tetap tidak terbukti bersih. 1 tes unit lulus = hanya generator laporan ArchUnit, BUKAN bukti perilaku.
+
+Perubahan (3 berkas non-docs):
+- `MainActivity.kt` — (a) 7 situs ikon `Icons.Filled.ArrowBack` (x5) / `ArrowForward` / `BrandingWatermark` -> `Icons.AutoMirrored.Filled.*`
+  (+3 import `...icons.automirrored.filled.*`); menutup 7 peringatan deprecated run #4. (b) `BatchScreen` `progress = { item.status.percent
+  / 100f }` — cast `as BatchStatus.Processing` dihapus ("No cast needed"; `BatchItem.status` = `val`, smart cast dari `if ... is Processing`
+  berlaku). (c) `CompressorScreen` blok `withContext`: `val message` lokal -> `doneMessage` ("Name shadowed: message"; state `message` di
+  luar tetap dan `message = msg` tak berubah; `val message` lain di ~4238 tidak dibayangi sehingga tak disentuh). (d) `ResizerScreen`:
+  parameter `themePref` dihapus (tak pernah dipakai; satu-satunya situs panggilan di `VideoResizerApp` diperbarui; `onThemePrefChange`
+  tetap dipakai menu More). Tema tetap mengalir lewat `MaterialTheme` di akar `setContent`, bukan lewat parameter ini.
+- `VideoPickerScreen.kt` — `ArrowBack` + `Sort` -> AutoMirrored; `pickerDateFormat` (satu `SimpleDateFormat` bersama, TIDAK thread-safe)
+  jadi `ThreadLocal<SimpleDateFormat>` -> menutup SpotBugs `STCAL_INVOKE_ON_STATIC_DATE_FORMAT_INSTANCE`. Satu-satunya pemanggil
+  (`formatPickerDate`, baris item daftar) tetap; keluaran tanggal identik.
+- `config/spotbugs/exclude.xml` — + `<Source name="LazyDsl.kt"/>`. Bukti: laporan run #4 memuat EI_EXPOSE_REP2 x51 + NP_PARAMETER_
+  MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE x17 bersumber `LazyDsl.kt`, padahal berkas itu tidak ada di pohon proyek (`find` kosong): kode
+  `inline` Compose Foundation yang disalin kompilator ke kelas sintetis. Temuan `MainActivity.kt`/`VideoPickerScreen.kt` (termasuk
+  baris :0) SENGAJA tidak disaring (belum terbukti). Hasil mentah tetap diaudit lewat SARIF; filter hanya berlaku di report opt-in.
+
+Dibaca dan SENGAJA tidak diubah (false positive codegen, bukti di kode): `NP_NULL_ON_SOME_PATH` `VideoResizer.kt:421/472/548/576`
+(`lateinit var transformer` ditangkap `Runnable` anonim -> dibungkus `Ref.ObjectRef` berawal null; `transformer` diisi di baris 454/558
+sebelum `start()` dan `mainHandler.post(pollProgress)`); `SA_LOCAL_SELF_ASSIGNMENT` `MainActivity.kt:4947` (baris `foundAudio` = nilai
+ekspresi `try`/`finally`); `OBL_UNSATISFIED_OBLIGATION` `AppUpdater.kt:158` (`FileOutputStream(...).use {}` bersarang dalam
+`inputStream.use {}` -> keduanya tertutup; SpotBugs hanya mengenali try-with-resources Java). Tidak dibaca batch ini: RV_RETURN_VALUE_IGNORED
+di `MainActivity.kt`/`PublicMovieExporter.kt`, REC_CATCH_EXCEPTION, detekt `SwallowedException` (butuh keputusan arsitektur, lihat resume point).
+
+Dampak yang diharapkan di run #5 (BELUM terverifikasi): peringatan kompilator 13 -> 1 (sisa `setTransformationRequest`
+`VideoResizer.kt:508`); SpotBugs 226 -> 157 bila filter `LazyDsl.kt` bekerja (-1 STCAL, -68 LazyDsl). Perilaku UI: ikon panah
+mencerminkan arah pada layout RTL; layout LTR (Indonesia) tampil identik. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
+
+Verifikasi: `diff` per baris terhadap Batch 62 (hanya baris di atas yang berubah); keseimbangan `{}`/`()`/`[]` per berkas; tidak ada
+sisa `Icons.Filled.(ArrowBack|ArrowForward|BrandingWatermark|Sort)`; XML `exclude.xml` dicek `xmllint`. NOT VERIFIED: kompilasi Kotlin
+(tak ada kotlinc/Gradle/Android SDK di sandbox), build/tes/lint/SpotBugs/detekt sungguhan, efek filter `<Source>` pada SpotBugs.
+Risiko tercatat: pesan deprecated `BrandingWatermark` di laporan terpotong ("...Filled.Brandin"); nama pengganti diasumsikan
+`Icons.AutoMirrored.Filled.BrandingWatermark`.
+
 ## Batch 62: Penghitung lint laporan CI memberi "LULUS" palsu + guard API CrashLogger + log Haptics
 
 User mengunggah `Vidsize_laporan-untuk-claude_run3.zip` tanpa teks (hasil push Batch 61, commit 3fd9769).

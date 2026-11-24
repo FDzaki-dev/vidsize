@@ -41,9 +41,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.ArrowForward
-import androidx.compose.material.icons.filled.BrandingWatermark
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.automirrored.filled.BrandingWatermark
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
@@ -309,7 +309,6 @@ private fun VideoResizerApp(
     // its state or gets its coroutines torn down.
     Box(modifier = Modifier.fillMaxSize()) {
         ResizerScreen(
-            themePref = themePref,
             onThemePrefChange = onThemePrefChange,
             onOpenHome = { screen = Screen.HOME },
             onOpenStudio = { screen = Screen.STUDIO },
@@ -598,7 +597,6 @@ private fun HomeToolCard(
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun ResizerScreen(
-    themePref: ThemePreference,
     onThemePrefChange: (ThemePreference) -> Unit,
     onOpenHome: () -> Unit,
     onOpenStudio: () -> Unit,
@@ -1116,7 +1114,7 @@ private fun ResizerScreen(
                     // HomeScreen is now in front of it — so it needs an
                     // explicit way back to the dashboard.
                     IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onOpenHome() }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali ke beranda")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali ke beranda")
                     }
                 },
                 title = {
@@ -1531,7 +1529,7 @@ private fun ResizerScreen(
                                 ) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
-                                            Icons.Filled.BrandingWatermark,
+                                            Icons.AutoMirrored.Filled.BrandingWatermark,
                                             contentDescription = null,
                                             modifier = Modifier.size(18.dp),
                                             tint = MaterialTheme.colorScheme.primary
@@ -1860,7 +1858,7 @@ private fun ResizerScreen(
                                         Text("Sebelum", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                     }
                                     Icon(
-                                        Icons.Filled.ArrowForward,
+                                        Icons.AutoMirrored.Filled.ArrowForward,
                                         contentDescription = null,
                                         tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                         modifier = Modifier.padding(bottom = 20.dp)
@@ -2383,7 +2381,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
                     }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -2476,7 +2474,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                         }
                         if (idx == currentIndex && item.status is BatchStatus.Processing) {
                             LinearProgressIndicator(
-                                progress = { (item.status as BatchStatus.Processing).percent / 100f },
+                                progress = { item.status.percent / 100f },
                                 modifier = Modifier.fillMaxWidth()
                             )
                         }
@@ -3894,7 +3892,7 @@ private fun StudioScreen(
                         if (selectionMode) exitSelection() else onBack()
                     }) {
                         Icon(
-                            if (selectionMode) Icons.Filled.Close else Icons.Filled.ArrowBack,
+                            if (selectionMode) Icons.Filled.Close else Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = if (selectionMode) "Batal pilih" else "Kembali"
                         )
                     }
@@ -4611,7 +4609,7 @@ private fun GifScreen(
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
                     }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -5070,7 +5068,7 @@ private fun CompressorScreen(onBack: () -> Unit) {
                         haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
                     }) {
-                        Icon(Icons.Filled.ArrowBack, contentDescription = "Kembali")
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -5249,12 +5247,12 @@ private fun CompressorScreen(onBack: () -> Unit) {
                                                         val savedPercent = if (originalClipSizeBytes > 0) {
                                                             ((1.0 - size.toDouble() / originalClipSizeBytes.toDouble()) * 100.0).coerceIn(0.0, 99.0).roundToInt()
                                                         } else 0
-                                                        val message = if (publicUri != null) {
+                                                        val doneMessage = if (publicUri != null) {
                                                             "Selesai. Tersimpan di Galeri > Movies > VideoResizer. Ukuran turun $savedPercent% (${formatFileSize(size)})."
                                                         } else {
                                                             "Selesai (${formatFileSize(size)}, turun $savedPercent%), tapi gagal disalin ke galeri publik. Tetap tersedia lewat tombol Share di bawah."
                                                         }
-                                                        Triple(message, publicUri, size)
+                                                        Triple(doneMessage, publicUri, size)
                                                     }
                                                     resultFile = result.outputFile
                                                     resultSizeBytes = outSize

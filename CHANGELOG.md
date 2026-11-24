@@ -1,5 +1,31 @@
 # Changelog
 
+## Batch 77: Verifikasi run #18 (HIJAU PENUH) + tes perilaku `SocialPresetTest` & `VideoResizerKalkulasiTest`
+
+User mengunggah `Vidsize_v76.zip` + `Vidsize_laporan-untuk-claude_run18.zip` tanpa teks tambahan (pola sama: lanjut ke batch berikutnya).
+
+Hasil run #18 (commit 7959419): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); SpotBugs LULUS (0); detekt LULUS (0); lintDebug LULUS (0); kompilator Kotlin 0 peringatan; Tes unit LULUS (8 tes, 0 dilewati = 7 `CrashLoggerTest` + 1 `ArchitectureTest`). Seluruh prediksi resume point Batch 76 terbukti, termasuk risiko "JUnit asli menolak overload `assertEquals`/classpath tes" yang TIDAK terjadi. Tidak ada temuan yang harus diperbaiki.
+
+### PERUBAHAN (3 berkas kode/konfigurasi; di bawah batas 3-5; kode produksi TIDAK berubah)
+- `app/src/test/java/com/example/videoresizer/SocialPresetTest.kt` (BARU) — 6 tes JUnit 4 JVM murni: `ENTRIES` = `values()`; dimensi tepat sesuai rasio aspek (lebar x rasioTinggi == tinggi x rasioLebar, tanpa pembulatan); lebar/tinggi positif dan genap (syarat encoder); bitrate dalam `MIN_BITRATE_KBPS..MAX_BITRATE_KBPS`; label tak kosong dan unik; nilai 4 preset (TikTok/Reels/Shorts 1080x1920 @8000, YouTube 1920x1080 @12000, IG 1:1 1080x1080 @5000, IG 4:5 1080x1350 @6000) terkunci.
+- `app/src/test/java/com/example/videoresizer/VideoResizerKalkulasiTest.kt` (BARU) — 19 tes JUnit 4 JVM murni untuk dua kalkulasi companion `VideoResizer` yang hanya memakai primitif/enum: `requiredBitrateKbpsForTargetSize` (8 tes: tanpa/dengan audio 128k, terlalu kecil -> `null`, persis sama dgn audio -> `null`, lantai 250 kbps, plafon 50.000 kbps, masukan tak valid, monoton) dan `estimateCompressedSizeBytes` (11 tes: target level penuh, MAKSIMAL < REKOMENDASI, audio asumsi/terprobe/mute/tanpa track, fps terprobe & fallback 30, dimensi ganjil dibulatkan genap, batas 85% bitrate video sumber, seluruh klip < ukuran sumber, lantai mengalahkan batas (karakterisasi), plafon, info sumber tak lengkap, masukan tak valid). Nilai harapan dari implementasi referensi independen (Python, urutan operasi `Double` sama) dan hitungan tangan di komentar, bukan disalin dari keluaran fungsi.
+- `.github/workflows/android-artifact.yml` — hanya 2 catatan statis (komentar baris 22 dan `echo "Catatan: ..."` baris 325) kini menyebut ketiga kelas tes perilaku; logika penghitung tes TIDAK berubah.
+- Docs: `PROJECT_STATE.md`, `CHANGELOG.md`, `FILE_MANIFEST.txt`, `README.md` (satu kalimat).
+
+### VERIFIED (statis, sandbox)
+- Kompiler: kotlinc 1.9.24 TIDAK tersedia di sandbox kali ini (Maven Central diblokir proxy); dipakai Kotlin 2.0.21 bawaan distribusi Gradle sandbox dgn `-language-version 1.9 -api-version 1.9 -Werror`: 0 peringatan.
+- Cakupan kompilasi: `SocialPreset.kt` ASLI utuh + enum/data class/companion `VideoResizer.kt` diekstrak programatik VERBATIM ke kelas `VideoResizer` kerangka (stub `android.net.Uri`; badan kelas asli yg memakai Media3/Android TIDAK dikompilasi) + kedua berkas tes, dgn JUnit 4.13.2 asli.
+- Eksekusi JVM (`JUnitCore`): 25 tes, 25 lulus, 0 gagal.
+- Uji mutasi (membuktikan tes tidak hampa): 20 mutasi pada salinan ekstrak (batas 0,85->0,90; audio 128k->64k di dua fungsi; `ASSUMED_FPS` 30->25; `MIN`/`MAX_BITRATE_KBPS`; bpp REKOMENDASI & MAKSIMAL; `<= 0` -> `< 0`; pembulatan genap dihapus; fallback fps dihapus; mute/hasAudio/audio terprobe diabaikan; plafon; dimensi IG 4:5; bitrate TikTok; lebar YouTube ganjil; label ganda; guard durasi klip dihapus) -> SEMUA terdeteksi (>= 1 tes gagal per mutasi).
+- detekt-cli 1.23.8 lokal (config proyek, `--build-upon-default-config`) atas `app/src/main/java` + `app/src/test/java`: 0 temuan, exit 0. Sanity: berkas dummy `catch (e: Exception)`/`throw RuntimeException` di folder tes TERDETEKSI (exit 2).
+- `android-artifact.yml`: `yaml.safe_load` valid; diff vs v76 = tepat 2 baris.
+
+### NOT VERIFIED
+Build Gradle/AGP penuh, `testReleaseUnitTest` sungguhan (classpath AGP `mockable-android` + Media3; inisialisasi kelas `VideoResizer` utuh diuji hanya lewat kerangka), ArchUnit/SpotBugs/lint atas ZIP ini, akurasi estimasi vs encoder nyata, dan SEMUA perilaku di HP. `computeTargetDimensions`/`estimateOutputSizeBytes` sengaja TIDAK diuji (butuh `Uri` Android).
+
+### CATATAN TEMUAN (tidak diubah; keputusan user)
+Lantai bitrate 250 kbps mengalahkan batas 85% bitrate sumber pada `computeCompressTargetBitrateBps` dan `estimateCompressedSizeBytes`: sumber dgn bitrate video < ~294 kbps dapat menghasilkan keluaran lebih besar dari sumber. Terkunci sebagai karakterisasi bernama jelas di tes; perbaikan = ubah logika produksi di 2 situs.
+
 ## Batch 76: Verifikasi run #17 (HIJAU PENUH) + tes perilaku pertama proyek (`CrashLoggerTest`)
 
 User mengunggah `Vidsize_v75.zip` + `Vidsize_laporan-untuk-claude_run17.zip` tanpa teks tambahan (pola sama seperti sebelumnya: lanjut ke batch berikutnya). Preferensi tetap: proaktif.

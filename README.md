@@ -569,7 +569,7 @@ the GitHub Actions route above is much faster in practice.
   `Vidsize_laporan-untuk-claude_run<N>` (SATU-SATUNYA artifact; berkas `laporan-untuk-claude.txt`, unggah ke Claude
   untuk evaluasi); retensi 7 hari. Status laporan: `PASS` / `FAIL` / `NOT VERIFIED` (alat gagal bukan
   lulus). Konfigurasi alat di `config/`. SpotBugs opt-in (`-Pvidsize.spotbugs=true`); `ArchitectureTest` aktif hanya
-  dgn env `VIDSIZE_ARCH_REPORT=1`. Tes perilaku baru `CrashLoggerTest` (kontrak `CrashLogger.nonFatal`, JVM murni; Batch 76); selain itu belum ada: "tes unit lulus" pada laporan bukan bukti perilaku UI/ekspor/HP.
+  dgn env `VIDSIZE_ARCH_REPORT=1`. Tes perilaku baru, semuanya JVM murni: `CrashLoggerTest` (kontrak `CrashLogger.nonFatal`; Batch 76), `SocialPresetTest` (invarian `SocialPreset`) dan `VideoResizerKalkulasiTest` (kalkulasi ukuran/bitrate murni; Batch 77); selain itu belum ada: "tes unit lulus" pada laporan bukan bukti perilaku UI/ekspor/HP.
 - **Repo GitHub**: `FDzaki-dev/Video-resizer`. Nama folder proyek yang
   konsisten dipakai: `Video-resizer` (bukan `Video-resizer-main` — itu
   cuma nama folder bawaan GitHub saat export ZIP branch `main`, dan

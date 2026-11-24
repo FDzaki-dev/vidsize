@@ -19,7 +19,7 @@ name: Android CI Artifact for Claude
 #    opt-in lewat `-Pvidsize.spotbugs=true` (config/spotbugs/spotbugs.gradle.kts). Aturan ArchUnit dibedakan per berkas
 #    sumber Kotlin karena semua kelas ada di satu package.
 #  - Peringatan kompilator Kotlin diurai dari dua format baris: `w: file:///...` dan `w: /...`.
-#  - Proyek BELUM punya tes perilaku: baris "Tes unit" hanya menghitung ArchitectureTest; laporan menyatakannya eksplisit.
+#  - Tes perilaku BARU mencakup `CrashLoggerTest` (kontrak `CrashLogger.nonFatal`, JVM murni; Batch 76): baris "Tes unit" = ArchitectureTest + CrashLoggerTest; laporan menyatakan cakupannya eksplisit.
 #  - Retensi artifact 7 hari (SONIX: 14).
 #  - Pemicu: push `main` + manual (selaras build.yml); `cache-read-only`: cache Gradle hanya ditulis build.yml.
 #  - Berkas `ci-report.yml` (stub nonaktif SONIX) TIDAK dibawa: Vidsize tak pernah punya workflow itu.
@@ -322,7 +322,7 @@ jobs:
             echo "$TESTS_SUMMARY"
             echo "$KWARN_SUMMARY"
             echo "Catatan: NOT VERIFIED = alat tidak jalan / laporan tidak ada; BUKAN berarti bersih."
-            echo "Catatan: Vidsize belum punya tes perilaku; satu-satunya tes = ArchitectureTest (generator laporan ArchUnit). 'Tes unit: LULUS' BUKAN bukti perilaku app terverifikasi."
+            echo "Catatan: tes perilaku Vidsize baru mencakup CrashLoggerTest (CrashLogger.nonFatal, JVM murni); selain itu ArchitectureTest = generator laporan ArchUnit. 'Tes unit: LULUS' BUKAN bukti perilaku UI/ekspor/penulisan log di HP terverifikasi."
             if [ "$A_VIOL" != "0" ] || [ "$NEED_ARCH_LOG" = "1" ] || [ "$ARCH_EXIT" != "0" ]; then
               echo ""
               echo "--- ARSITEKTUR (ARCHUNIT) ---"

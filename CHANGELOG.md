@@ -1,5 +1,26 @@
 # Changelog
 
+## Batch 76: Verifikasi run #17 (HIJAU PENUH) + tes perilaku pertama proyek (`CrashLoggerTest`)
+
+User mengunggah `Vidsize_v75.zip` + `Vidsize_laporan-untuk-claude_run17.zip` tanpa teks tambahan (pola sama seperti sebelumnya: lanjut ke batch berikutnya). Preferensi tetap: proaktif.
+
+Hasil run #17 (commit a21e452): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); SpotBugs LULUS (0 temuan; risiko bytecode inline `runCatching` yang diperingatkan Batch 75 TIDAK terjadi); detekt LULUS (0 temuan, turun dari 20); lintDebug LULUS (0); kompilator Kotlin 0 peringatan; 1 tes lulus (ArchitectureTest, BUKAN tes perilaku). Semua prediksi butir (1) resume point Batch 75 TERBUKTI. Tak ada temuan CI yang bisa ditindak.
+
+### PERUBAHAN (2 berkas kode/konfigurasi; di bawah batas 3-5; kode produksi TIDAK berubah)
+- `app/src/test/java/com/example/videoresizer/CrashLoggerTest.kt` (BARU) — 7 tes JUnit 4 JVM murni untuk kontrak `CrashLogger.nonFatal` (batas kegagalan terpusat Batch 75 yang menggantikan 20 blok `catch (e: Exception)`): (1) sukses mengembalikan nilai `block` tanpa memanggil `onFailure`; (2) `IllegalStateException` -> `onFailure` menerima instans SAMA, nilai `onFailure` jadi hasil; (3) `IOException` tetap ditangkap; (4) `OutOfMemoryError` dilempar ulang (instans sama) dan `onFailure` TIDAK dipanggil; (5) `return` non-lokal dari `block`; (6) `return` non-lokal dari `onFailure`; (7) pengecualian dari `onFailure` tidak ditelan. Tanpa Robolectric/Android: `nonFatal` inline dan hanya memakai stdlib. Pengecualian yang dilempar tes sengaja BUKAN `Exception`/`RuntimeException`/`Throwable` polos agar `TooGenericExceptionThrown` tak muncul.
+- `.github/workflows/android-artifact.yml` — hanya 2 catatan statis (komentar baris 22 dan `echo "Catatan: ..."` baris 325) yang dulu menyatakan "belum punya tes perilaku; satu-satunya tes = ArchitectureTest": kini menyebut `CrashLoggerTest` dan tetap menegaskan bahwa "Tes unit: LULUS" BUKAN bukti perilaku UI/ekspor/penulisan log di HP. Logika penghitung tes (`sum_attr` atas XML `testReleaseUnitTest`) TIDAK diubah: jumlah tes otomatis jadi 1 + 7 = 8 pada run berikutnya.
+- Docs: `PROJECT_STATE.md`, `CHANGELOG.md`, `FILE_MANIFEST.txt`, `README.md` (satu kalimat tentang tes perilaku).
+
+### VERIFIED (statis, sandbox)
+- kotlinc 1.9.24 (versi proyek): `CrashLogger.kt` ASLI + `CrashLoggerTest.kt` dikompilasi bersama stub Android/JUnit (signature `Assert.assertEquals/assertSame/assertThrows/assertFalse` meniru JUnit 4.13.2): 0 peringatan pada kedua berkas proyek.
+- Eksekusi JVM atas 7 tes: 7 lulus, 0 gagal.
+- Uji mutasi (membuktikan tes tidak hampa): `nonFatal` yang menangkap `Throwable` -> tes `OutOfMemoryError` GAGAL; `nonFatal` yang tak menangkap apa pun -> 4 tes tangkap GAGAL (3 lulus tersisa = jalur sukses + `Error` + return non-lokal dari `block`).
+- detekt-cli 1.23.8 lokal (config proyek, `--build-upon-default-config`) atas `app/src/main/java` + `app/src/test/java`: 0 temuan, exit 0. Sanity: berkas dummy dengan `catch (e: Exception)`/`throw RuntimeException` pada folder yang sama TERDETEKSI, jadi detekt memang memindai (laporan kosong bukan artefak).
+- `android-artifact.yml`: `yaml.safe_load` valid; tepat 2 penggantian (assert jumlah kemunculan = 1 per teks lama).
+
+### NOT VERIFIED
+Build Gradle/AGP penuh, `testReleaseUnitTest` sungguhan (JUnit asli, classpath AGP `mockable-android`), ArchUnit/SpotBugs/lint atas ZIP ini, dan SEMUA perilaku di HP (penulisan `Documents/VideoResizer/logs/error_*.txt`, `startForeground` ditolak OS, alur "Unduh & Pasang"). Tak ada Android SDK/Maven di sandbox. Prediksi run #18: build hijau; ArchUnit 12/0 (kelas tes dikecualikan lewat `DoNotIncludeTests` + filter `UnitTest`); SpotBugs 0 (hanya kelas main); detekt 0; lint 0; kompilator 0; Tes unit LULUS (8 tes, 0 dilewati).
+
 ## Batch 75: Refactor 20 temuan detekt `TooGenericExceptionCaught` (run #16) ke satu batas kegagalan terpusat
 
 User mengunggah `Vidsize_v74.zip` + `Vidsize_laporan-untuk-claude_run16.zip` dan menginstruksikan: "semua yang didapati tidak memenuhi standar, maka di refactor saja".

@@ -1,5 +1,5 @@
 FILE_MANIFEST.txt — Video Resizer
-Generated: Batch 6, last updated Batch 75. Regenerate/update this file
+Generated: Batch 6, last updated Batch 76. Regenerate/update this file
 whenever files are added, removed, or renamed — it should always match
 `find . -type f` for real.
 Legend: [PROTECTED] = edit-parsial-only per user preferences; deleting or
@@ -14,7 +14,7 @@ ROOT
   .gitignore                               [PROTECTED]
   .gitattributes                           [PROTECTED] LF normalization + binary-safe rules for keystore/apk/images (Batch 14)
   .github/workflows/build.yml              [PROTECTED] CI: assembleRelease + publish GitHub Release (Batch 59: diadaptasi dari SONIX — ubuntu-24.04, actions v5, ulang sekali bila unduhan gagal, Release dulu baru artifact APK tanpa zip, isi Release = pesan commit, versi dihitung sekali di step 'Determine version name'; Batch 5: unique tag/APK per run; Batch 15: Stale Run Guard aborts stale 'Re-run jobs' before build/release; Batch 22: VERSION_NAME computed directly as "1.${GITHUB_RUN_NUMBER}", no longer grepped from build.gradle.kts)
-  .github/workflows/android-artifact.yml   Batch 68: blok "Contoh SARIF mentah" dihapus dari laporan (UUF terjawab); Batch 67: laporan SpotBugs +[elemen kode] (logicalLocations SARIF) per titik + blok "Contoh SARIF mentah" (1 temuan/aturan, maks 6, 600 karakter); Batch 66: baris "Titik temuan" SpotBugs +pesan mentah SARIF (setelah |, dipotong 160 karakter); (new, Batch 59) CI laporan NON-BLOCKING -> laporan-untuk-claude.txt (ArchUnit, tes unit, SpotBugs, detekt, lintDebug, peringatan kompilator Kotlin; PASS/FAIL/NOT VERIFIED); SATU artifact Vidsize_laporan-untuk-claude_run<N>; retensi 7 hari (Batch 60: artifact mentah dihapus) Batch 62: hitung+uraikan isu lint dari XML multibaris (dulu selalu 0)
+  .github/workflows/android-artifact.yml   Batch 76: 2 catatan statis (komentar baris 22 + echo baris 325) menyebut CrashLoggerTest, logika penghitung tes tak berubah; Batch 68: blok "Contoh SARIF mentah" dihapus dari laporan (UUF terjawab); Batch 67: laporan SpotBugs +[elemen kode] (logicalLocations SARIF) per titik + blok "Contoh SARIF mentah" (1 temuan/aturan, maks 6, 600 karakter); Batch 66: baris "Titik temuan" SpotBugs +pesan mentah SARIF (setelah |, dipotong 160 karakter); (new, Batch 59) CI laporan NON-BLOCKING -> laporan-untuk-claude.txt (ArchUnit, tes unit, SpotBugs, detekt, lintDebug, peringatan kompilator Kotlin; PASS/FAIL/NOT VERIFIED); SATU artifact Vidsize_laporan-untuk-claude_run<N>; retensi 7 hari (Batch 60: artifact mentah dihapus) Batch 62: hitung+uraikan isu lint dari XML multibaris (dulu selalu 0)
   config/detekt/detekt.yml                 (new, Batch 59) aturan detekt fokus & non-blocking (complexity/style/naming/comments mati)
   config/spotbugs/spotbugs.gradle.kts      (new, Batch 59) SpotBugs opt-in (-Pvidsize.spotbugs=true), laporan SARIF, task spotbugsRelease manual
   config/spotbugs/exclude.xml              Batch 68: +UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD x field `$stable` (24/24 titik run #9, sempit per nama field); Batch 67: +NP_PARAMETER x AppUpdater.kt (2 titik :0 = lambda suspend sintetis, bukti di komentar); Batch 66: +31 temuan disaring dgn bukti (MS_EXPOSE_REP x10 ENTRIES, BC_BAD_CAST x9 baris di luar berkas, NP_NULL x4 lateinit, SA_LOCAL x1, OBL x1, REC_CATCH_EXCEPTION x6 duplikat detekt); Batch 65: +NP_PARAMETER_* untuk MainActivity/VideoPickerScreen/Theme (argumen $composer Compose); Batch 63: +Source LazyDsl.kt (kode inline Compose, bukan proyek); (new, Batch 59) filter noise minimal (kelas generate + NM_METHOD_NAMING_CONVENTION)
@@ -29,6 +29,7 @@ app/
   proguard-rules.pro                       R8 rules (inactive while isMinifyEnabled=false)
 
 app/src/test/java/com/example/videoresizer/
+  CrashLoggerTest.kt                       (new, Batch 76) 7 tes JUnit 4 JVM murni untuk kontrak `CrashLogger.nonFatal` (sukses, Exception -> onFailure, Error dilempar ulang, return non-lokal, onFailure tak ditelan); tanpa Robolectric; tes perilaku PERTAMA proyek
   ArchitectureTest.kt                      Batch 70: aturan "mandiri" boleh bergantung ke CrashLogger.kt (logger daun) untuk VideoResizer/PublicMovieExporter/ExportForegroundService, jumlah aturan tetap 12; (new, Batch 59; Batch 60: perbaikan false positive) 12 aturan ArchUnit per berkas sumber Kotlin; aktif hanya dgn env VIDSIZE_ARCH_REPORT=1; menulis build/reports/archunit/archunit-report.txt; Batch 61: +Haptics.kt di UI_FILES
 
 app/src/main/

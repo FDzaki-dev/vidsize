@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 75**. This is the first-read file per the context
+Snapshot as of **Batch 76**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,7 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 76 (2 berkas kode/konfigurasi; kode produksi TIDAK berubah):** run #17 HIJAU PENUH (ArchUnit 12/0, SpotBugs 0, detekt 0 dari 20, lint 0, kompilator 0; semua prediksi Batch 75 terbukti). Tes perilaku PERTAMA: `CrashLoggerTest.kt` (7 tes JVM murni, kontrak `CrashLogger.nonFatal`: nilai sukses, `Exception` -> `onFailure` instans sama, `Error` dilempar ulang, `return` non-lokal dari `block`/`onFailure`, pengecualian `onFailure` tak ditelan); `android-artifact.yml` hanya 2 catatan statis (baris 22 & 325) diperbarui. Sandbox: kotlinc 1.9.24 0 peringatan, 7/7 lulus, uji mutasi mendeteksi regresi, detekt lokal 0. NOT VERIFIED di CI/HP. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 75 (7 berkas kode):** refactor 20 temuan detekt `TooGenericExceptionCaught` (run #16) -> `CrashLogger.nonFatal` (inline; `Exception` ditangkap, `Error` dilempar ulang; semantik identik, tipe TIDAK disempitkan); `CrashLogger.install` -> `runCatching` (Throwable). `detekt.yml` TIDAK diubah (aturan tetap aktif). Pembenaran 7 berkas (>5): kontrak baru bersama `CrashLogger.nonFatal` dipakai 6 berkas lain.
   Sandbox: detekt lokal 20 -> 0 (baseline v74 = 20 cocok dgn run #16); kotlinc 1.9.24 kompilasi berkas asli + stub OK. NOT VERIFIED di CI/HP. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 74 (4 berkas kode/konfigurasi):** audit UI/UX vs Vital Guards + perbaikan: edge-to-edge (`enableEdgeToEdge` di `MainActivity.onCreate`, `Theme.kt` `DisposableEffect` `SystemBarStyle.auto`, `Surface` akar `imePadding`+cutout,
@@ -275,6 +276,11 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 76]** Verifikasi run #17 (hijau penuh) + tes perilaku pertama `CrashLoggerTest` (kontrak `CrashLogger.nonFatal`) -> **SELESAI di ZIP; kompilasi stub kotlinc 0 peringatan, 7/7 lulus + uji mutasi + detekt lokal 0 di sandbox; `testReleaseUnitTest` sungguhan/ArchUnit/SpotBugs/lint & perilaku HP NOT VERIFIED** ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP; run #18 diharapkan: build hijau, Tes unit LULUS (8 tes, 0 dilewati), ArchUnit 12/0, SpotBugs 0, detekt 0, lint 0, kompilator 0; catatan laporan kini menyebut `CrashLoggerTest`. Bila `testReleaseUnitTest` MERAH/NOT VERIFIED: baca bagian TES UNIT laporan (kemungkinan: JUnit asli menolak overload `assertEquals` atau classpath tes); jalan balik = hapus `CrashLoggerTest.kt` + kembalikan 2 catatan `android-artifact.yml` ke `Vidsize_v75.zip` (kode produksi tak tersentuh).
+(2) Uji manual di HP (user) = satu-satunya verifikasi tersisa (butir Batch 75 (2) tetap berlaku): picu kegagalan (video rusak, ekspor/GIF gagal, matikan jaringan saat "Unduh & Pasang") -> pesan galat wajar + `Documents/VideoResizer/logs/error_*.txt`; `startForeground` ditolak OS -> tidak crash.
+(3) Sisa kandidat: tes perilaku murni-JVM berikutnya hanya bila ada logika murni yang bisa dipisah tanpa structural rewrite (mis. `SocialPreset.kt`, kalkulasi di `VideoResizer.kt`); butir Batch 74 (`rememberSaveable` Batch/GIF/Kompres/Studio, `Saver` `trimRange`, aksi aksesibilitas `TrimHandle`, minSdk 24 vs prioritas API 31+ menunggu keputusan user) tetap berlaku. Resume point Batch 75 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 75]** Refactor 20 temuan detekt `TooGenericExceptionCaught` (run #16) ke `CrashLogger.nonFatal` (7 berkas kode) -> **SELESAI di ZIP; detekt lokal 0 temuan + kompilasi stub kotlinc OK di sandbox; build Gradle/ArchUnit/SpotBugs/lint & perilaku HP NOT VERIFIED** ->
 **LANGKAH BERIKUTNYA:** (1) push ZIP; run #17 diharapkan: build hijau, detekt 0 (dari 20), ArchUnit 12/0, SpotBugs 0 (risiko: bytecode inline `runCatching` baru — bila SpotBugs memunculkan pola baru, baca laporan dan JANGAN filter tanpa bukti), lint 0, kompilator 0. Bila build MERAH: baca `e:` di laporan; jalan balik = kembalikan 7 berkas kode ke `Vidsize_v74.zip`.
 (2) Uji manual di HP (user): picu kegagalan (video rusak/tak terbaca, ekspor/GIF gagal, matikan jaringan saat "Unduh & Pasang") -> pesan galat wajar + `Documents/VideoResizer/logs/error_*.txt` tetap terbentuk; bila OS menolak `startForeground`, aplikasi tidak crash.

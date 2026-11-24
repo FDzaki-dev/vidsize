@@ -115,7 +115,7 @@ android {
         // NewerVersionAvailable (nag versi; Media3 sengaja dipin 1.4.1, lihat komentar dependency di bawah), HardcodedText/
         // ContentDescription (i18n/gaya), UseKtx. ConfigurationScreenWidthHeight TIDAK dimasukkan: baru ada di Compose UI
         // 1.7+ (proyek ini BOM 2024.06.00 = 1.6.x). Baseline TIDAK dipakai: baseline menyembunyikan temuan.
-        // Daftar ini belum diuji di CI vidsize: bila laporan memuat "Unknown issue id", hapus id itu.
+        // Run #1 CI: "NonObservableLocale" = Unknown issue id di AGP 8.4 -> DIHAPUS; 6 id lain dikenali.
         checkOnly.addAll(
             listOf(
                 "WrongConstant",
@@ -123,8 +123,7 @@ android {
                 "MissingPermission",
                 "AutoboxingStateCreation",
                 "UseOfNonLambdaOffsetOverload",
-                "ConstantLocale",
-                "NonObservableLocale"
+                "ConstantLocale"
             )
         )
     }

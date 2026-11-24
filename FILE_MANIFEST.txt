@@ -14,7 +14,7 @@ ROOT
   .gitignore                               [PROTECTED]
   .gitattributes                           [PROTECTED] LF normalization + binary-safe rules for keystore/apk/images (Batch 14)
   .github/workflows/build.yml              [PROTECTED] CI: assembleRelease + publish GitHub Release (Batch 59: diadaptasi dari SONIX — ubuntu-24.04, actions v5, ulang sekali bila unduhan gagal, Release dulu baru artifact APK tanpa zip, isi Release = pesan commit, versi dihitung sekali di step 'Determine version name'; Batch 5: unique tag/APK per run; Batch 15: Stale Run Guard aborts stale 'Re-run jobs' before build/release; Batch 22: VERSION_NAME computed directly as "1.${GITHUB_RUN_NUMBER}", no longer grepped from build.gradle.kts)
-  .github/workflows/android-artifact.yml   (new, Batch 59) CI laporan NON-BLOCKING -> laporan-untuk-claude.txt (ArchUnit, tes unit, SpotBugs, detekt, lintDebug, peringatan kompilator Kotlin; PASS/FAIL/NOT VERIFIED) + artifact hasil mentah; retensi 7 hari
+  .github/workflows/android-artifact.yml   (new, Batch 59) CI laporan NON-BLOCKING -> laporan-untuk-claude.txt (ArchUnit, tes unit, SpotBugs, detekt, lintDebug, peringatan kompilator Kotlin; PASS/FAIL/NOT VERIFIED); SATU artifact Vidsize_laporan-untuk-claude_run<N>; retensi 7 hari (Batch 60: artifact mentah dihapus)
   config/detekt/detekt.yml                 (new, Batch 59) aturan detekt fokus & non-blocking (complexity/style/naming/comments mati)
   config/spotbugs/spotbugs.gradle.kts      (new, Batch 59) SpotBugs opt-in (-Pvidsize.spotbugs=true), laporan SARIF, task spotbugsRelease manual
   config/spotbugs/exclude.xml              (new, Batch 59) filter noise minimal (kelas generate + NM_METHOD_NAMING_CONVENTION)
@@ -29,7 +29,7 @@ app/
   proguard-rules.pro                       R8 rules (inactive while isMinifyEnabled=false)
 
 app/src/test/java/com/example/videoresizer/
-  ArchitectureTest.kt                      (new, Batch 59) 13 aturan ArchUnit per berkas sumber Kotlin; aktif hanya dgn env VIDSIZE_ARCH_REPORT=1; menulis build/reports/archunit/archunit-report.txt
+  ArchitectureTest.kt                      (new, Batch 59; Batch 60: perbaikan false positive) 12 aturan ArchUnit per berkas sumber Kotlin; aktif hanya dgn env VIDSIZE_ARCH_REPORT=1; menulis build/reports/archunit/archunit-report.txt
 
 app/src/main/
   AndroidManifest.xml                      [PROTECTED] android:name=".VideoResizerApp" (Batch 2), permissions, activity decl; Batch 21: +INTERNET, +REQUEST_INSTALL_PACKAGES for in-app updater

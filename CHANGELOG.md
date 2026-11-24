@@ -1,5 +1,26 @@
 # Changelog
 
+## Batch 60: Laporan CI cukup SATU artifact + perbaikan false positive hasil run #1
+
+User: "kenapa ada 2 output?? seharusnya cukup 1 aja!!". `app/src/main` TIDAK diubah.
+
+- `.github/workflows/android-artifact.yml` — langkah "Upload Raw Results (audit)" DIHAPUS (itu tambahan saya, bukan dari
+  SONIX). Kini hanya `Vidsize_laporan-untuk-claude_run<N>` (satu berkas `laporan-untuk-claude.txt`, retensi 7 hari).
+- `app/src/test/java/com/example/videoresizer/ArchitectureTest.kt` — run #1 melaporkan 133 pelanggaran ArchUnit yang
+  setelah dibaca ternyata artefak bytecode Kompiler Kotlin/Compose, bukan dependensi kode: (a) anotasi
+  `@StabilityInferred` (24) di setiap kelas; (b) kelas hasil inline yang membawa `SourceFile` fungsi yang di-inline
+  (mis. `LazyDsl.kt`, 63); (c) tipe array (`$VALUES` enum) tanpa informasi sumber (VideoResizer 27, VideoPickerScreen 19).
+  Perbaikan: berkas sebuah kelas diturunkan dari kelas luarnya (`outerFiles`) bila `SourceFile`-nya bukan berkas proyek,
+  tipe array dipetakan ke tipe komponen dasarnya, `StabilityInferred` dikecualikan dari aturan "engine tanpa Compose".
+  Jumlah aturan = 12 (8 berkas mandiri + 4 aturan arah dependensi), bukan 13 seperti tertulis di Batch 59.
+- `app/build.gradle.kts` — `NonObservableLocale` dihapus dari `lint.checkOnly` (run #1: "Unknown issue id" di AGP 8.4);
+  6 id lain dikenali dan tetap.
+- `config/detekt/detekt.yml`, `config/spotbugs/exclude.xml` — hanya komentar (tak ada lagi rujukan artifact mentah;
+  evidensi run #1 dicatat: detekt 20 `TooGenericExceptionCaught` + 17 `SwallowedException`, SpotBugs 226 temuan —
+  BELUM disaring, filter hanya setelah kode di titik temuan dibaca).
+- NOT VERIFIED di CI: efektivitas perbaikan ArchUnit (baru terlihat di run berikutnya). Terverifikasi statis: YAML,
+  `bash -n`, simulasi perakitan laporan, XML, keseimbangan kurung; parse Kotlin hanya error cascade tipe ArchUnit.
+
 ## Batch 59: Adaptasi maksimal workflow SONIX ke Vidsize (CI + laporan evaluasi untuk Claude)
 
 User minta: "adaptasi dengan maksimal workflow `SONIX` ke `vidsize`". Batch ini hanya menyentuh CI dan konfigurasi alat
@@ -14,11 +35,11 @@ analisis; `app/src/main` TIDAK diubah.
   (`Regex("build(\\d+)")` di `AppUpdater.kt`), `release.keystore` ter-commit + `RELEASE_KEYSTORE_PASSWORD`, Gradle 8.7.
 - `.github/workflows/android-artifact.yml` (baru) — laporan NON-BLOCKING `laporan-untuk-claude.txt`: ArchUnit, tes unit,
   SpotBugs (SARIF), detekt, lintDebug, peringatan kompilator Kotlin; status `PASS`/`FAIL`/`NOT VERIFIED`; artifact
-  `Vidsize_laporan-untuk-claude_run<N>` + `Vidsize_laporan-mentah_run<N>` (audit), retensi 7 hari.
+  `Vidsize_laporan-untuk-claude_run<N>` (artifact tunggal; artifact mentah tambahan dihapus Batch 60), retensi 7 hari.
 - `config/detekt/detekt.yml`, `config/spotbugs/spotbugs.gradle.kts` (opt-in `-Pvidsize.spotbugs=true`),
   `config/spotbugs/exclude.xml` (minimal: hanya kelas generate + `NM_METHOD_NAMING_CONVENTION`; filter SONIX tidak
   dibawa karena butuh bukti run).
-- `app/src/test/java/com/example/videoresizer/ArchitectureTest.kt` (baru) — 13 aturan ArchUnit per berkas sumber Kotlin
+- `app/src/test/java/com/example/videoresizer/ArchitectureTest.kt` (baru) — 12 aturan ArchUnit per berkas sumber Kotlin
   (semua kelas ada di satu package); hanya arah dependensi yang SAAT INI terpenuhi (dicek dari kode sumber tanpa
   komentar/string). Aktif hanya dgn env `VIDSIZE_ARCH_REPORT=1`.
 - `build.gradle.kts` (+ plugin detekt 1.23.8 `apply false`), `app/build.gradle.kts` (+ plugin detekt, `lint`

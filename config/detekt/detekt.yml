@@ -12,7 +12,7 @@
 # SENGAJA TIDAK dimatikan (beda dari SONIX): SwallowedException, TooGenericExceptionCaught, SpreadOperator.
 # Di SONIX ketiganya dimatikan berdasarkan bukti laporan run #508 (semua fallback disengaja). Vidsize belum punya
 # laporan run apa pun -> menyaring tanpa bukti = menyembunyikan temuan yang belum terverifikasi. Evaluasi setelah
-# laporan pertama (hasil mentah ikut di artifact `Vidsize_laporan-mentah_run<N>`); matikan HANYA bila terbukti
+# laporan pertama (run #1: 20 TooGenericExceptionCaught + 17 SwallowedException belum ditriase); matikan HANYA bila terbukti
 # fallback disengaja, dengan kutipan bukti di komentar ini.
 # Tidak memblokir: `ignoreFailures = true` di app/build.gradle.kts (bukan di sini).
 

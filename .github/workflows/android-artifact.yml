@@ -1,8 +1,8 @@
 name: Android CI Artifact for Claude
 
 # Batch 59 — adaptasi `.github/workflows/android-artifact.yml` SONIX (Batch 570-720) ke Vidsize. Menghasilkan SATU berkas
-# teks ringkas `laporan-untuk-claude.txt` sebagai artifact resmi GitHub `Vidsize_laporan-untuk-claude_run<N>` (retensi
-# 7 hari) + artifact hasil mentah `Vidsize_laporan-mentah_run<N>` (audit penyaringan). ArchUnit, tes unit, SpotBugs, detekt,
+# teks ringkas `laporan-untuk-claude.txt` sebagai SATU-SATUNYA artifact resmi GitHub `Vidsize_laporan-untuk-claude_run<N>`
+# (retensi 7 hari; Batch 60: artifact tambahan Batch 59 dihapus atas permintaan user). ArchUnit, tes unit, SpotBugs, detekt,
 # lintDebug, dan peringatan kompilator Kotlin masuk laporan yang sama; ArchUnit hanya baris ringkas bila lulus, temuan
 # SpotBugs 1 baris per titik (duplikat digabung "xN"), detekt/lint hanya diurai bila ada temuan.
 #
@@ -20,7 +20,6 @@ name: Android CI Artifact for Claude
 #    sumber Kotlin karena semua kelas ada di satu package.
 #  - Peringatan kompilator Kotlin diurai dari dua format baris: `w: file:///...` dan `w: /...`.
 #  - Proyek BELUM punya tes perilaku: baris "Tes unit" hanya menghitung ArchitectureTest; laporan menyatakannya eksplisit.
-#  - Artifact hasil mentah ditambahkan (SONIX tidak menyimpannya) agar penyaringan temuan dapat diaudit.
 #  - Retensi artifact 7 hari (SONIX: 14).
 #  - Pemicu: push `main` + manual (selaras build.yml); `cache-read-only`: cache Gradle hanya ditulis build.yml.
 #  - Berkas `ci-report.yml` (stub nonaktif SONIX) TIDAK dibawa: Vidsize tak pernah punya workflow itu.
@@ -350,7 +349,7 @@ jobs:
             echo "- $LINT_SUMMARY"
             echo "- $TESTS_SUMMARY"
             echo "- $KWARN_SUMMARY"
-            echo "- Artifact: \`Vidsize_laporan-untuk-claude_run${{ github.run_number }}\` (+ hasil mentah: \`Vidsize_laporan-mentah_run${{ github.run_number }}\`)"
+            echo "- Artifact: \`Vidsize_laporan-untuk-claude_run${{ github.run_number }}\`"
           } > banner.md
           cat laporan-untuk-claude.txt
 
@@ -370,7 +369,7 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
-      # 3. Artifact resmi GitHub (berkas tunggal .txt; mudah diunduh di HP lalu diunggah ke Claude). Retensi 7 hari
+      # 3. Artifact resmi GitHub — SATU-SATUNYA output (berkas tunggal .txt; mudah diunduh di HP lalu diunggah ke Claude). Retensi 7 hari
       #    (aturan pipeline; SONIX memakai 14).
       - name: Upload Report for Claude
         if: always()
@@ -380,27 +379,3 @@ jobs:
           path: laporan-untuk-claude.txt
           retention-days: 7
           if-no-files-found: warn
-
-      # 4. Hasil MENTAH (tambahan Vidsize, tak ada di SONIX): agar penyaringan temuan bisa diaudit. Laporan ringkas di atas
-      #    memotong daftar (maks 40/60/120 baris) dan SpotBugs disaring di sumber (config/spotbugs/exclude.xml); berkas
-      #    di sini = keluaran alat apa adanya (SARIF, detekt.xml, lint xml/txt/html, laporan ArchUnit, XML tes, log Gradle).
-      - name: Upload Raw Results (audit)
-        if: always()
-        uses: actions/upload-artifact@v6
-        with:
-          name: Vidsize_laporan-mentah_run${{ github.run_number }}
-          path: |
-            gradle-exit.txt
-            gradle-arch.log
-            gradle-tests.log
-            gradle-spotbugs.log
-            gradle-static.log
-            app/build/reports/archunit/
-            app/build/reports/spotbugs/
-            app/build/reports/detekt/
-            app/build/reports/lint-results-debug.xml
-            app/build/reports/lint-results-debug.txt
-            app/build/reports/lint-results-debug.html
-            app/build/test-results/testReleaseUnitTest/
-          retention-days: 7
-          if-no-files-found: ignore

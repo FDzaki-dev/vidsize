@@ -6,7 +6,7 @@
   temuan SONIX. Vidsize belum punya satu pun laporan run -> menyaring kategori yang sama tanpa bukti = menyembunyikan
   temuan yang belum terverifikasi. Aturan: tambah filter HANYA setelah laporan CI Vidsize ada + kode di titik temuan
   dibaca dan terbukti artefak bytecode Kotlin/Compose (cantumkan run + alasan per baris di komentar ini, sempit:
-  per file/kelas). Hasil mentah tiap run tersimpan di artifact `Vidsize_laporan-mentah_run<N>` untuk audit.
+  per file/kelas). Daftar SpotBugs di laporan memuat SEMUA temuan non-filter (maks 120 titik), jadi filter bisa diaudit dari laporan.
 
   Disaring sekarang (terbukti bukan kode proyek / bukan bug, tanpa perlu data run):
   - NM_METHOD_NAMING_CONVENTION: fungsi @Composable WAJIB berawalan huruf besar (pedoman API Compose) — aturan

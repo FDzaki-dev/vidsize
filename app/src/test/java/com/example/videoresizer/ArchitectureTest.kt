@@ -22,12 +22,16 @@ import java.io.File
  * - Beda dari SONIX: semua kelas proyek ada di SATU package (`com.example.videoresizer`) + `ui.theme`, jadi lapisan
  *   dibedakan per BERKAS SUMBER Kotlin (atribut `SourceFile` bytecode; mencakup kelas fasad `XxxKt`, lambda, dan
  *   `ComposableSingletons` dari berkas itu). Aturan = hanya arah dependensi yang SAAT INI sudah dipenuhi (dicek dari
- *   kode sumber tanpa komentar/string, Batch 59), jadi pelanggaran baru = regresi arsitektur.
+ *   kode sumber tanpa komentar/string, Batch 59), jadi pelanggaran baru = regresi arsitektur. Batch 60: run #1 CI (133
+ *   "pelanggaran") ternyata artefak bytecode, bukan dependensi nyata — lihat [fileOf] dan aturan Compose di [rules].
  * - Pakai `archunit` inti (BUKAN `archunit-junit5`): tes proyek ini JUnit 4.
  */
 class ArchitectureTest {
 
     private class RuleOutcome(val name: String, val violations: Int, val details: List<String>)
+
+    /** Berkas sumber kelas TERLUAR (tanpa `$`) -> dipakai [fileOf] untuk kelas hasil inline/sintetis; diisi di [buildReport]. */
+    private var outerFiles: Map<String, String> = emptyMap()
 
     @Test
     fun writeArchitectureReport() {
@@ -55,6 +59,11 @@ class ArchitectureTest {
         if (total == 0) {
             return "ARCHUNIT_STATUS=NOT_VERIFIED\nREASON=0 kelas ter-import dari $ROOT (classpath tes tak memuat kelas app)\n"
         }
+        val tops = HashMap<String, String>()
+        for (c in classes) {
+            if (!c.name.contains('$')) tops[c.name] = rawFile(c)
+        }
+        outerFiles = tops
         val outcomes = rules().map { (name, rule) -> evaluate(name, rule, classes) }
         val violations = outcomes.sumOf { it.violations }
         return buildString {
@@ -90,44 +99,67 @@ class ArchitectureTest {
     private fun predicate(description: String, check: (JavaClass) -> Boolean): DescribedPredicate<JavaClass> =
         DescribedPredicate.describe<JavaClass>(description) { c -> check(c) }
 
-    /** Nama berkas sumber Kotlin kelas ini (atribut `SourceFile`); kosong bila tak tercatat. */
-    private fun sourceFile(c: JavaClass): String = c.source.map { it.fileName.orElse("") }.orElse("")
+    /** Nama berkas sumber (atribut `SourceFile`) kelas ini apa adanya; kosong bila tak tercatat. */
+    private fun rawFile(c: JavaClass): String = c.source.map { it.fileName.orElse("") }.orElse("")
 
-    /** Kelas proyek = package root atau `ui.theme`, tanpa kelas generate `R` dan `BuildConfig`. */
-    private fun isAppClass(c: JavaClass): Boolean =
-        (c.packageName == ROOT || c.packageName.startsWith(UI_THEME_PREFIX)) &&
-            c.simpleName != "R" && c.simpleName != "BuildConfig" && !c.name.contains(".R\$")
+    /** Tipe array (mis. `$VALUES` enum) dipetakan ke tipe komponen dasarnya. */
+    private fun baseOf(c: JavaClass): JavaClass = if (c.isArray) c.baseComponentType else c
+
+    /**
+     * Berkas sumber "logis" kelas proyek. Kelas hasil inline Kotlin (`...$$inlined$items$default$4`) mencatat `SourceFile`
+     * fungsi yang di-inline (mis. `LazyDsl.kt`), BUKAN berkas pemiliknya (run #1: 63+ false positive) -> bila `SourceFile`
+     * bukan berkas proyek yang dikenal, pakai berkas kelas terluar (nama sebelum `$` pertama).
+     */
+    private fun fileOf(c: JavaClass): String {
+        val k = baseOf(c)
+        val raw = rawFile(k)
+        if (raw in KNOWN_FILES) return raw
+        return outerFiles[k.name.substringBefore('$')] ?: raw
+    }
+
+    /** Kelas proyek = package root atau `ui.theme`, tanpa kelas generate `R` dan `BuildConfig`; array dihitung lewat komponennya. */
+    private fun isAppClass(c: JavaClass): Boolean {
+        val k = baseOf(c)
+        return (k.packageName == ROOT || k.packageName.startsWith(UI_THEME_PREFIX)) &&
+            k.simpleName != "R" && k.simpleName != "BuildConfig" && !k.name.contains(".R\$")
+    }
 
     private fun isUiClass(c: JavaClass): Boolean =
-        isAppClass(c) && (sourceFile(c) in UI_FILES || c.packageName.startsWith(UI_THEME_PREFIX))
+        isAppClass(c) && (fileOf(c) in UI_FILES || baseOf(c).packageName.startsWith(UI_THEME_PREFIX))
 
     /** Berkas [file] tidak boleh bergantung ke kelas proyek dari berkas lain (R/BuildConfig tidak dihitung). */
     private fun standalone(file: String): ArchRule =
         noClasses()
-            .that(predicate("kelas dari $file") { isAppClass(it) && sourceFile(it) == file })
-            .should().dependOnClassesThat(predicate("kelas proyek dari berkas lain") { isAppClass(it) && sourceFile(it) != file })
+            .that(predicate("kelas dari $file") { isAppClass(it) && fileOf(it) == file })
+            .should().dependOnClassesThat(predicate("kelas proyek dari berkas lain") { isAppClass(it) && fileOf(it) != file })
 
     private fun rules(): List<Pair<String, ArchRule>> {
-        val engine = predicate("mesin (berkas non-UI)") { isAppClass(it) && sourceFile(it) in ENGINE_FILES }
+        val engine = predicate("mesin (berkas non-UI)") { isAppClass(it) && fileOf(it) in ENGINE_FILES }
         val result = mutableListOf<Pair<String, ArchRule>>()
         result.add(
             "mesin (non-UI) tidak bergantung ke layar UI / ui.theme" to
                 noClasses().that(engine).should().dependOnClassesThat(predicate("layar UI / ui.theme") { isUiClass(it) }),
         )
+        // Compiler Compose memasang `@StabilityInferred` di SETIAP kelas modul (run #1: 24 false positive) — anotasi
+        // bentukan compiler, bukan dependensi kode, jadi dikecualikan; dependensi Compose lain tetap dihitung.
         result.add(
-            "mesin (non-UI) tidak bergantung ke Compose" to
-                noClasses().that(engine).should().dependOnClassesThat().resideInAnyPackage("androidx.compose.."),
+            "mesin (non-UI) tidak bergantung ke Compose (selain @StabilityInferred bentukan compiler)" to
+                noClasses().that(engine).should().dependOnClassesThat(
+                    predicate("kelas Compose selain StabilityInferred") {
+                        it.packageName.startsWith("androidx.compose") && it.simpleName != "StabilityInferred"
+                    },
+                ),
         )
         result.add(
             "ui.theme mandiri: tidak bergantung ke kelas proyek di package root" to
                 noClasses().that().resideInAPackage("$UI_THEME_PREFIX..")
-                    .should().dependOnClassesThat(predicate("kelas proyek di package root") { isAppClass(it) && it.packageName == ROOT }),
+                    .should().dependOnClassesThat(predicate("kelas proyek di package root") { isAppClass(it) && baseOf(it).packageName == ROOT }),
         )
         result.add(
             "MainActivity.kt = akar UI: tidak ada berkas lain yang bergantung padanya" to
                 noClasses()
-                    .that(predicate("kelas proyek di luar MainActivity.kt") { isAppClass(it) && sourceFile(it) != MAIN_FILE })
-                    .should().dependOnClassesThat(predicate("kelas dari MainActivity.kt") { isAppClass(it) && sourceFile(it) == MAIN_FILE }),
+                    .that(predicate("kelas proyek di luar MainActivity.kt") { isAppClass(it) && fileOf(it) != MAIN_FILE })
+                    .should().dependOnClassesThat(predicate("kelas dari MainActivity.kt") { isAppClass(it) && fileOf(it) == MAIN_FILE }),
         )
         STANDALONE_FILES.forEach { file ->
             result.add("mandiri: $file tidak bergantung ke berkas proyek lain" to standalone(file))
@@ -138,7 +170,7 @@ class ArchitectureTest {
     private companion object {
         const val ENV_FLAG = "VIDSIZE_ARCH_REPORT"
         const val REPORT_PATH = "build/reports/archunit/archunit-report.txt"
-        const val MAX_DETAILS = 12
+        const val MAX_DETAILS = 30
         val VIOLATION_COUNT = Regex("""was violated \((\d+) times?\)""")
 
         const val ROOT = "com.example.videoresizer"
@@ -154,6 +186,9 @@ class ArchitectureTest {
             "GifEncoder.kt", "GifExporter.kt", "PublicMovieExporter.kt", "SocialPreset.kt",
             "VideoHistoryStore.kt", "VideoResizer.kt", "VideoResizerApp.kt",
         )
+
+        /** Semua berkas proyek yang dikenal (UI + non-UI); `SourceFile` lain (mis. `LazyDsl.kt`) = hasil inline, lihat [fileOf]. */
+        val KNOWN_FILES = UI_FILES + ENGINE_FILES
 
         /** Berkas yang SAAT INI tidak bergantung ke berkas proyek lain mana pun (Batch 59, dari kode sumber). */
         val STANDALONE_FILES = listOf(

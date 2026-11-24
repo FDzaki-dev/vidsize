@@ -534,8 +534,8 @@ the GitHub Actions route above is much faster in practice.
 - **Pipeline CI (Batch 59, adaptasi SONIX)**: dua workflow terpisah. `build.yml` = build + GitHub Release + artifact
   APK (jalur rilis; skema versi/tag/keystore tidak berubah). `android-artifact.yml` = laporan evaluasi NON-BLOCKING
   (ArchUnit, tes unit, SpotBugs, detekt, lintDebug, peringatan kompilator Kotlin) -> artifact
-  `Vidsize_laporan-untuk-claude_run<N>` (satu berkas `laporan-untuk-claude.txt`, unggah ke Claude untuk evaluasi) dan
-  `Vidsize_laporan-mentah_run<N>`; retensi 7 hari. Status laporan: `PASS` / `FAIL` / `NOT VERIFIED` (alat gagal bukan
+  `Vidsize_laporan-untuk-claude_run<N>` (SATU-SATUNYA artifact; berkas `laporan-untuk-claude.txt`, unggah ke Claude
+  untuk evaluasi); retensi 7 hari. Status laporan: `PASS` / `FAIL` / `NOT VERIFIED` (alat gagal bukan
   lulus). Konfigurasi alat di `config/`. SpotBugs opt-in (`-Pvidsize.spotbugs=true`); `ArchitectureTest` aktif hanya
   dgn env `VIDSIZE_ARCH_REPORT=1`. Belum ada tes perilaku: "tes unit lulus" pada laporan bukan bukti perilaku app.
 - **Repo GitHub**: `FDzaki-dev/Video-resizer`. Nama folder proyek yang

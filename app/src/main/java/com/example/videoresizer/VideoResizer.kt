@@ -322,12 +322,14 @@ class VideoResizer(private val context: Context) {
         // exact same ResizeResult.Failure path onError already uses keeps
         // failure handling in exactly one place, with identical UX: the
         // caller just sees "export failed" instead of the app dying.
-        return try {
+        return CrashLogger.nonFatal<Transformer?>(
+            onFailure = { e ->
+                CrashLogger.logCaught(context, "resize.start", e)
+                onDone(ResizeResult.Failure(e.message ?: "Gagal memulai export"))
+                null
+            }
+        ) {
             resizeInternal(request, onProgress, onDone)
-        } catch (e: Exception) {
-            CrashLogger.logCaught(context, "resize.start", e)
-            onDone(ResizeResult.Failure(e.message ?: "Gagal memulai export"))
-            null
         }
     }
 
@@ -487,12 +489,14 @@ class VideoResizer(private val context: Context) {
      * surfaces as an ordinary [ResizeResult.Failure] instead of crashing.
      */
     fun compress(request: CompressRequest, onProgress: (Int) -> Unit, onDone: (ResizeResult) -> Unit): Transformer? {
-        return try {
+        return CrashLogger.nonFatal<Transformer?>(
+            onFailure = { e ->
+                CrashLogger.logCaught(context, "compress.start", e)
+                onDone(ResizeResult.Failure(e.message ?: "Gagal memulai kompresi"))
+                null
+            }
+        ) {
             compressInternal(request, onProgress, onDone)
-        } catch (e: Exception) {
-            CrashLogger.logCaught(context, "compress.start", e)
-            onDone(ResizeResult.Failure(e.message ?: "Gagal memulai kompresi"))
-            null
         }
     }
 

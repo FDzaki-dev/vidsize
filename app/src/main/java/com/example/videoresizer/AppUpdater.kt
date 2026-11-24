@@ -93,58 +93,62 @@ object AppUpdater {
     }
 
     suspend fun check(context: Context): CheckResult = withContext(Dispatchers.IO) {
-        var conn: HttpURLConnection? = null
-        try {
-            conn = (URL(API_URL).openConnection() as HttpURLConnection).apply {
-                applyCommonConfig()
-                requestMethod = "GET"
-                setRequestProperty("Accept", "application/vnd.github+json")
+        CrashLogger.nonFatal<CheckResult>(
+            onFailure = { e ->
+                CrashLogger.logCaught(context, "AppUpdater.check", e)
+                CheckResult.Error(e.message ?: "Gagal memeriksa update")
             }
-            val code = conn.responseCode
-            if (code !in 200..299) return@withContext CheckResult.Error("Cek update gagal (HTTP $code)")
-
-            val body = conn.inputStream.bufferedReader().use { it.readText() }
-            val json = JSONObject(body)
-            val tagName = json.optString("tag_name")
-            val assets: JSONArray = json.optJSONArray("assets") ?: JSONArray()
-
-            var apkUrl: String? = null
-            var apkName = ""
-            for (i in 0 until assets.length()) {
-                val asset = assets.getJSONObject(i)
-                val name = asset.optString("name")
-                if (name.endsWith(".apk")) {
-                    apkUrl = asset.optString("browser_download_url")
-                    apkName = name
-                    break
+        ) {
+            var conn: HttpURLConnection? = null
+            try {
+                conn = (URL(API_URL).openConnection() as HttpURLConnection).apply {
+                    applyCommonConfig()
+                    requestMethod = "GET"
+                    setRequestProperty("Accept", "application/vnd.github+json")
                 }
-            }
-            if (apkUrl.isNullOrBlank()) return@withContext CheckResult.Error("Release terbaru tidak memiliki file APK")
+                val code = conn.responseCode
+                if (code !in 200..299) return@withContext CheckResult.Error("Cek update gagal (HTTP $code)")
 
-            val remoteBuild = Regex("build(\\d+)").find(tagName)?.groupValues?.get(1)?.toIntOrNull()
-            val remoteVersionCode = if (remoteBuild != null) 1000 + remoteBuild else 0
-            val current = installedVersionCode(context)
+                val body = conn.inputStream.bufferedReader().use { it.readText() }
+                val json = JSONObject(body)
+                val tagName = json.optString("tag_name")
+                val assets: JSONArray = json.optJSONArray("assets") ?: JSONArray()
 
-            if (remoteVersionCode == 0 || remoteVersionCode <= current) {
-                CheckResult.UpToDate
-            } else {
-                CheckResult.Available(
-                    UpdateInfo(
-                        tagName = tagName,
-                        apkUrl = apkUrl,
-                        apkName = apkName,
-                        remoteVersionCode = remoteVersionCode,
-                        releaseNotes = json.optString("body").take(600)
+                var apkUrl: String? = null
+                var apkName = ""
+                for (i in 0 until assets.length()) {
+                    val asset = assets.getJSONObject(i)
+                    val name = asset.optString("name")
+                    if (name.endsWith(".apk")) {
+                        apkUrl = asset.optString("browser_download_url")
+                        apkName = name
+                        break
+                    }
+                }
+                if (apkUrl.isNullOrBlank()) return@withContext CheckResult.Error("Release terbaru tidak memiliki file APK")
+
+                val remoteBuild = Regex("build(\\d+)").find(tagName)?.groupValues?.get(1)?.toIntOrNull()
+                val remoteVersionCode = if (remoteBuild != null) 1000 + remoteBuild else 0
+                val current = installedVersionCode(context)
+
+                if (remoteVersionCode == 0 || remoteVersionCode <= current) {
+                    CheckResult.UpToDate
+                } else {
+                    CheckResult.Available(
+                        UpdateInfo(
+                            tagName = tagName,
+                            apkUrl = apkUrl,
+                            apkName = apkName,
+                            remoteVersionCode = remoteVersionCode,
+                            releaseNotes = json.optString("body").take(600)
+                        )
                     )
-                )
+                }
+            } catch (e: IOException) {
+                CheckResult.Error(e.message ?: "Tidak bisa terhubung ke GitHub")
+            } finally {
+                conn?.disconnect()
             }
-        } catch (e: IOException) {
-            CheckResult.Error(e.message ?: "Tidak bisa terhubung ke GitHub")
-        } catch (e: Exception) {
-            CrashLogger.logCaught(context, "AppUpdater.check", e)
-            CheckResult.Error(e.message ?: "Gagal memeriksa update")
-        } finally {
-            conn?.disconnect()
         }
     }
 
@@ -164,7 +168,15 @@ object AppUpdater {
                 throw IOException("Gagal membuat folder unduhan: ${outDir.absolutePath}")
             }
             val outFile = File(outDir, "update.apk")
-            try {
+            CrashLogger.nonFatal<File>(
+                onFailure = { e ->
+                    CrashLogger.logCaught(context, "AppUpdater.download", e)
+                    if (!outFile.delete() && outFile.exists()) {
+                        e.addSuppressed(IOException("Gagal menghapus berkas unduhan parsial: ${outFile.absolutePath}"))
+                    }
+                    throw e
+                }
+            ) {
                 val requestBuilder = Request.Builder()
                     .url(info.apkUrl)
                     .header("Accept", "application/octet-stream")
@@ -189,12 +201,6 @@ object AppUpdater {
                     }
                 }
                 outFile
-            } catch (e: Exception) {
-                CrashLogger.logCaught(context, "AppUpdater.download", e)
-                if (!outFile.delete() && outFile.exists()) {
-                    e.addSuppressed(IOException("Gagal menghapus berkas unduhan parsial: ${outFile.absolutePath}"))
-                }
-                throw e
             }
         }
 

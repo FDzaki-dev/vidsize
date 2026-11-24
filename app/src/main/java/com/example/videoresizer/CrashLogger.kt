@@ -58,16 +58,23 @@ object CrashLogger {
         val appContext = context.applicationContext
         val previousHandler = Thread.getDefaultUncaughtExceptionHandler()
         Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
-            try {
-                writeLog(appContext, thread, throwable)
-            } catch (loggingFailure: Throwable) {
-                // Never let the logger itself interfere with the real crash.
-                // Batch 66: kegagalan penulisan log dicatat mentah ke logcat; runCatching menjaga previousHandler tetap terpanggil.
-                runCatching { Log.e(TAG, "install.writeLog", loggingFailure) }
-            }
+            // Never let the logger itself interfere with the real crash.
+            // Batch 66: kegagalan penulisan log dicatat mentah ke logcat; runCatching menjaga previousHandler tetap terpanggil.
+            // Batch 75: Throwable (bukan hanya Exception) tetap sengaja ditangkap lewat runCatching — handler crash tak boleh melempar.
+            runCatching { writeLog(appContext, thread, throwable) }
+                .onFailure { loggingFailure -> runCatching { Log.e(TAG, "install.writeLog", loggingFailure) } }
             previousHandler?.uncaughtException(thread, throwable)
         }
     }
+
+    /**
+     * Batas kegagalan terpusat (Batch 75): menjalankan [block]; bila melempar [Exception], hasilnya diganti [onFailure].
+     * Setara `try { block() } catch (e: Exception) { onFailure(e) }`: [Error] (mis. OutOfMemoryError) TETAP dilempar ulang
+     * dan `return` non-lokal dari [block]/[onFailure] tetap berlaku (inline). Menggantikan blok `catch (e: Exception)`
+     * di berkas lain; ditaruh di logger daun ini agar aturan ArchUnit "mandiri" tak dilanggar.
+     */
+    inline fun <T> nonFatal(onFailure: (Exception) -> T, block: () -> T): T =
+        runCatching(block).getOrElse { failure -> if (failure is Exception) onFailure(failure) else throw failure }
 
     /**
      * Mencatat [throwable] yang sudah TERTANGKAP (aplikasi tetap berjalan) mentah ke Documents lewat MediaStore.
@@ -104,17 +111,19 @@ object CrashLogger {
         val collection = MediaStore.Files.getContentUri("external")
         val itemUri = resolver.insert(collection, values) ?: return
 
-        try {
+        nonFatal<Unit>(
+            onFailure = { e ->
+                Log.e(TAG, "writeLog", e)
+                resolver.delete(itemUri, null, null)
+                return
+            }
+        ) {
             resolver.openOutputStream(itemUri)?.use { out ->
                 out.write(body.toByteArray(Charsets.UTF_8))
             } ?: run {
                 resolver.delete(itemUri, null, null)
                 return
             }
-        } catch (e: Exception) {
-            Log.e(TAG, "writeLog", e)
-            resolver.delete(itemUri, null, null)
-            return
         }
 
         enforceRetention(context, prefix)
@@ -122,15 +131,17 @@ object CrashLogger {
 
     private fun buildLogBody(context: Context, thread: Thread, throwable: Throwable, title: String, tag: String? = null): String {
         val stackTrace = StringWriter().also { throwable.printStackTrace(PrintWriter(it)) }.toString()
-        val versionInfo = try {
+        val versionInfo = nonFatal<String>(
+            onFailure = { e ->
+                Log.e(TAG, "buildLogBody.versionInfo", e)
+                "unknown"
+            }
+        ) {
             val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
             // Batch 62: longVersionCode baru ada di API 28 (minSdk 24); NoSuchMethodError bukan Exception -> log crash API 24-27 hilang.
             val code: Long = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) pkgInfo.longVersionCode
             else @Suppress("DEPRECATION") pkgInfo.versionCode.toLong()
             "${pkgInfo.versionName} ($code)"
-        } catch (e: Exception) {
-            Log.e(TAG, "buildLogBody.versionInfo", e)
-            "unknown"
         }
 
         return buildString {
@@ -149,7 +160,10 @@ object CrashLogger {
 
     /** FIFO retention: keeps at most [MAX_RETAINED_LOGS] logs per [prefix] (crash / error), oldest deleted first. */
     private fun enforceRetention(context: Context, prefix: String) {
-        try {
+        nonFatal<Unit>(
+            // Retention is best-effort; a failure here must not affect the app.
+            onFailure = { e -> Log.e(TAG, "enforceRetention", e) }
+        ) {
             val resolver = context.contentResolver
             val collection = MediaStore.Files.getContentUri("external")
             val projection = arrayOf(MediaStore.Files.FileColumns._ID)
@@ -168,9 +182,6 @@ object CrashLogger {
                     toDelete--
                 }
             }
-        } catch (e: Exception) {
-            // Retention is best-effort; a failure here must not affect the app.
-            Log.e(TAG, "enforceRetention", e)
         }
     }
 }

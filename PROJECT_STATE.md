@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 74**. This is the first-read file per the context
+Snapshot as of **Batch 75**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,8 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 75 (7 berkas kode):** refactor 20 temuan detekt `TooGenericExceptionCaught` (run #16) -> `CrashLogger.nonFatal` (inline; `Exception` ditangkap, `Error` dilempar ulang; semantik identik, tipe TIDAK disempitkan); `CrashLogger.install` -> `runCatching` (Throwable). `detekt.yml` TIDAK diubah (aturan tetap aktif). Pembenaran 7 berkas (>5): kontrak baru bersama `CrashLogger.nonFatal` dipakai 6 berkas lain.
+  Sandbox: detekt lokal 20 -> 0 (baseline v74 = 20 cocok dgn run #16); kotlinc 1.9.24 kompilasi berkas asli + stub OK. NOT VERIFIED di CI/HP. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 74 (4 berkas kode/konfigurasi):** audit UI/UX vs Vital Guards + perbaikan: edge-to-edge (`enableEdgeToEdge` di `MainActivity.onCreate`, `Theme.kt` `DisposableEffect` `SystemBarStyle.auto`, `Surface` akar `imePadding`+cutout,
   `VideoPickerScreen.kt` `navigationBars`); `configChanges` diperluas; 22 state inti `ResizerScreen` -> `rememberSaveable`; `BatchScreen` pemilih -> `Dispatchers.IO`; 6 string UI Indonesia; tab bar `selectable`+`Role.Tab`; Studio `onLongClickLabel`.
   NOT VERIFIED di CI/HP. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
@@ -273,6 +275,11 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 75]** Refactor 20 temuan detekt `TooGenericExceptionCaught` (run #16) ke `CrashLogger.nonFatal` (7 berkas kode) -> **SELESAI di ZIP; detekt lokal 0 temuan + kompilasi stub kotlinc OK di sandbox; build Gradle/ArchUnit/SpotBugs/lint & perilaku HP NOT VERIFIED** ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP; run #17 diharapkan: build hijau, detekt 0 (dari 20), ArchUnit 12/0, SpotBugs 0 (risiko: bytecode inline `runCatching` baru — bila SpotBugs memunculkan pola baru, baca laporan dan JANGAN filter tanpa bukti), lint 0, kompilator 0. Bila build MERAH: baca `e:` di laporan; jalan balik = kembalikan 7 berkas kode ke `Vidsize_v74.zip`.
+(2) Uji manual di HP (user): picu kegagalan (video rusak/tak terbaca, ekspor/GIF gagal, matikan jaringan saat "Unduh & Pasang") -> pesan galat wajar + `Documents/VideoResizer/logs/error_*.txt` tetap terbentuk; bila OS menolak `startForeground`, aplikasi tidak crash.
+(3) Sisa kandidat: tes unit perilaku `CrashLogger.nonFatal` (butuh ubah catatan statis di `android-artifact.yml` baris 22 & 325 -> di luar batas berkas batch ini); butir Batch 74 tetap berlaku. Resume point Batch 74 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 74]** Audit UI/UX vs Vital Guards + perbaikan (edge-to-edge, `rememberSaveable` 22 state `ResizerScreen`, `configChanges` diperluas, I/O pemilih Batch ke IO, bahasa UI, semantics tab/Studio) -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
 **LANGKAH BERIKUTNYA:** (1) push ZIP; run #15 diharapkan: build hijau, SpotBugs 0, detekt 20 (bisa bergeser), lint 0, kompilator 0, ArchUnit 12/0. API `enableEdgeToEdge`/`SystemBarStyle.auto`/`rememberSaveable`/`selectable` BELUM pernah dikompilasi di sandbox: bila build MERAH baca `e:` di laporan, jalan balik per butir di CHANGELOG Batch 74 (edge-to-edge: hapus `enableEdgeToEdge()` + modifier `Surface` akar + inset `VideoPickerScreen`, kembalikan `SideEffect` warna opak `Theme.kt`).
 (2) Uji manual di HP (user): bar status/navigasi transparan & konten tidak tertutup (portrait + landscape, navigasi gestur + 3-tombol); keyboard pada kolom teks caption/dialog tidak menutupi; ubah mode gelap sistem / ukuran font saat video terpilih -> pilihan TIDAK hilang; taruh app di background lama lalu buka lagi -> pengaturan layar utama pulih (video: bila gagal terbaca, pesan galat wajar, bukan crash); `Documents/VideoResizer/logs/error_*.txt` bila ada galat; TalkBack: tab terbaca "terpilih".
@@ -517,6 +524,9 @@ sesi berikutnya:
    "Kompres GIF"): itu instruksi baru yang eksplisit, belum dieksekusi.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 75** — User: "semua yang didapati tidak memenuhi standar. maka di refactor saja!!" (upload `Vidsize_v74.zip` + laporan CI run #16). Satu-satunya temuan run #16 = detekt 20 x `TooGenericExceptionCaught`
+  (ArchUnit 12/0, SpotBugs 0, lint 0, kompilator 0). Refactor: 20 blok `catch (e: Exception)` -> `CrashLogger.nonFatal` (inline, `Error` dilempar ulang, semantik identik, tipe tidak disempitkan — pelajaran Batch 63/64); 7 berkas kode (kontrak bersama baru).
+  Verifikasi sandbox: detekt lokal 20 -> 0, kotlinc 1.9.24 + stub OK, 10 uji semantik JVM LULUS. Detail, jalan balik, dan butir yang sengaja TIDAK dikerjakan: CHANGELOG.md Batch 75.
 - **Batch 74** — User: "audit kepatuhan UI/UX project terhadap aturan yang berlaku" (upload `Vidsize_v73.zip`), lalu "ya" atas tawaran perbaikan. Audit statis menemukan 4 FAIL (tidak edge-to-edge, 0 `rememberSaveable`/ViewModel dgn rotasi hanya
   ditopang `configChanges` sempit, I/O pemilih Batch di Main, string campur Inggris/Indonesia) + semantics parsial. Perbaikan: `MainActivity.kt`, `Theme.kt`, `VideoPickerScreen.kt`, `AndroidManifest.xml` (4 berkas kode/konfigurasi, dalam batas).
   Detail, daftar state, jalan balik, dan butir yang sengaja TIDAK dikerjakan: CHANGELOG.md Batch 74.

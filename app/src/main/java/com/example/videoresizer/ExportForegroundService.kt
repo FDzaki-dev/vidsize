@@ -66,12 +66,14 @@ class ExportForegroundService : Service() {
         // Transformer keep running exactly as before, just without the
         // foreground-priority safety net for this one export.
         // Batch 67: pengecualian mentah dicatat ke logcat (dulu ditelan tanpa jejak) sebelum stopSelf().
-        try {
+        CrashLogger.nonFatal<Unit>(
+            onFailure = { e ->
+                Log.e(TAG, "onCreate startForeground", e)
+                CrashLogger.logCaught(this, "onCreate startForeground", e)
+                stopSelf()
+            }
+        ) {
             startForeground(NOTIFICATION_ID, buildNotification(this, progress = 0))
-        } catch (e: Exception) {
-            Log.e(TAG, "onCreate startForeground", e)
-            CrashLogger.logCaught(this, "onCreate startForeground", e)
-            stopSelf()
         }
     }
 

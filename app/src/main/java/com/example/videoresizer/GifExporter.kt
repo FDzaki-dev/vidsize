@@ -68,28 +68,32 @@ object GifExporter {
         val bitmaps = ArrayList<Bitmap>(frameCount)
         val retriever = MediaMetadataRetriever()
         try {
-            retriever.setDataSource(context, sourceUri)
-            for (i in 0 until frameCount) {
-                val timeMs = startMs + (i * actualIntervalMs).toLong()
-                val frame = retriever.getFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST)
-                    ?: continue
-                if (frame.width <= 0 || frame.height <= 0) {
-                    frame.recycle()
-                    continue
+            CrashLogger.nonFatal<Unit>(
+                onFailure = { e ->
+                    CrashLogger.logCaught(context, "GifExporter.export.readFrames", e)
+                    bitmaps.forEach { it.recycle() }
+                    return GifExportResult.Failure(e.message ?: "Gagal membaca video sumber")
                 }
-                val scale = targetWidth.toFloat() / frame.width
-                val targetHeight = (frame.height * scale).toInt().coerceAtLeast(1)
-                val scaled = Bitmap.createScaledBitmap(frame, targetWidth, targetHeight, true)
-                if (scaled !== frame) frame.recycle()
-                bitmaps.add(scaled)
-                // Frame extraction is roughly the first 40% of total work;
-                // quantizing (40-90%) and LZW encoding (90-100%) make up the rest.
-                onProgress((((i + 1) * 40) / frameCount).coerceIn(0, 40))
+            ) {
+                retriever.setDataSource(context, sourceUri)
+                for (i in 0 until frameCount) {
+                    val timeMs = startMs + (i * actualIntervalMs).toLong()
+                    val frame = retriever.getFrameAtTime(timeMs * 1000, MediaMetadataRetriever.OPTION_CLOSEST)
+                        ?: continue
+                    if (frame.width <= 0 || frame.height <= 0) {
+                        frame.recycle()
+                        continue
+                    }
+                    val scale = targetWidth.toFloat() / frame.width
+                    val targetHeight = (frame.height * scale).toInt().coerceAtLeast(1)
+                    val scaled = Bitmap.createScaledBitmap(frame, targetWidth, targetHeight, true)
+                    if (scaled !== frame) frame.recycle()
+                    bitmaps.add(scaled)
+                    // Frame extraction is roughly the first 40% of total work;
+                    // quantizing (40-90%) and LZW encoding (90-100%) make up the rest.
+                    onProgress((((i + 1) * 40) / frameCount).coerceIn(0, 40))
+                }
             }
-        } catch (e: Exception) {
-            CrashLogger.logCaught(context, "GifExporter.export.readFrames", e)
-            bitmaps.forEach { it.recycle() }
-            return GifExportResult.Failure(e.message ?: "Gagal membaca video sumber")
         } finally {
             retriever.release()
         }
@@ -128,7 +132,13 @@ object GifExporter {
 
         val delayCentiseconds = max(2, (actualIntervalMs / 10.0).toInt())
 
-        return try {
+        return CrashLogger.nonFatal<GifExportResult>(
+            onFailure = { e ->
+                CrashLogger.logCaught(context, "GifExporter.export.encode", e)
+                runCatching { outputFile.delete() }
+                GifExportResult.Failure(e.message ?: "Gagal menulis file GIF")
+            }
+        ) {
             FileOutputStream(outputFile).use { out ->
                 GifEncoder.encode(
                     out = out,
@@ -142,10 +152,6 @@ object GifExporter {
             }
             onProgress(100)
             GifExportResult.Success(outputFile, indexedFrames.size)
-        } catch (e: Exception) {
-            CrashLogger.logCaught(context, "GifExporter.export.encode", e)
-            runCatching { outputFile.delete() }
-            GifExportResult.Failure(e.message ?: "Gagal menulis file GIF")
         }
     }
 

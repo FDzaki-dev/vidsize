@@ -1,5 +1,32 @@
 # Changelog
 
+## Batch 75: Refactor 20 temuan detekt `TooGenericExceptionCaught` (run #16) ke satu batas kegagalan terpusat
+
+User mengunggah `Vidsize_v74.zip` + `Vidsize_laporan-untuk-claude_run16.zip` dan menginstruksikan: "semua yang didapati tidak memenuhi standar, maka di refactor saja".
+
+Hasil run #16 (commit 068af14): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); SpotBugs LULUS (0); lintDebug LULUS (0); kompilator Kotlin 0 peringatan; 1 tes (ArchitectureTest, BUKAN tes perilaku). Satu-satunya temuan = detekt 20 x `TooGenericExceptionCaught` (`SwallowedException` sudah 0 sejak Batch 66/70).
+
+### PERUBAHAN (7 berkas kode; pembenaran >5 berkas: kontrak baru bersama `CrashLogger.nonFatal` dipakai 6 berkas lain)
+- `CrashLogger.kt` — `inline fun <T> nonFatal(onFailure: (Exception) -> T, block: () -> T): T`: setara `try { block() } catch (e: Exception) { onFailure(e) }`; `Error` (OOM, `NoSuchMethodError`, dst.) TETAP dilempar ulang; `return` non-lokal dari `block`/`onFailure` tetap berlaku (inline). Ditaruh di logger daun ini agar aturan ArchUnit "mandiri" tak dilanggar (tidak ada berkas baru). Dipakai di `persist`, `buildLogBody`, `enforceRetention`; handler crash `install` -> `runCatching` (tetap menangkap `Throwable`, handler crash tak boleh melempar).
+- `AppUpdater.kt` (2: `check`, `download`), `GifExporter.kt` (2), `VideoResizer.kt` (2: `resize`, `compress`), `PublicMovieExporter.kt` (4), `ExportForegroundService.kt` (1: `startForeground` TETAP menangkap `Exception`), `MainActivity.kt` (5: tombol "Unduh & Pasang", `decodeSampledBitmapFromFile`, `extractVideoThumbnail`, `loadSourceMetadata`, `loadSourceInfo`) — blok `catch (e: Exception)` diganti `CrashLogger.nonFatal`; isi handler (log mentah ke logcat, `logCaught`, nilai fallback, `stopSelf()`, `addSuppressed` + `throw e`) dipindahkan APA ADANYA ke `onFailure`. `finally` (`retriever.release()`, `conn?.disconnect()`) tetap.
+- Keputusan desain: tipe pengecualian TIDAK disempitkan (pelajaran Batch 63/64: menyempit tanpa kompilator merusak build; `MediaMetadataRetriever`/MediaStore melempar `RuntimeException`/`IllegalArgumentException`/`SecurityException` yang tak bisa dienumerasi tanpa perangkat). Penangkap generik DIPUSATKAN di satu situs, bukan dibuang; temuan detekt hilang karena tak ada klausa `catch` generik lagi, BUKAN karena filter. `config/detekt/detekt.yml` TIDAK diubah, aturan tetap AKTIF.
+- Perbedaan perilaku (disengaja, tak berdampak): di `AppUpdater.check`, `finally` (`disconnect()`) kini berjalan SEBELUM `logCaught` (dulu sesudah); cabang `IOException` tetap tanpa log (sama seperti sebelumnya).
+
+### VERIFIED (statis, sandbox)
+- detekt-cli 1.23.8 lokal (config proyek, `--build-upon-default-config`): pada `Vidsize_v74.zip` menghasilkan 20 temuan di baris yang SAMA dengan laporan run #16 (baseline cocok); setelah batch ini 0 temuan, exit 0, tanpa temuan baru dari aturan lain.
+- kotlinc 1.9.24 (versi proyek) + stub Android/OkHttp/Okio/coroutines: `CrashLogger.kt`, `AppUpdater.kt`, `GifExporter.kt`, `PublicMovieExporter.kt` (+`GifEncoder.kt`) asli dikompilasi, plus potongan persis hasil patch dari `MainActivity.kt` (5 situs, termasuk `suspend`/`withContext`/`launch`), `VideoResizer.kt` (2) dan `ExportForegroundService.kt` (1): exit 0, tidak ada peringatan baru dari kode proyek.
+- 10 pemeriksaan semantik JVM untuk `nonFatal` LULUS: nilai sukses; `Exception`/`RuntimeException` -> `onFailure`; `OutOfMemoryError`/`NoSuchMethodError` dilempar ulang tanpa memanggil `onFailure`; `return` non-lokal dari `block` dan `onFailure`; `continue` di loop dalam `block`; `onFailure` boleh `throw e`; `addSuppressed` pada instance asli.
+- Aturan ArchUnit (dibaca dari `ArchitectureTest.kt`): berkas mesin hanya menambah ketergantungan ke `CrashLogger.kt` (logger daun yang sudah dikecualikan); `GifExporter.kt` dan `MainActivity.kt` tak masuk daftar "mandiri".
+
+### NOT VERIFIED
+Build Gradle/AGP penuh, kompilasi Compose pada `MainActivity.kt` utuh, ArchUnit, SpotBugs (bytecode inline `runCatching` baru bisa memunculkan pola baru), lintDebug, dan SEMUA perilaku di HP. Tak ada Android SDK/Maven di sandbox.
+
+### TIDAK DIKERJAKAN (disengaja)
+Tes unit perilaku untuk `nonFatal` di repo: `android-artifact.yml` memuat catatan statis "belum punya tes perilaku" (baris 22 & 325) sehingga menambah tes berarti menyentuh workflow juga -> melewati batas berkas batch ini; dicatat sebagai kandidat berikutnya. `detekt.yml` tidak disentuh.
+
+### JALAN BALIK (bila build MERAH atau perilaku HP rusak)
+Kembalikan 7 berkas kode (`CrashLogger.kt`, `AppUpdater.kt`, `GifExporter.kt`, `VideoResizer.kt`, `PublicMovieExporter.kt`, `ExportForegroundService.kt`, `MainActivity.kt`) ke isi `Vidsize_v74.zip`; tidak ada berkas baru/dihapus, versi/tag/keystore/signing/CI tidak berubah.
+
 ## Batch 74: Audit kepatuhan UI/UX terhadap aturan (Vital Guards + MICRO_POLISH_GUIDE) + perbaikan temuan
 
 User mengunggah `Vidsize_v73.zip` dan meminta "audit kepatuhan UI/UX project terhadap aturan yang berlaku"; setelah laporan audit statis (grep + baca kode di titik temuan) user menjawab "ya" -> perbaikan dikerjakan. Batch ini 4 berkas kode/konfigurasi (dalam batas 3-5) + 3 berkas dokumentasi.

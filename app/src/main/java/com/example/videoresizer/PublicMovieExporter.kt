@@ -55,7 +55,14 @@ object PublicMovieExporter {
         val collection = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
         val itemUri = resolver.insert(collection, values) ?: return null
 
-        return try {
+        return CrashLogger.nonFatal<Uri?>(
+            onFailure = { e ->
+                Log.e(TAG, "publishViaMediaStore", e)
+                CrashLogger.logCaught(context, "publishViaMediaStore", e)
+                resolver.delete(itemUri, null, null)
+                null
+            }
+        ) {
             val output = resolver.openOutputStream(itemUri)
             if (output == null) {
                 // Batch 67: baris IS_PENDING=1 tidak boleh yatim (tak terlihat di galeri, tak pernah dibersihkan) bila stream tak terbuka.
@@ -70,16 +77,17 @@ object PublicMovieExporter {
             values.put(MediaStore.Video.Media.IS_PENDING, 0)
             resolver.update(itemUri, values, null, null)
             itemUri
-        } catch (e: Exception) {
-            Log.e(TAG, "publishViaMediaStore", e)
-            CrashLogger.logCaught(context, "publishViaMediaStore", e)
-            resolver.delete(itemUri, null, null)
-            null
         }
     }
 
     private fun publishViaLegacyStorage(context: Context, sourceFile: File, displayName: String): Uri? {
-        return try {
+        return CrashLogger.nonFatal<Uri?>(
+            onFailure = { e ->
+                Log.e(TAG, "publishViaLegacyStorage", e)
+                CrashLogger.logCaught(context, "publishViaLegacyStorage", e)
+                null
+            }
+        ) {
             val moviesDir = File(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
                 RELATIVE_SUBFOLDER
@@ -101,10 +109,6 @@ object PublicMovieExporter {
             ) { _, scannedUri -> resultUri = scannedUri }
 
             resultUri ?: Uri.fromFile(destFile)
-        } catch (e: Exception) {
-            Log.e(TAG, "publishViaLegacyStorage", e)
-            CrashLogger.logCaught(context, "publishViaLegacyStorage", e)
-            null
         }
     }
 
@@ -133,7 +137,14 @@ object PublicMovieExporter {
         val collection = MediaStore.Images.Media.EXTERNAL_CONTENT_URI
         val itemUri = resolver.insert(collection, values) ?: return null
 
-        return try {
+        return CrashLogger.nonFatal<Uri?>(
+            onFailure = { e ->
+                Log.e(TAG, "publishImageViaMediaStore", e)
+                CrashLogger.logCaught(context, "publishImageViaMediaStore", e)
+                resolver.delete(itemUri, null, null)
+                null
+            }
+        ) {
             val output = resolver.openOutputStream(itemUri)
             if (output == null) {
                 // Batch 67: sama seperti jalur video — hapus baris IS_PENDING=1 yatim sebelum kembali null.
@@ -148,16 +159,17 @@ object PublicMovieExporter {
             values.put(MediaStore.Images.Media.IS_PENDING, 0)
             resolver.update(itemUri, values, null, null)
             itemUri
-        } catch (e: Exception) {
-            Log.e(TAG, "publishImageViaMediaStore", e)
-            CrashLogger.logCaught(context, "publishImageViaMediaStore", e)
-            resolver.delete(itemUri, null, null)
-            null
         }
     }
 
     private fun publishImageViaLegacyStorage(context: Context, sourceFile: File, displayName: String): Uri? {
-        return try {
+        return CrashLogger.nonFatal<Uri?>(
+            onFailure = { e ->
+                Log.e(TAG, "publishImageViaLegacyStorage", e)
+                CrashLogger.logCaught(context, "publishImageViaLegacyStorage", e)
+                null
+            }
+        ) {
             val picturesDir = File(
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
                 RELATIVE_SUBFOLDER
@@ -177,10 +189,6 @@ object PublicMovieExporter {
             ) { _, scannedUri -> resultUri = scannedUri }
 
             resultUri ?: Uri.fromFile(destFile)
-        } catch (e: Exception) {
-            Log.e(TAG, "publishImageViaLegacyStorage", e)
-            CrashLogger.logCaught(context, "publishImageViaLegacyStorage", e)
-            null
         }
     }
 }

@@ -1980,7 +1980,12 @@ private fun ResizerScreen(
                             haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                             downloadProgress = -1f
                             scope.launch {
-                                try {
+                                CrashLogger.nonFatal<Unit>(
+                                    onFailure = { e ->
+                                        downloadProgress = null
+                                        updateResult = AppUpdater.CheckResult.Error(e.message ?: "Unduh gagal")
+                                    }
+                                ) {
                                     val apk = AppUpdater.download(context, info) { p -> downloadProgress = p }
                                     downloadedApk = apk
                                     downloadProgress = null
@@ -1990,9 +1995,6 @@ private fun ResizerScreen(
                                     } else {
                                         AppUpdater.requestInstallPermission(context)
                                     }
-                                } catch (e: Exception) {
-                                    downloadProgress = null
-                                    updateResult = AppUpdater.CheckResult.Error(e.message ?: "Unduh gagal")
                                 }
                             }
                         }
@@ -4364,7 +4366,12 @@ private fun openInGallery(context: android.content.Context, uri: Uri) {
  * never allocates more than it needs to actually show on screen.
  */
 private fun decodeSampledBitmapFromFile(path: String, reqHeightPx: Int): Bitmap? {
-    return try {
+    return CrashLogger.nonFatal<Bitmap?>(
+        onFailure = { e ->
+            android.util.Log.e(LOG_TAG, "decodeSampledBitmapFromFile", e)
+            null
+        }
+    ) {
         val boundsOptions = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeFile(path, boundsOptions)
         var sampleSize = 1
@@ -4374,9 +4381,6 @@ private fun decodeSampledBitmapFromFile(path: String, reqHeightPx: Int): Bitmap?
         }
         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
         BitmapFactory.decodeFile(path, decodeOptions)
-    } catch (e: Exception) {
-        android.util.Log.e(LOG_TAG, "decodeSampledBitmapFromFile", e)
-        null
     }
 }
 
@@ -4397,16 +4401,20 @@ private fun ensureThumbDir(cacheDir: File): File {
 private fun extractVideoThumbnail(videoFile: File, thumbnailFile: File): Boolean {
     val retriever = MediaMetadataRetriever()
     return try {
-        retriever.setDataSource(videoFile.absolutePath)
-        val frame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return false
-        java.io.FileOutputStream(thumbnailFile).use { out ->
-            frame.compress(Bitmap.CompressFormat.JPEG, 85, out)
+        CrashLogger.nonFatal<Boolean>(
+            onFailure = { e ->
+                android.util.Log.e(LOG_TAG, "extractVideoThumbnail", e)
+                false
+            }
+        ) {
+            retriever.setDataSource(videoFile.absolutePath)
+            val frame = retriever.getFrameAtTime(0, MediaMetadataRetriever.OPTION_CLOSEST_SYNC) ?: return false
+            java.io.FileOutputStream(thumbnailFile).use { out ->
+                frame.compress(Bitmap.CompressFormat.JPEG, 85, out)
+            }
+            frame.recycle()
+            true
         }
-        frame.recycle()
-        true
-    } catch (e: Exception) {
-        android.util.Log.e(LOG_TAG, "extractVideoThumbnail", e)
-        false
     } finally {
         retriever.release()
     }
@@ -4527,15 +4535,19 @@ private fun GifScreen(
     suspend fun loadSourceMetadata(uri: Uri): Triple<Long, Int, Int>? = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
-            retriever.setDataSource(context, uri)
-            val d = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
-            val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
-            if (d > 0) Triple(d, w, h) else null
-        } catch (e: Exception) {
-            android.util.Log.e(LOG_TAG, "loadSourceMetadata", e)
-            CrashLogger.logCaught(context, "loadSourceMetadata", e)
-            null
+            CrashLogger.nonFatal<Triple<Long, Int, Int>?>(
+                onFailure = { e ->
+                    android.util.Log.e(LOG_TAG, "loadSourceMetadata", e)
+                    CrashLogger.logCaught(context, "loadSourceMetadata", e)
+                    null
+                }
+            ) {
+                retriever.setDataSource(context, uri)
+                val d = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                if (d > 0) Triple(d, w, h) else null
+            }
         } finally {
             retriever.release()
         }
@@ -4960,50 +4972,54 @@ private fun CompressorScreen(onBack: () -> Unit) {
     suspend fun loadSourceInfo(uri: Uri): CompressSourceInfo? = withContext(Dispatchers.IO) {
         val retriever = MediaMetadataRetriever()
         try {
-            retriever.setDataSource(context, uri)
-            val d = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-            val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
-            val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
-            val size = runCatching {
-                context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
-            }.getOrNull() ?: -1L
-            // 0 = "couldn't probe" — computeCompressTargetBitrateBps /
-            // estimateCompressedSizeBytes both fall back to ASSUMED_FPS.
-            // Same MediaExtractor pass also checks for an audio track
-            // (Batch 33) — hasAudio defaults to true (old assumed-present
-            // behavior) only if the probe itself fails; a probe that
-            // succeeds but finds zero audio tracks correctly reports false.
-            var fps = 0
-            var hasAudio = true
-            var audioBitrateBps = 0
-            val probed = runCatching {
-                val extractor = android.media.MediaExtractor()
-                try {
-                    extractor.setDataSource(context, uri, null)
-                    var foundAudio = false
-                    for (i in 0 until extractor.trackCount) {
-                        val format = extractor.getTrackFormat(i)
-                        val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: continue
-                        if (mime.startsWith("video/") && format.containsKey(android.media.MediaFormat.KEY_FRAME_RATE)) {
-                            fps = format.getInteger(android.media.MediaFormat.KEY_FRAME_RATE)
-                        } else if (mime.startsWith("audio/")) {
-                            foundAudio = true
-                            if (format.containsKey(android.media.MediaFormat.KEY_BIT_RATE)) {
-                                audioBitrateBps = format.getInteger(android.media.MediaFormat.KEY_BIT_RATE)
+            CrashLogger.nonFatal<CompressSourceInfo?>(
+                onFailure = { e ->
+                    android.util.Log.e(LOG_TAG, "loadSourceInfo", e)
+                    CrashLogger.logCaught(context, "loadSourceInfo", e)
+                    null
+                }
+            ) {
+                retriever.setDataSource(context, uri)
+                val d = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                val w = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                val size = runCatching {
+                    context.contentResolver.openAssetFileDescriptor(uri, "r")?.use { it.length }
+                }.getOrNull() ?: -1L
+                // 0 = "couldn't probe" — computeCompressTargetBitrateBps /
+                // estimateCompressedSizeBytes both fall back to ASSUMED_FPS.
+                // Same MediaExtractor pass also checks for an audio track
+                // (Batch 33) — hasAudio defaults to true (old assumed-present
+                // behavior) only if the probe itself fails; a probe that
+                // succeeds but finds zero audio tracks correctly reports false.
+                var fps = 0
+                var hasAudio = true
+                var audioBitrateBps = 0
+                val probed = runCatching {
+                    val extractor = android.media.MediaExtractor()
+                    try {
+                        extractor.setDataSource(context, uri, null)
+                        var foundAudio = false
+                        for (i in 0 until extractor.trackCount) {
+                            val format = extractor.getTrackFormat(i)
+                            val mime = format.getString(android.media.MediaFormat.KEY_MIME) ?: continue
+                            if (mime.startsWith("video/") && format.containsKey(android.media.MediaFormat.KEY_FRAME_RATE)) {
+                                fps = format.getInteger(android.media.MediaFormat.KEY_FRAME_RATE)
+                            } else if (mime.startsWith("audio/")) {
+                                foundAudio = true
+                                if (format.containsKey(android.media.MediaFormat.KEY_BIT_RATE)) {
+                                    audioBitrateBps = format.getInteger(android.media.MediaFormat.KEY_BIT_RATE)
+                                }
                             }
                         }
+                        foundAudio
+                    } finally {
+                        extractor.release()
                     }
-                    foundAudio
-                } finally {
-                    extractor.release()
                 }
+                probed.onSuccess { hasAudio = it }
+                if (d > 0 && size > 0) CompressSourceInfo(d, w, h, size, fps, hasAudio, audioBitrateBps) else null
             }
-            probed.onSuccess { hasAudio = it }
-            if (d > 0 && size > 0) CompressSourceInfo(d, w, h, size, fps, hasAudio, audioBitrateBps) else null
-        } catch (e: Exception) {
-            android.util.Log.e(LOG_TAG, "loadSourceInfo", e)
-            CrashLogger.logCaught(context, "loadSourceInfo", e)
-            null
         } finally {
             retriever.release()
         }

@@ -6,9 +6,11 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Batch 77 — tes PERILAKU ketiga proyek: dua kalkulasi murni di companion [VideoResizer] yang hanya memakai tipe
- * primitif/enum (tanpa `Uri`/`Context`): [VideoResizer.requiredBitrateKbpsForTargetSize] ("Ukuran target (MB)") dan
- * [VideoResizer.estimateCompressedSizeBytes] (pratinjau sebelum/sesudah tab Kompres). JVM murni, tanpa Robolectric.
+ * Batch 77 — tes PERILAKU ketiga proyek: kalkulasi murni di companion [VideoResizer] yang hanya memakai tipe
+ * primitif/enum (tanpa `Uri`/`Context`): [VideoResizer.requiredBitrateKbpsForTargetSize] ("Ukuran target (MB)"),
+ * [VideoResizer.estimateCompressedSizeBytes] (pratinjau sebelum/sesudah tab Kompres) dan, sejak Batch 78,
+ * [VideoResizer.compressVideoBitrateBps] (aturan bitrate video Kompres bersama ekspor & pratinjau; batas 85% bitrate
+ * sumber menang atas lantai 250 kbps). JVM murni, tanpa Robolectric.
  *
  * Nilai harapan diturunkan dari rumus kontrak lewat implementasi referensi independen (urutan operasi `Double` sama),
  * bukan disalin dari keluaran fungsi. Contoh tangan: 1280x720 @30fps x 0,06 bpp = 1.658.880 bps -> 10 dtk, tanpa audio
@@ -185,13 +187,74 @@ class VideoResizerKalkulasiTest {
     }
 
     @Test
-    fun estimasi_sumberBitrateSangatRendah_lantaiBitrateMengalahkanBatas_perilakuSaatIni() {
-        // KARAKTERISASI perilaku sekarang, bukan klaim "ideal": sumber 1.000.000 byte / 80 dtk = 100.000 bps tanpa audio ->
-        // batas 85% = 85.000 bps, tetapi lantai 250 kbps menang -> 250.000 x 8 dtk / 8 = 250.000 byte (> ukuran sumber utk klip 8 dtk).
+    fun estimasi_sumberBitrateRendah_batasSumberMengalahkanLantai250kbps() {
+        // Batch 78 (sebelumnya karakterisasi "lantai menang" = file membesar): sumber 1.000.000 byte / 80 dtk = 100.000 bps tanpa
+        // audio -> batas 85% = 85.000 bps (di atas lantai mutlak 64 kbps) MENANG atas lantai 250 kbps -> 85.000 x 8 dtk / 8 =
+        // 85.000 byte, lebih kecil dari jatah sumber utk 8 dtk (100.000 byte).
         assertEquals(
-            250_000L,
+            85_000L,
             estimasi(lebar = 1920, tinggi = 1080, durasiSumberMs = 80_000L, ukuranSumberByte = 1_000_000L, durasiKlipMs = 8_000L, mute = true),
         )
+    }
+
+    @Test
+    fun estimasi_sumberDiBawahLantaiMutlak_dijepitKe64kbps() {
+        // 400.000 byte / 80 dtk = 40.000 bps -> 85% = 34.000 < lantai mutlak 64.000 -> 64.000 x 8 dtk / 8 = 64.000 byte
+        assertEquals(
+            64_000L,
+            estimasi(lebar = 1920, tinggi = 1080, durasiSumberMs = 80_000L, ukuranSumberByte = 400_000L, durasiKlipMs = 8_000L, mute = true),
+        )
+    }
+
+    @Test
+    fun estimasi_seluruhKlip_semuaBitrateSumberDiAtasLantaiMutlak_tidakPernahLebihBesarDariSumber() {
+        // Mencakup sumber di bawah 294 kbps (area bug lama) sampai 5 Mbps; durasi 60 dtk, tanpa audio.
+        for (bps in listOf(100_000L, 150_000L, 200_000L, 250_000L, 294_000L, 300_000L, 500_000L, 1_000_000L, 5_000_000L)) {
+            val ukuranSumber = bps * 60L / 8
+            val hasil = checkNotNull(
+                estimasi(
+                    lebar = 1920, tinggi = 1080, durasiSumberMs = 60_000L, ukuranSumberByte = ukuranSumber,
+                    durasiKlipMs = 60_000L, mute = true,
+                ),
+            ) { "estimasi null utk sumber $bps bps" }
+            assertTrue("sumber $bps bps: estimasi $hasil tidak lebih kecil dari sumber $ukuranSumber", hasil < ukuranSumber)
+        }
+    }
+
+    // ---- compressVideoBitrateBps (aturan bitrate video Kompres, dipakai bersama ekspor & pratinjau) ----
+
+    @Test
+    fun bitrateKompres_tanpaInfoSumber_hanyaDijepitKeBatasKeras() {
+        assertEquals(250_000.0, VideoResizer.compressVideoBitrateBps(100_000.0, null), 0.0) // naik ke lantai 250 kbps
+        assertEquals(1_000_000.0, VideoResizer.compressVideoBitrateBps(1_000_000.0, null), 0.0)
+        assertEquals(50_000_000.0, VideoResizer.compressVideoBitrateBps(119_439_360.0, null), 0.0) // turun ke plafon 50 Mbps
+    }
+
+    @Test
+    fun bitrateKompres_batasSumber85Persen_menangAtasLantai250kbps() {
+        // sumber 280 kbps: 85% = 238.000 (< lantai 250.000, > lantai mutlak 64.000) -> 238.000
+        assertEquals(238_000.0, VideoResizer.compressVideoBitrateBps(3_732_480.0, 280_000.0), 1e-6)
+        // target level di bawah lantai tetap dinaikkan ke 250.000 bila batas sumber (850.000) longgar
+        assertEquals(250_000.0, VideoResizer.compressVideoBitrateBps(100_000.0, 1_000_000.0), 0.0)
+    }
+
+    @Test
+    fun bitrateKompres_batasSumberDiAtasTarget_tidakMenaikkanTarget() {
+        assertEquals(1_000_000.0, VideoResizer.compressVideoBitrateBps(1_000_000.0, 5_000_000.0), 0.0)
+    }
+
+    @Test
+    fun bitrateKompres_sumberNolAtauNegatif_dianggapTakDiketahui() {
+        assertEquals(1_000_000.0, VideoResizer.compressVideoBitrateBps(1_000_000.0, 0.0), 0.0)
+        assertEquals(1_000_000.0, VideoResizer.compressVideoBitrateBps(1_000_000.0, -5.0), 0.0)
+    }
+
+    @Test
+    fun bitrateKompres_tidakPernahDiBawahLantaiMutlak64kbps_dan_selaluPositif() {
+        assertEquals(64_000.0, VideoResizer.compressVideoBitrateBps(3_000_000.0, 10_000.0), 0.0)
+        assertEquals(64_000.0, VideoResizer.compressVideoBitrateBps(3_000_000.0, 0.5), 0.0) // sumber ~0 bps: encoder tetap dapat nilai > 0
+        assertEquals(64, VideoResizer.MIN_COMPRESS_BITRATE_KBPS)
+        assertTrue(VideoResizer.MIN_COMPRESS_BITRATE_KBPS < VideoResizer.MIN_BITRATE_KBPS)
     }
 
     @Test

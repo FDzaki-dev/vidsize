@@ -678,14 +678,13 @@ class VideoResizer(private val context: Context) {
      * probed), capped so it never exceeds ~85% of the source's own
      * estimated bitrate (see [estimateSourceBitrateBps]) — the actual
      * guarantee that compressing an already-efficient source doesn't grow
-     * it.
+     * it. Batch 78: urutan jepit/batas kini ada di [compressVideoBitrateBps]
+     * (dipakai bersama pratinjau); batas sumber MENANG atas lantai [MIN_BITRATE_KBPS].
      */
     private fun computeCompressTargetBitrateBps(request: CompressRequest, w: Int, h: Int): Int {
         val fps = if (request.sourceFps > 0) request.sourceFps else CompressionLevel.ASSUMED_FPS
-        val levelTargetBps = (w.toDouble() * h.toDouble() * fps * request.level.targetBitsPerPixelPerFrame).toLong()
-        val sourceBps = estimateSourceBitrateBps(request)
-        val cappedBps = if (sourceBps != null && sourceBps > 0) minOf(levelTargetBps, (sourceBps * 0.85).toLong()) else levelTargetBps
-        return cappedBps.coerceIn(MIN_BITRATE_KBPS.toLong() * 1000, MAX_BITRATE_KBPS.toLong() * 1000).toInt()
+        val levelTargetBps = w.toDouble() * h.toDouble() * fps * request.level.targetBitsPerPixelPerFrame
+        return compressVideoBitrateBps(levelTargetBps, estimateSourceBitrateBps(request)?.toDouble()).toInt()
     }
 
     /**
@@ -732,6 +731,26 @@ class VideoResizer(private val context: Context) {
         /** Hard floor/ceiling so a bad custom value can't produce an unusable file or an encoder crash. */
         const val MIN_BITRATE_KBPS = 250
         const val MAX_BITRATE_KBPS = 50_000
+
+        /**
+         * Lantai MUTLAK bitrate video mode Kompres (Batch 78), jauh di bawah [MIN_BITRATE_KBPS]: hanya agar
+         * `VideoEncoderSettings.setBitrate` (wajib > 0) tak menerima nilai absurd dari sumber berbitrate nyaris nol.
+         */
+        const val MIN_COMPRESS_BITRATE_KBPS = 64
+
+        /**
+         * Bitrate video (bps) mode Kompres; dipakai bersama ekspor ([computeCompressTargetBitrateBps]) dan pratinjau
+         * ([estimateCompressedSizeBytes]) supaya keduanya tak bisa berbeda. Urutan (Batch 78): (1) target level dijepit ke
+         * [MIN_BITRATE_KBPS]..[MAX_BITRATE_KBPS]; (2) bila bitrate video sumber diketahui (> 0), dibatasi 85%-nya — batas
+         * sumber MENANG atas lantai (1) karena itulah jaminan "kompres tak membesarkan file" (dulu lantai dikenakan SETELAH
+         * batas, sehingga sumber < ~294 kbps dienkode ulang ke 250 kbps = membesar); (3) tak pernah di bawah
+         * [MIN_COMPRESS_BITRATE_KBPS].
+         */
+        fun compressVideoBitrateBps(levelTargetBps: Double, sourceVideoBps: Double?): Double {
+            val levelClamped = levelTargetBps.coerceIn(MIN_BITRATE_KBPS * 1000.0, MAX_BITRATE_KBPS * 1000.0)
+            val capped = if (sourceVideoBps != null && sourceVideoBps > 0) minOf(levelClamped, sourceVideoBps * 0.85) else levelClamped
+            return capped.coerceAtLeast(MIN_COMPRESS_BITRATE_KBPS * 1000.0)
+        }
 
         /** Resolves the final output width/height (0,0 means "keep original"). */
         fun computeTargetDimensions(request: ResizeRequest): Pair<Int, Int> {
@@ -865,8 +884,7 @@ class VideoResizer(private val context: Context) {
             val sourceVideoBps = if (sourceDurationMs > 0 && sourceFileSizeBytes > 0) {
                 (((sourceFileSizeBytes * 8.0) / (sourceDurationMs / 1000.0)) - audioBps).coerceAtLeast(0.0)
             } else null
-            val cappedVideoBps = if (sourceVideoBps != null && sourceVideoBps > 0) minOf(levelTargetBps, sourceVideoBps * 0.85) else levelTargetBps
-            val finalVideoBps = cappedVideoBps.coerceIn(MIN_BITRATE_KBPS * 1000.0, MAX_BITRATE_KBPS * 1000.0)
+            val finalVideoBps = compressVideoBitrateBps(levelTargetBps, sourceVideoBps)
             val seconds = clipDurationMs / 1000.0
             return ((finalVideoBps + audioBps) * seconds / 8.0).toLong()
         }

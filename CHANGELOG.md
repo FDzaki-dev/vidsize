@@ -1,5 +1,30 @@
 # Changelog
 
+## Batch 78: Verifikasi run #19 (HIJAU PENUH) + perbaikan bitrate Kompres: batas 85% sumber menang atas lantai 250 kbps
+
+User mengunggah `Vidsize_laporan-untuk-claude_run19.zip` dan menulis "saya izinkan selama itu membuahkan hasil" (izin mengubah logika produksi untuk temuan Batch 77). Sumber = `Vidsize_v77.zip` (hasil batch sebelumnya).
+
+Hasil run #19 (commit d51ce38): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); SpotBugs LULUS (0); detekt LULUS (0); lintDebug LULUS (0); kompilator Kotlin 0 peringatan; Tes unit LULUS (33 tes, 0 dilewati = 7 `CrashLoggerTest` + 6 `SocialPresetTest` + 19 `VideoResizerKalkulasiTest` + 1 `ArchitectureTest`). Seluruh prediksi resume point Batch 77 terbukti, termasuk risiko inisialisasi kelas `VideoResizer` di classpath tes AGP yang TIDAK terjadi.
+
+### MASALAH (temuan Batch 77)
+Di mode Kompres, lantai `MIN_BITRATE_KBPS` (250 kbps) dikenakan SESUDAH batas 85% bitrate video sumber (`coerceIn` di akhir `computeCompressTargetBitrateBps`; idem `estimateCompressedSizeBytes`). Sumber berbitrate video < ~294 kbps (85% < 250 kbps) dienkode ulang ke 250 kbps = file KELUARAN LEBIH BESAR dari sumber, bertentangan dgn jaminan KDoc "kompres tak membesarkan file". Jalur Resizer tak terkena (tak punya batas relatif-sumber).
+
+### PERUBAHAN (2 berkas kode; di bawah batas 3-5; ada perubahan logika produksi atas izin user)
+- `app/src/main/java/com/example/videoresizer/VideoResizer.kt` — (1) +`companion.compressVideoBitrateBps(levelTargetBps, sourceVideoBps)`: target level dijepit ke 250..50.000 kbps DULU, lalu dibatasi 85% bitrate video sumber (bila diketahui > 0) — batas sumber MENANG atas lantai — lalu tak pernah di bawah lantai mutlak; (2) +`MIN_COMPRESS_BITRATE_KBPS = 64` (lantai mutlak; `VideoEncoderSettings.setBitrate` wajib > 0, jadi sumber berbitrate nyaris nol tak boleh menghasilkan nilai absurd); (3) `computeCompressTargetBitrateBps` (ekspor) dan `estimateCompressedSizeBytes` (pratinjau) kini sama-sama memanggil fungsi (1) sehingga ekspor dan "Perkiraan hasil" tak bisa berbeda lagi. Tidak ada perubahan di jalur Resizer (`requestedBitrateBps`, `estimateOutputSizeBytes`, `requiredBitrateKbpsForTargetSize`) maupun UI/`MainActivity`.
+- `app/src/test/java/com/example/videoresizer/VideoResizerKalkulasiTest.kt` — tes karakterisasi "lantai menang" diganti `estimasi_sumberBitrateRendah_batasSumberMengalahkanLantai250kbps` (100 kbps -> 85.000 byte, bukan 250.000); +`estimasi_sumberDiBawahLantaiMutlak_dijepitKe64kbps`; +`estimasi_seluruhKlip_semuaBitrateSumberDiAtasLantaiMutlak_tidakPernahLebihBesarDariSumber` (sapuan 100 kbps..5 Mbps); +5 tes langsung `compressVideoBitrateBps` (tanpa info sumber, batas 85% menang atas lantai, batas di atas target tak menaikkan, sumber 0/negatif = tak diketahui, lantai mutlak 64 kbps & selalu positif). Total tes file ini 26 (dari 19).
+- Docs: `PROJECT_STATE.md`, `CHANGELOG.md`, `FILE_MANIFEST.txt`.
+
+### VERIFIED (statis, sandbox)
+- Kompiler: Kotlin 2.0.21 bawaan distribusi Gradle sandbox, `-language-version 1.9 -api-version 1.9 -Werror` (kotlinc 1.9.24 tak tersedia): 0 peringatan. Cakupan kompilasi: `SocialPreset.kt` ASLI utuh + enum/data class/companion + dua fungsi private ekspor Kompres (`computeCompressTargetBitrateBps`, `estimateSourceBitrateBps`) `VideoResizer.kt` diekstrak programatik VERBATIM ke kelas `VideoResizer` kerangka (stub `android.net.Uri`; badan lain yg memakai Media3/Android TIDAK dikompilasi) + kedua berkas tes, JUnit 4.13.2 asli.
+- Eksekusi JVM (`JUnitCore`): 32 tes (6 + 26), 32 lulus, 0 gagal.
+- Uji diferensial lama-vs-baru (HARNESS SAJA, tidak dikirim; refleksi atas fungsi private `computeCompressTargetBitrateBps`): 1152 kombinasi (4 resolusi x 4 fps x 2 level x 9 bitrate sumber x 4 profil audio). 640 kasus IDENTIK (selisih <= 1 bps karena trunkasi Long->Double); 512 kasus berubah, SEMUANYA memenuhi pola: baru < lama, baru >= 64 kbps, lama <= 250 kbps (= bug lama); 0 pelanggaran pola. Bitrate ekspor == bitrate tersirat estimasi pratinjau pada seluruh kasus (0 selisih > 200 byte). Kasus estimasi > ukuran sumber (klip penuh 60 dtk): lama 384 -> baru 128 (sisanya = sumber 20 kbps < lantai mutlak, disengaja).
+- Uji mutasi: 8 mutasi pada kode baru (lantai dikenakan sesudah batas / 0,85->0,90 / lantai mutlak 64->0 dan 64->300 / `> 0` -> `>= 0` / target tak dijepit dulu / batas sumber dihapus / pratinjau tak pakai fungsi bersama) semuanya TERDETEKSI; 8 mutasi lama diulang, semua terdeteksi. Satu mutasi (`else -> 128_000.0` pada `estimateSourceBitrateBps` private) tidak terdeteksi tes terkirim karena fungsi itu private + butuh `Uri` (hanya tercakup uji diferensial sandbox); mutasi pada salinan di companion terdeteksi.
+- detekt-cli 1.23.8 lokal (config proyek, `--build-upon-default-config`) atas `app/src/main/java` + `app/src/test/java`: 0 temuan, exit 0.
+- Produksi lain tidak berubah: `app/src/main` selain `VideoResizer.kt`, `app/build.gradle.kts`, `build.yml`, `android-artifact.yml`, `release.keystore` identik dgn v77.
+
+### NOT VERIFIED
+Build Gradle/AGP penuh, `testReleaseUnitTest` sungguhan atas ZIP ini, ArchUnit/SpotBugs/lint, perilaku encoder H.265 nyata pada bitrate rendah (64-250 kbps) di HP, dan akurasi estimasi vs file nyata. `computeCompressTargetBitrateBps` (private) tak terjangkau tes CI.
+
 ## Batch 77: Verifikasi run #18 (HIJAU PENUH) + tes perilaku `SocialPresetTest` & `VideoResizerKalkulasiTest`
 
 User mengunggah `Vidsize_v76.zip` + `Vidsize_laporan-untuk-claude_run18.zip` tanpa teks tambahan (pola sama: lanjut ke batch berikutnya).

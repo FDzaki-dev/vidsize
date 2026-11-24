@@ -1,5 +1,17 @@
 # Changelog
 
+## Batch 73: Verifikasi run #14 (hijau penuh) — docs saja, nol perubahan kode
+
+User mengunggah `Vidsize_laporan-untuk-claude_run14.zip` (hasil push Batch 72, commit a70e94a, run #14), tanpa instruksi tambahan.
+
+Hasil run #14: semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran — `AppUpdater.kt` sebagai klien logger terbukti tidak melanggar aturan "mandiri"); SpotBugs LULUS (0 temuan);
+lintDebug LULUS (0 isu); kompilator 0; 1 tes unit lulus (hanya generator laporan, BUKAN bukti perilaku); detekt 20 (`TooGenericExceptionCaught`, jumlah sama dengan run #11-#13; hanya nomor baris bergeser,
+mis. `AppUpdater.kt` 143/192, `GifExporter.kt` 89/145). Semua prediksi Batch 72 TERBUKTI: tidak ada temuan baru dari 6 panggilan `logCaught`.
+
+Triase: tidak ada temuan CI yang bisa ditindak. Sisa detekt x20 = aturan gaya, bukan bug; TIDAK difilter karena tidak ada bukti baru yang mendukung penyaringan (aturan: filter hanya dengan bukti dari laporan +
+pembacaan kode). Batch ini hanya mencatat verifikasi di `PROJECT_STATE.md` dan `CHANGELOG.md`; versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
+NOT VERIFIED (tetap): perilaku di HP — penulisan `Documents/VideoResizer/logs/error_*.txt` dari 6 situs Batch 72 dan 9 situs Batch 70 belum dicoba (butuh kegagalan nyata, mis. video rusak atau ekspor gagal).
+
 ## Batch 72: Verifikasi run #13 (SpotBugs 0) + log mentah `Documents/` untuk sisa catch yang menelan pengecualian (GifExporter, AppUpdater, 2 probe sumber video)
 
 User mengunggah `Vidsize_laporan-untuk-claude_run13.zip` (hasil push Batch 71, commit 2542764, run #13), tanpa instruksi tambahan; dilanjutkan ke "sisa kandidat" resume point Batch 71.

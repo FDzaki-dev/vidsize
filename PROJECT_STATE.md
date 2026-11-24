@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 72**. This is the first-read file per the context
+Snapshot as of **Batch 73**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,8 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 73 (docs saja, nol perubahan kode):** run #14 HIJAU PENUH (SpotBugs 0, detekt 20, kompilator 0, lint 0, ArchUnit 12/0; semua prediksi Batch 72 terbukti). Tidak ada temuan CI yang bisa ditindak;
+  verifikasi perilaku di HP masih NOT VERIFIED. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 72 (4 berkas kode/tes):** run #13 HIJAU (SpotBugs 0, detekt 20, kompilator 0, lint 0, ArchUnit 12/0). `CrashLogger.logCaught` dipasang di 6 catch yang menelan pengecualian: `GifExporter.kt` (2),
   `AppUpdater.kt` (`check` generik + `download`), `MainActivity.kt` (`loadSourceMetadata`, `loadSourceInfo`); `AppUpdater.kt` masuk `LOGGER_CLIENT_FILES` di `ArchitectureTest.kt`. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 71 (3 berkas kode):** run #12 HIJAU (SpotBugs 7, detekt 20, kompilator 0, lint 0, ArchUnit 12/0; tanpa temuan baru dari `logCaught`). 7 temuan `RV_RETURN_VALUE_IGNORED` diperbaiki: hasil
@@ -268,6 +270,12 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 73]** Verifikasi run #14 (hijau penuh) -> **SELESAI di CI untuk statis/kompilasi; perilaku di HP NOT VERIFIED** (kode TIDAK berubah, hanya docs) ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP (docs saja; push tetap memicu build rilis baru oleh `build.yml`). (2) Uji manual di HP (user) = satu-satunya verifikasi tersisa: pilih video rusak/tak terbaca ->
+cek `Documents/VideoResizer/logs/error_*.txt` (`Tag: loadSourceMetadata`/`loadSourceInfo` + stacktrace mentah); ekspor video/GIF yang gagal -> `error_*.txt`; "Unduh & Pasang" pembaruan tetap berjalan.
+(3) Tidak ada temuan CI yang bisa ditindak: SpotBugs 0, lint 0, kompilator 0, ArchUnit 12/0; sisa detekt `TooGenericExceptionCaught` x20 = gaya, TIDAK difilter (tak ada bukti baru; `startForeground` HARUS tetap
+`Exception`). Butir berikutnya menunggu arahan user (bug/fitur dari uji HP), bukan perbaikan laporan CI. Butir (1) resume point Batch 72 TERBUKTI (run #14 sesuai prediksi); resume point Batch 72 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 72]** Triase run #13 + `logCaught` di `GifExporter.kt` (2), `AppUpdater.kt` (2), `MainActivity.kt` (2) + `AppUpdater.kt` jadi klien logger -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
 **LANGKAH BERIKUTNYA:** (1) push ZIP; run #14 diharapkan: build hijau, ArchUnit 12/0 (bila ada pelanggaran: baca `kelas proyek dari berkas lain` pada aturan "mandiri: AppUpdater.kt" — JANGAN longgarkan lebih luas
 tanpa bukti), SpotBugs 0, detekt 20, lint 0, kompilator 0. Bila build MERAH: baca `e:` di laporan; jalan balik = hapus 6 baris `CrashLogger.logCaught(...)` batch ini dan kembalikan `LOGGER_CLIENT_FILES` ke 3 berkas.

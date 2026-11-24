@@ -93,7 +93,7 @@ Galeri, same as the rest of the app.
    quality/bitrate control either — `DefaultEncoderFactory` and
    `VideoEncoderSettings` both live in `media3-transformer`, already a
    dependency).
-3. Run on a device/emulator with **API 24+**.
+3. Run on a device/emulator with **API 31+ (Android 12+)**.
 
 ## Building from a phone only (no PC / Android Studio)
 
@@ -609,7 +609,7 @@ the GitHub Actions route above is much faster in practice.
   per-layar, border+shape 4 Card, 2 gradient CTA jadi theme-aware). Tidak
   ada blur asli (`RenderEffect`/API 31+) — efek kaca dicapai lewat
   transparansi + border tipis + gradasi latar, jadi tetap konsisten di
-  semua versi Android yang didukung app (minSdk 24).
+  semua versi Android yang didukung app (minSdk 31 sejak Batch 80; sebelumnya 24).
 - **Status build speed**: **Batch 4** (lihat `CHANGELOG.md`) mempercepat CI
   (`assembleRelease` di GitHub Actions) lewat `gradle.properties` (heap
   daemon lebih besar, `org.gradle.caching`, `-XX:+UseParallelGC`),

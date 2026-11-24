@@ -11,7 +11,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.videoresizer"
-        minSdk = 24
+        // Batch 80: minSdk 24 -> 31 (Android 12+, sesuai prioritas proyek); perangkat < Android 12 tak bisa memasang/memperbarui app ini.
+        minSdk = 31
         targetSdk = 34
         // versionCode is dynamic (Batch 7): every CI build gets its own
         // code by reading VERSION_CODE_OVERRIDE (set from $GITHUB_RUN_NUMBER
@@ -110,7 +111,7 @@ android {
         // lewat `gradle lintDebug` (workflow `android-artifact.yml`).
         abortOnError = false
         warningsAsErrors = false
-        // WHITELIST kelas cacat nyata (bukan gaya/i18n/nag versi): WrongConstant, NewApi (minSdk 24 -> relevan),
+        // WHITELIST kelas cacat nyata (bukan gaya/i18n/nag versi): WrongConstant, NewApi (minSdk 31),
         // MissingPermission + pemeriksaan performa Compose + locale. Dikeluarkan sengaja: GradleDependency/
         // NewerVersionAvailable (nag versi; Media3 sengaja dipin 1.4.1, lihat komentar dependency di bawah), HardcodedText/
         // ContentDescription (i18n/gaya), UseKtx. ConfigurationScreenWidthHeight TIDAK dimasukkan: baru ada di Compose UI

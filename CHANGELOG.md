@@ -1,5 +1,41 @@
 # Changelog
 
+## Batch 80: minSdk 24 -> 31 (Android 12+)
+
+User: "naikkan minSdk. minimal android >12". Ditafsirkan Android 12 ke atas = API 31+ (aturan proyek "Fokus dan prioritas pada Android 12 ke atas (API 31+)"); bila yang dimaksud Android 13 (API 33), cukup ubah satu angka di `app/build.gradle.kts`.
+
+### PERUBAHAN (1 berkas konfigurasi + docs; kode Kotlin TIDAK berubah)
+- `app/build.gradle.kts` — `minSdk = 24` -> `minSdk = 31` (+ satu baris komentar alasan) dan komentar whitelist lint "NewApi (minSdk 24 -> relevan)" -> "(minSdk 31)". `compileSdk`/`targetSdk` 34, signing, `versionCode`, R8/minify, dependensi TIDAK berubah.
+- `README.md` — "API 24+" -> "API 31+ (Android 12+)" dan catatan minSdk di bagian tema.
+- `PROJECT_STATE.md`, `CHANGELOG.md`, `FILE_MANIFEST.txt`.
+
+### DAMPAK
+- Perangkat Android 11 ke bawah tidak bisa memasang maupun memperbarui app (termasuk lewat `AppUpdater`): `INSTALL_FAILED_OLDER_SDK`.
+- Seluruh dependensi (Media3 1.4.1, Compose BOM 2024.06, OkHttp 4.12, Okio) bermin-SDK <= 31, jadi tidak ada konflik manifest-merger yang diharapkan.
+- Cek `SDK_INT` untuk API <= 31 di 8 berkas kini kode mati (daftar di PROJECT_STATE, resume point Batch 80); sengaja TIDAK dibersihkan di batch ini (di luar permintaan, risiko regresi, menyentuh banyak berkas).
+
+### VERIFIED (statis)
+- Diff `app/build.gradle.kts` vs v79 = tepat 2 hunk (3 baris berubah/ditambah); tidak ada pemakai `minSdk` lain di `*.kts`/`*.gradle`/`*.xml`/`*.yml`/`*.properties`/`*.toml` (hanya komentar); `ObsoleteSdkInt` tidak ada di whitelist lint.
+
+### NOT VERIFIED
+Build Gradle/AGP (tidak ada di sandbox), manifest merger, ArchUnit/SpotBugs/detekt/lint, tes unit, dan pemasangan di HP.
+
+## Batch 79: Verifikasi run #20 (HIJAU PENUH) — HANYA dokumentasi, kode TIDAK berubah
+
+User mengunggah `Vidsize_laporan-untuk-claude_run20.zip` tanpa teks tambahan.
+
+Hasil run #20 (commit c4c9d71, atas `Vidsize_v78.zip`): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); SpotBugs LULUS (0); detekt LULUS (0); lintDebug LULUS (0); kompilator Kotlin 0 peringatan; Tes unit LULUS (40 tes, 0 dilewati = 7 `CrashLoggerTest` + 6 `SocialPresetTest` + 26 `VideoResizerKalkulasiTest` + 1 `ArchitectureTest`). Prediksi resume point Batch 78 terbukti persis (jumlah tes 40, semua nol).
+
+### VERIFIED (CI)
+- Perbaikan Kompres Batch 78 (`compressVideoBitrateBps`, `MIN_COMPRESS_BITRATE_KBPS`, ekspor+pratinjau memakai fungsi bersama) terkompilasi di Gradle/AGP asli dgn 0 peringatan dan 8 tes barunya lulus di JUnit asli; `VideoResizer.kt` utuh (termasuk fungsi private `computeCompressTargetBitrateBps`) terkompilasi — yang di sandbox hanya diuji lewat kerangka ekstrak.
+- Tidak ada temuan ArchUnit/SpotBugs/detekt/lint baru dari perubahan logika produksi Batch 78.
+
+### NOT VERIFIED
+Perilaku di HP: ukuran hasil Kompres untuk sumber berbitrate rendah, perilaku encoder H.265 pada bitrate 64-250 kbps, akurasi "Perkiraan hasil", dan butir uji manual Batch 74/75. `computeCompressTargetBitrateBps` (private + `Uri`) tetap tak punya tes CI. Laporan "Tes unit: LULUS" BUKAN bukti perilaku UI/ekspor di HP.
+
+### PERUBAHAN
+Hanya `PROJECT_STATE.md`, `CHANGELOG.md`, `FILE_MANIFEST.txt` (stempel Batch). Nol berkas kode/konfigurasi; versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
+
 ## Batch 78: Verifikasi run #19 (HIJAU PENUH) + perbaikan bitrate Kompres: batas 85% sumber menang atas lantai 250 kbps
 
 User mengunggah `Vidsize_laporan-untuk-claude_run19.zip` dan menulis "saya izinkan selama itu membuahkan hasil" (izin mengubah logika produksi untuk temuan Batch 77). Sumber = `Vidsize_v77.zip` (hasil batch sebelumnya).

@@ -1,5 +1,5 @@
 FILE_MANIFEST.txt — Video Resizer
-Generated: Batch 6, last updated Batch 78. Regenerate/update this file
+Generated: Batch 6, last updated Batch 80. Regenerate/update this file
 whenever files are added, removed, or renamed — it should always match
 `find . -type f` for real.
 Legend: [PROTECTED] = edit-parsial-only per user preferences; deleting or
@@ -25,7 +25,7 @@ ROOT
   FILE_MANIFEST.txt                        this file
 
 app/
-  build.gradle.kts                         [PROTECTED] app module: Batch 69: +okhttp 4.12.0 +okio 3.6.0 (hanya AppUpdater.download()); Batch 59: +plugin detekt, lint non-blocking + whitelist checkOnly, blok detekt + pin Kotlin 2.0.21, apply SpotBugs opt-in, +testImplementation junit/archunit; deps (media3 1.4.1 since Batch 9, material-icons-extended already present), signingConfig, minifyEnabled=false, lint.checkReleaseBuilds=false; Batch 22: versionName fully automated ("$appVersionMajor.$VERSION_CODE_OVERRIDE") — no more hand-bumped semanticVersionName literal, see PROJECT_STATE.md Standing rules
+  build.gradle.kts                         [PROTECTED] app module: Batch 80: minSdk 24 -> 31 (Android 12+); Batch 69: +okhttp 4.12.0 +okio 3.6.0 (hanya AppUpdater.download()); Batch 59: +plugin detekt, lint non-blocking + whitelist checkOnly, blok detekt + pin Kotlin 2.0.21, apply SpotBugs opt-in, +testImplementation junit/archunit; deps (media3 1.4.1 since Batch 9, material-icons-extended already present), signingConfig, minifyEnabled=false, lint.checkReleaseBuilds=false; Batch 22: versionName fully automated ("$appVersionMajor.$VERSION_CODE_OVERRIDE") — no more hand-bumped semanticVersionName literal, see PROJECT_STATE.md Standing rules
   proguard-rules.pro                       R8 rules (inactive while isMinifyEnabled=false)
 
 app/src/test/java/com/example/videoresizer/

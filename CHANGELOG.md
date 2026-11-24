@@ -1,5 +1,36 @@
 # Changelog
 
+## Batch 64: Perbaikan build rusak run #5 — `ThreadLocal` dibayangi import Compose
+
+User mengunggah `Vidsize_laporan-untuk-claude_run5.zip` tanpa teks (hasil push Batch 63, commit 1bbc27f).
+
+Hasil run #5: BUILD GAGAL di `:app:compileReleaseKotlin` (26 dtk) -> ArchUnit, tes unit, SpotBugs, lintDebug, peringatan kompilator
+semuanya NOT VERIFIED (alat tak jalan, BUKAN bersih); hanya detekt yang terbentuk (37 temuan, sama dengan run #4). Karena
+`compileReleaseKotlin` gagal, workflow `Build APK` (rilis) pada commit itu juga ikut gagal.
+
+Akar masalah (KESALAHAN Batch 63, terbukti dari log): `VideoPickerScreen.kt` memakai `import androidx.compose.runtime.*`. Di Kotlin,
+impor bintang MENGALAHKAN impor default `java.lang.*`, sehingga nama `ThreadLocal` di berkas ini terselesaikan ke
+`androidx.compose.runtime.ThreadLocal` (kelas `internal`, final) — bukan `java.lang.ThreadLocal`. Error persis: "Cannot access
+'ThreadLocal': it is internal in 'androidx.compose.runtime'", "This type is final", "No value passed for parameter 'initialValue'",
+dan `Unresolved reference` pada `.get()` (VideoPickerScreen.kt:167-171). Batch 63 tidak bisa mengompilasi di sandbox (tak ada kotlinc/
+Gradle/SDK) dan risiko ini tidak terlihat dari pembacaan berkas.
+
+Perubahan (1 berkas non-docs):
+- `VideoPickerScreen.kt` — `object : ThreadLocal<SimpleDateFormat>()` -> `object : java.lang.ThreadLocal<SimpleDateFormat>()` (nama penuh);
+  komentar menjelaskan pembayangan. Logika, format tanggal, dan pemanggil (`formatPickerDate`) tidak berubah. `get()` tetap
+  `SimpleDateFormat!` sehingga baris pemakaian tak diubah.
+
+Hanya error `ThreadLocal` yang muncul di log (5 pesan unik, semuanya `VideoPickerScreen.kt:167-171`); TIDAK ada error di `MainActivity.kt`
+sehingga perubahan Batch 63 lainnya (ikon `Icons.AutoMirrored.Filled.*` termasuk `BrandingWatermark`, cast, `doneMessage`, parameter
+`themePref`) lolos tahap analisis kompilator. Catatan: lolos analisis bukan bukti lolos codegen/tes — tetap tunggu run #6.
+Pemeriksaan wildcard lain: `MainActivity.kt` juga mengimpor `androidx.compose.runtime.*` tetapi tidak memakai `ThreadLocal`.
+
+Dampak yang diharapkan di run #6 (BELUM terverifikasi): build hijau; peringatan kompilator 13 -> 1; SpotBugs 226 -> 157 bila filter
+`<Source name="LazyDsl.kt"/>` (Batch 63) bekerja. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
+
+Verifikasi: `diff` terhadap Batch 63 (hanya 3 baris komentar + 1 baris deklarasi); keseimbangan kurung berkas. NOT VERIFIED: kompilasi
+Kotlin (sandbox tanpa kotlinc/Gradle/SDK), build, tes, lint, SpotBugs, detekt.
+
 ## Batch 63: Triase laporan CI run #4 — ikon AutoMirrored, 3 peringatan kompilator, SimpleDateFormat thread-safe, filter LazyDsl
 
 User mengunggah `Vidsize_v62.zip` + `Vidsize_laporan-untuk-claude_run4.zip` tanpa teks (hasil push Batch 62, commit 8b939ef);

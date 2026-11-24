@@ -163,8 +163,9 @@ private fun formatPickerSize(bytes: Long): String {
 // Indonesian day/month labels ("24 Juli, 2026"), matching the app's existing
 // Indonesian-language UI strings rather than the device's raw locale.
 // SimpleDateFormat TIDAK thread-safe: satu instance per thread (ThreadLocal) agar aman bila pemanggil berpindah
-// thread (temuan SpotBugs STCAL_INVOKE_ON_STATIC_DATE_FORMAT_INSTANCE run #4).
-private val pickerDateFormat = object : ThreadLocal<SimpleDateFormat>() {
+// thread (temuan SpotBugs STCAL_INVOKE_ON_STATIC_DATE_FORMAT_INSTANCE run #4). WAJIB java.lang.ThreadLocal penuh:
+// `import androidx.compose.runtime.*` membayangi nama `ThreadLocal` dengan versi internal Compose (build run #5 gagal).
+private val pickerDateFormat = object : java.lang.ThreadLocal<SimpleDateFormat>() {
     override fun initialValue(): SimpleDateFormat = SimpleDateFormat("d MMMM, yyyy", Locale("in", "ID"))
 }
 private fun formatPickerDate(epochSec: Long): String =

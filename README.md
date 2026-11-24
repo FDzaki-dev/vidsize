@@ -531,6 +531,9 @@ the GitHub Actions route above is much faster in practice.
 
 ## Project & CI notes (baca ini dulu sebelum ubah setup build/git)
 
+- **Impor bintang membayangi java.lang (Batch 64)**: `MainActivity.kt` dan `VideoPickerScreen.kt` memakai `import androidx.compose.runtime.*`;
+  impor bintang mengalahkan impor default `java.lang.*`, jadi `ThreadLocal` terselesaikan ke kelas `internal` Compose dan build gagal
+  (run #5). Pakai nama penuh `java.lang.ThreadLocal`. Sandbox Claude tak bisa mengompilasi: perubahan tipe/impor baru terbukti hanya di CI.
 - **Ikon & format tanggal (Batch 63)**: ikon berarah (`ArrowBack`, `ArrowForward`, `Sort`, `BrandingWatermark`) WAJIB
   `Icons.AutoMirrored.Filled.*` (import `androidx.compose.material.icons.automirrored.filled.*`), bukan `Icons.Filled.*` (deprecated).
   `SimpleDateFormat` tidak boleh disimpan sebagai satu instance bersama — pakai `ThreadLocal` (lihat `pickerDateFormat`).

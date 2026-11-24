@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 63**. This is the first-read file per the context
+Snapshot as of **Batch 64**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,9 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 64 (1 berkas non-docs):** memperbaiki build rusak run #5: `VideoPickerScreen.kt` `ThreadLocal` -> `java.lang.ThreadLocal`
+  (`import androidx.compose.runtime.*` membayangi nama dengan kelas internal Compose). Versi/tag/keystore/signing/Stale Run Guard
+  TIDAK berubah.
 - **Batch 63 (3 berkas non-docs):** 9 situs ikon -> `Icons.AutoMirrored.Filled.*` (`MainActivity.kt` x7, `VideoPickerScreen.kt` x2), 3 peringatan
   kompilator ditutup (cast tak perlu, `val message` membayangi, param `themePref` `ResizerScreen` dihapus), `pickerDateFormat` jadi
   `ThreadLocal`, `exclude.xml` + sumber `LazyDsl.kt` (kode inline Compose, bukan proyek). Versi/tag/keystore/signing/Stale Run Guard
@@ -243,6 +246,16 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 64]** Build rusak run #5 (`ThreadLocal` dibayangi `androidx.compose.runtime.*`) -> **SELESAI di ZIP, NOT VERIFIED di
+CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #6 harus HIJAU (`compileReleaseKotlin`). Bila masih gagal, baca baris `e:` di
+laporan (hanya `VideoPickerScreen.kt:167-171` yang gagal di run #5; `MainActivity.kt` lolos analisis). (2) Semua target Batch 63 masih
+menunggu verifikasi karena run #5 tak menghasilkan ArchUnit/tes/SpotBugs/lint/peringatan kompilator: peringatan kompilator 13 -> 1 (sisa
+`setTransformationRequest` `VideoResizer.kt:508`), SpotBugs 226 -> 157 bila filter `LazyDsl.kt` bekerja (bila 225: filter tak cocok ->
+baca SARIF, jangan perluas tanpa bukti), lint 0 isu (artifact hanya memuat `.txt`). (3) PELAJARAN: berkas ber-`import androidx.compose.runtime.*`
+(`MainActivity.kt`, `VideoPickerScreen.kt`) membayangi nama `java.lang` yang sama — pakai nama penuh (`java.lang.ThreadLocal`), jangan
+mengandalkan impor default; sandbox tak bisa mengompilasi, jadi perubahan yang menyentuh nama tipe/impor berisiko NOT VERIFIED sampai CI.
+(4) Sisa kandidat Batch 63 butir (3)-(4) tetap berlaku. Resume point Batch 63 & 62 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 63]** Triase run #4: ikon AutoMirrored (9 situs), 3 peringatan kompilator, `SimpleDateFormat` ThreadLocal, filter
 SpotBugs `LazyDsl.kt` -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #5 diharapkan: peringatan
 kompilator 13 -> 1 (sisa `setTransformationRequest` `VideoResizer.kt:508`), SpotBugs 226 -> 157 bila filter `<Source name="LazyDsl.kt"/>` bekerja

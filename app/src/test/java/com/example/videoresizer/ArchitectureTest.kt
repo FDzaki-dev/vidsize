@@ -205,8 +205,10 @@ class ArchitectureTest {
         /** Logger daun (Batch 70): satu-satunya berkas proyek yang boleh dipakai oleh [LOGGER_CLIENT_FILES]; ia sendiri tetap mandiri. */
         const val LOGGER_FILE = "CrashLogger.kt"
 
-        /** Berkas mesin yang memanggil `CrashLogger.logCaught` (Batch 70) — dikecualikan dari "mandiri" HANYA untuk [LOGGER_FILE]. */
-        val LOGGER_CLIENT_FILES = setOf("VideoResizer.kt", "PublicMovieExporter.kt", "ExportForegroundService.kt")
+        /** Berkas mesin yang memanggil `CrashLogger.logCaught` (Batch 70; `AppUpdater.kt` ditambah Batch 72) — dikecualikan dari "mandiri" HANYA untuk [LOGGER_FILE]. */
+        val LOGGER_CLIENT_FILES = setOf(
+            "VideoResizer.kt", "PublicMovieExporter.kt", "ExportForegroundService.kt", "AppUpdater.kt",
+        )
 
         /** Berkas yang SAAT INI tidak bergantung ke berkas proyek lain mana pun, kecuali logger daun (Batch 59/70, dari kode sumber). */
         val STANDALONE_FILES = listOf(

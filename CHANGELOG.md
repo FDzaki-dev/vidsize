@@ -1,5 +1,27 @@
 # Changelog
 
+## Batch 72: Verifikasi run #13 (SpotBugs 0) + log mentah `Documents/` untuk sisa catch yang menelan pengecualian (GifExporter, AppUpdater, 2 probe sumber video)
+
+User mengunggah `Vidsize_laporan-untuk-claude_run13.zip` (hasil push Batch 71, commit 2542764, run #13), tanpa instruksi tambahan; dilanjutkan ke "sisa kandidat" resume point Batch 71.
+
+Hasil run #13: semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); SpotBugs LULUS (0 temuan) — 7 temuan `RV_RETURN_VALUE_IGNORED` Batch 71 TERBUKTI hilang; lintDebug LULUS (0 isu);
+kompilator 0; 1 tes unit lulus (hanya generator laporan, BUKAN bukti perilaku); detekt 20 (`TooGenericExceptionCaught`, jumlah sama; hanya nomor baris bergeser).
+
+Triase: catch di bawah ini mengubah pengecualian jadi pesan UI (`e.message`) atau `null` tanpa stacktrace; pengguna memakai Termux tanpa adb, jadi aturan guard "logger menangkap pengecualian mentah ke `Documents/`"
+belum terpenuhi untuknya. Dipasang `CrashLogger.logCaught(context, tag, e)` (API Batch 70; thread latar, retensi 50 `error_*`, tak pernah melempar) di 6 situs; tidak ada catch baru, perilaku UI/alur TIDAK berubah.
+
+Perubahan (4 berkas kode/tes; di dalam batas 3-5):
+- `GifExporter.kt` — `export`: catch baca frame (`GifExporter.export.readFrames`) dan catch tulis GIF (`GifExporter.export.encode`).
+- `AppUpdater.kt` — `check`: HANYA catch `Exception` generik (`AppUpdater.check`; mis. JSON rusak/respons tak terduga). Catch `IOException` (tak ada koneksi, pola yang diharapkan) SENGAJA tidak dicatat agar tiap cek
+  update saat offline tidak menulis berkas log. `download`: catch pembersihan (`AppUpdater.download`; HTTP gagal/IO gagal), pengecualian tetap dilempar ulang ke `MainActivity.kt` untuk pesan UI.
+- `MainActivity.kt` — `loadSourceMetadata` dan `loadSourceInfo` (probe video yang baru dipilih; sekali per pilih): `logCaught` tepat setelah `Log.e` yang sudah ada.
+- `ArchitectureTest.kt` — `LOGGER_CLIENT_FILES` += `AppUpdater.kt` (boleh bergantung HANYA ke `CrashLogger.kt`, sama seperti 3 berkas Batch 70). Jumlah aturan tetap 12. `GifExporter.kt` tidak ada di daftar
+  "mandiri", dan hanya terkena aturan mesin (non-UI, non-Compose) yang tetap dipenuhi.
+
+Sengaja TIDAK disentuh: `MainActivity.kt` `decodeSampledBitmapFromFile` (4347) dan `extractVideoThumbnail` (4377) — dipanggil per thumbnail/daftar, frekuensi tinggi dan bernilai rendah, akan membanjiri `Documents/`
+(tetap `Log.e` ke logcat); catch unduhan `MainActivity.kt` (1978) — kegagalan unduh sudah dicatat di `AppUpdater.download`; detekt `TooGenericExceptionCaught` x20 (gaya, bukan bug; `startForeground` HARUS tetap `Exception`).
+NOT VERIFIED: kompilasi Kotlin (tak ada kotlinc/gradle di sandbox; hanya cek keseimbangan kurung = BALANCED), build/tes/lint/SpotBugs/detekt/ArchUnit pasca-ubah, dan penulisan `error_*.txt` di HP.
+
 ## Batch 71: Verifikasi run #12 (build hijau) + 7 temuan SpotBugs `RV_RETURN_VALUE_IGNORED` diperbaiki (hasil `mkdirs()`/`delete()` kini dipakai)
 
 User mengunggah `Vidsize_laporan-untuk-claude_run12.zip` (hasil push Batch 70, commit 434cc3c, run #12).

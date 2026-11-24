@@ -141,6 +141,7 @@ object AppUpdater {
         } catch (e: IOException) {
             CheckResult.Error(e.message ?: "Tidak bisa terhubung ke GitHub")
         } catch (e: Exception) {
+            CrashLogger.logCaught(context, "AppUpdater.check", e)
             CheckResult.Error(e.message ?: "Gagal memeriksa update")
         } finally {
             conn?.disconnect()
@@ -189,6 +190,7 @@ object AppUpdater {
                 }
                 outFile
             } catch (e: Exception) {
+                CrashLogger.logCaught(context, "AppUpdater.download", e)
                 if (!outFile.delete() && outFile.exists()) {
                     e.addSuppressed(IOException("Gagal menghapus berkas unduhan parsial: ${outFile.absolutePath}"))
                 }

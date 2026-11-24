@@ -4504,6 +4504,7 @@ private fun GifScreen(
             if (d > 0) Triple(d, w, h) else null
         } catch (e: Exception) {
             android.util.Log.e(LOG_TAG, "loadSourceMetadata", e)
+            CrashLogger.logCaught(context, "loadSourceMetadata", e)
             null
         } finally {
             retriever.release()
@@ -4971,6 +4972,7 @@ private fun CompressorScreen(onBack: () -> Unit) {
             if (d > 0 && size > 0) CompressSourceInfo(d, w, h, size, fps, hasAudio, audioBitrateBps) else null
         } catch (e: Exception) {
             android.util.Log.e(LOG_TAG, "loadSourceInfo", e)
+            CrashLogger.logCaught(context, "loadSourceInfo", e)
             null
         } finally {
             retriever.release()

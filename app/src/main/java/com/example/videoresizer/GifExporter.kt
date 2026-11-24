@@ -87,6 +87,7 @@ object GifExporter {
                 onProgress((((i + 1) * 40) / frameCount).coerceIn(0, 40))
             }
         } catch (e: Exception) {
+            CrashLogger.logCaught(context, "GifExporter.export.readFrames", e)
             bitmaps.forEach { it.recycle() }
             return GifExportResult.Failure(e.message ?: "Gagal membaca video sumber")
         } finally {
@@ -142,6 +143,7 @@ object GifExporter {
             onProgress(100)
             GifExportResult.Success(outputFile, indexedFrames.size)
         } catch (e: Exception) {
+            CrashLogger.logCaught(context, "GifExporter.export.encode", e)
             runCatching { outputFile.delete() }
             GifExportResult.Failure(e.message ?: "Gagal menulis file GIF")
         }

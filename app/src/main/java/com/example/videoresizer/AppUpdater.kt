@@ -158,7 +158,10 @@ object AppUpdater {
      */
     suspend fun download(context: Context, info: UpdateInfo, onProgress: (Float) -> Unit): File =
         withContext(Dispatchers.IO) {
-            val outDir = File(context.cacheDir, "updates").apply { mkdirs() }
+            val outDir = File(context.cacheDir, "updates")
+            if (!outDir.isDirectory && !outDir.mkdirs() && !outDir.isDirectory) {
+                throw IOException("Gagal membuat folder unduhan: ${outDir.absolutePath}")
+            }
             val outFile = File(outDir, "update.apk")
             try {
                 val requestBuilder = Request.Builder()
@@ -186,7 +189,9 @@ object AppUpdater {
                 }
                 outFile
             } catch (e: Exception) {
-                outFile.delete()
+                if (!outFile.delete() && outFile.exists()) {
+                    e.addSuppressed(IOException("Gagal menghapus berkas unduhan parsial: ${outFile.absolutePath}"))
+                }
                 throw e
             }
         }

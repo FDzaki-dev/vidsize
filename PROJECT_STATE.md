@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 70**. This is the first-read file per the context
+Snapshot as of **Batch 71**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,8 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 71 (3 berkas kode):** run #12 HIJAU (SpotBugs 7, detekt 20, kompilator 0, lint 0, ArchUnit 12/0; tanpa temuan baru dari `logCaught`). 7 temuan `RV_RETURN_VALUE_IGNORED` diperbaiki: hasil
+  `mkdirs()`/`delete()` kini dipakai di `AppUpdater.kt` (2), `PublicMovieExporter.kt` (2), `MainActivity.kt` (3, via `ensureThumbDir`). Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 70 (5 berkas kode/tes):** run #11 HIJAU (SpotBugs 7, detekt 20, kompilator 0, lint 0, ArchUnit 12/0). KEPUTUSAN ARSITEKTUR (diserahkan user ke Claude): pengecualian TERTANGKAP kini dicatat
   mentah ke `Documents/VideoResizer/logs/error_<ts>_<uuid>.txt` lewat `CrashLogger.logCaught` (thread latar, retensi 50 per awalan, tak pernah melempar); dipasang di `VideoResizer.kt` (start + `onError`
   resize/compress), `PublicMovieExporter.kt` (4 catch), `ExportForegroundService.kt` (`startForeground`). Aturan ArchUnit "mandiri" dilonggarkan SEMPIT: 3 berkas itu boleh bergantung ke `CrashLogger.kt`
@@ -264,6 +266,14 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 71]** Triase run #12 + `RV_RETURN_VALUE_IGNORED` x7 diperbaiki (`mkdirs()`/`delete()` kini dipakai hasilnya) -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP; run #13 diharapkan: build hijau, ArchUnit 12/0, detekt 20 (tak berubah), lint 0, kompilator 0, SpotBugs 0 temuan `RV_RETURN_VALUE_IGNORED` (bila masih ada: baca
+`[elemen kode]` dan baris di laporan, JANGAN menyaring tanpa bukti). Bila build MERAH: baca `e:` di laporan; jalan balik = kembalikan 7 situs ke bentuk Batch 70 (`.apply { mkdirs() }` / `outFile.delete()`),
+hapus `ensureThumbDir` di `MainActivity.kt` dan `import java.io.IOException` di `PublicMovieExporter.kt`. (2) Uji manual di HP (user): "Unduh & Pasang" pembaruan tetap jalan; ekspor video -> thumbnail muncul di
+riwayat. (3) Sisa kandidat: pasang `logCaught` di `GifExporter.kt` (89/144), catch `MainActivity.kt` (1978/4347/4364/4492/4959), `AppUpdater.kt` (butuh `LOGGER_CLIENT_FILES` += `AppUpdater.kt`); detekt
+`TooGenericExceptionCaught` x20 (`startForeground` HARUS tetap `Exception`). Tidak diverifikasi di sandbox: kompilasi Kotlin, build/tes/lint/SpotBugs/detekt, perilaku di HP. Butir (1) resume point Batch 70
+TERBUKTI (run #12 sesuai prediksi); resume point Batch 70 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 70]** Triase run #11 + `CrashLogger.logCaught` (catch tertangkap -> `Documents/`) + aturan ArchUnit "mandiri" dilonggarkan sempit -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
 **LANGKAH BERIKUTNYA:** (1) push ZIP; run #12 diharapkan: build hijau, ArchUnit 12/0 (bila ada pelanggaran: baca `kelas proyek dari berkas lain` pada aturan "mandiri" — kemungkinan kelas sintetis
 `CrashLogger$...` salah dipetakan `fileOf`, JANGAN longgarkan lebih luas tanpa bukti), detekt 20, lint 0, kompilator 0, SpotBugs 7 (+ mungkin temuan baru di `CrashLogger.kt`, mis.

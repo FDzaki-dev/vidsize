@@ -1763,7 +1763,7 @@ private fun ResizerScreen(
                             resultThumbnailFile = null
 
                             val id = UUID.randomUUID().toString()
-                            val thumbDir = File(context.cacheDir, "thumbs").apply { mkdirs() }
+                            val thumbDir = ensureThumbDir(context.cacheDir)
                             val request = ResizeRequest(
                                 sourceUri = uri,
                                 outputFile = File(context.cacheDir, "resized_$id.mp4"),
@@ -2231,7 +2231,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                 }
 
                 val id = UUID.randomUUID().toString()
-                val thumbDir = File(context.cacheDir, "thumbs").apply { mkdirs() }
+                val thumbDir = ensureThumbDir(context.cacheDir)
                 // Target-size mode resolves per item here, against this
                 // item's own probed `dur` — see targetSizeMb's doc comment
                 // above for why this can't be solved once for the whole
@@ -4351,6 +4351,19 @@ private fun decodeSampledBitmapFromFile(path: String, reqHeightPx: Int): Bitmap?
 }
 
 /** Grabs the first frame of [videoFile] and saves it as a JPEG at [thumbnailFile]. Returns success. */
+/**
+ * Folder cache thumbnail (`cacheDir/thumbs`). Hasil `mkdirs()` dipakai, bukan diabaikan.
+ * Best-effort: gagal hanya dicatat ke logcat dan tidak melempar — [extractVideoThumbnail]
+ * lalu gagal sendiri dan mengembalikan `false` (thumbnail dilewati, ekspor tetap jalan).
+ */
+private fun ensureThumbDir(cacheDir: File): File {
+    val dir = File(cacheDir, "thumbs")
+    if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) {
+        android.util.Log.w(LOG_TAG, "ensureThumbDir: gagal membuat ${dir.absolutePath}")
+    }
+    return dir
+}
+
 private fun extractVideoThumbnail(videoFile: File, thumbnailFile: File): Boolean {
     val retriever = MediaMetadataRetriever()
     return try {
@@ -5230,7 +5243,7 @@ private fun CompressorScreen(onBack: () -> Unit) {
                                                         val displayName = result.outputFile.name
                                                         val publicUri = PublicMovieExporter.publish(context, result.outputFile, displayName)
                                                         val size = result.outputFile.length()
-                                                        val thumbDir = File(context.cacheDir, "thumbs").apply { mkdirs() }
+                                                        val thumbDir = ensureThumbDir(context.cacheDir)
                                                         val thumbnailFile = File(thumbDir, "thumb_$id.jpg")
                                                         if (extractVideoThumbnail(result.outputFile, thumbnailFile)) {
                                                             VideoHistoryStore.add(

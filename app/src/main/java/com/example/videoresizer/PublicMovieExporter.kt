@@ -10,6 +10,7 @@ import android.provider.MediaStore
 import android.util.Log
 import java.io.File
 import java.io.FileInputStream
+import java.io.IOException
 
 /**
  * Publishes a locally-rendered video file into the device's public
@@ -83,7 +84,9 @@ object PublicMovieExporter {
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES),
                 RELATIVE_SUBFOLDER
             )
-            if (!moviesDir.exists()) moviesDir.mkdirs()
+            if (!moviesDir.isDirectory && !moviesDir.mkdirs() && !moviesDir.isDirectory) {
+                throw IOException("Gagal membuat folder ${moviesDir.absolutePath}")
+            }
 
             val destFile = File(moviesDir, displayName)
             sourceFile.copyTo(destFile, overwrite = true)
@@ -159,7 +162,9 @@ object PublicMovieExporter {
                 Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES),
                 RELATIVE_SUBFOLDER
             )
-            if (!picturesDir.exists()) picturesDir.mkdirs()
+            if (!picturesDir.isDirectory && !picturesDir.mkdirs() && !picturesDir.isDirectory) {
+                throw IOException("Gagal membuat folder ${picturesDir.absolutePath}")
+            }
 
             val destFile = File(picturesDir, displayName)
             sourceFile.copyTo(destFile, overwrite = true)

@@ -1,5 +1,29 @@
 # Changelog
 
+## Batch 71: Verifikasi run #12 (build hijau) + 7 temuan SpotBugs `RV_RETURN_VALUE_IGNORED` diperbaiki (hasil `mkdirs()`/`delete()` kini dipakai)
+
+User mengunggah `Vidsize_laporan-untuk-claude_run12.zip` (hasil push Batch 70, commit 434cc3c, run #12).
+
+Hasil run #12: semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran — pelonggaran sempit aturan "mandiri" Batch 70 TERBUKTI aman); 1 tes unit lulus (hanya generator laporan, BUKAN bukti perilaku);
+lintDebug LULUS (0 isu); kompilator 0; detekt 20 (`TooGenericExceptionCaught`, tak berubah); SpotBugs 7 (semuanya `RV_RETURN_VALUE_IGNORED_BAD_PRACTICE`, TANPA temuan baru dari `CrashLogger.logCaught` —
+kekhawatiran `SIC_INNER_SHOULD_BE_STATIC_ANON` pada lambda `ThreadFactory` TIDAK terjadi).
+
+Triase 7 temuan (dibaca di titik kode): semuanya nyata, bukan noise. `File.mkdirs()` mengembalikan `false` bila gagal membuat folder, dan hasilnya dibuang; kegagalan baru muncul belakangan sebagai
+`FileNotFoundException` generik, jauh dari penyebab aslinya. `File.delete()` pada pembersihan unduhan parsial juga membuang hasil.
+
+Perubahan (3 berkas kode, tanpa perubahan perilaku pada jalur sukses):
+- `AppUpdater.kt` — `download()`: folder `cacheDir/updates` dibuat dengan hasil `mkdirs()` diperiksa; gagal -> `IOException("Gagal membuat folder unduhan: ...")` (ditangkap pemanggil yang sudah ada di
+  `MainActivity.kt` -> `CheckResult.Error`). Blok `catch` pembersihan: bila `outFile.delete()` gagal dan berkas masih ada, kegagalan itu ditempelkan lewat `e.addSuppressed(...)`; pengecualian asli tetap
+  dilempar ulang tanpa diubah.
+- `PublicMovieExporter.kt` — `publishViaLegacyStorage` dan `publishImageViaLegacyStorage`: `if (!dir.exists()) dir.mkdirs()` -> `if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) throw IOException(...)`
+  di dalam `try` yang sudah ada, sehingga akar masalah tercatat mentah oleh `Log.e` + `CrashLogger.logCaught` (sebelumnya hanya `FileNotFoundException` dari `copyTo`). `import java.io.IOException` ditambah.
+- `MainActivity.kt` — fungsi privat baru `ensureThumbDir(cacheDir)` (KDoc ringkas) menggantikan 3 situs identik `File(context.cacheDir, "thumbs").apply { mkdirs() }`. Best-effort: gagal hanya dicatat ke
+  logcat (`LOG_TAG`), tidak melempar — `extractVideoThumbnail` sudah menangani kegagalan tulis dengan `false` (thumbnail dilewati, ekspor jalan terus).
+
+Aturan ArchUnit tidak tersentuh (hanya `java.io.IOException` JDK + fungsi privat satu-berkas; tidak ada dependensi baru antar berkas proyek).
+Sengaja TIDAK disentuh: detekt `TooGenericExceptionCaught` x20 (gaya, bukan bug; `startForeground` HARUS tetap `Exception`), pemasangan `logCaught` di `GifExporter.kt`/catch `MainActivity.kt`/`AppUpdater.kt`.
+NOT VERIFIED: kompilasi Kotlin (tak ada kotlinc/gradle di sandbox; hanya cek keseimbangan kurung = BALANCED), build/tes/lint/SpotBugs/detekt pasca-ubah, dan perilaku di HP.
+
 ## Batch 70: Verifikasi run #11 (build hijau) + keputusan arsitektur: pengecualian TERTANGKAP dicatat mentah ke `Documents/` lewat `CrashLogger.logCaught`
 
 User mengunggah `Vidsize_laporan-untuk-claude_run11.zip`, lalu menyerahkan keputusan arsitektur ke Claude ("keputusan ditangan mu. yang penting terus berproses").

@@ -415,7 +415,9 @@ internal fun VideoPickerScreen(
     }
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        Column(modifier = Modifier.fillMaxSize()) {
+        // Batch 74 (guard edge-to-edge): layar ini menimpa seluruh jendela (bukan di dalam Scaffold), jadi inset navigation
+        // bar (bawah + sisi) dipasang di sini; inset status bar ditangani TopAppBar (windowInsets bawaan M3).
+        Column(modifier = Modifier.fillMaxSize().windowInsetsPadding(WindowInsets.navigationBars)) {
             TopAppBar(
                 title = {
                     Text(
@@ -468,13 +470,13 @@ internal fun VideoPickerScreen(
                     Tab(
                         selected = tab == PickerTab.VIDEOS,
                         onClick = { tab = PickerTab.VIDEOS },
-                        text = { Text("Videos") },
+                        text = { Text("Video") },
                         icon = { Icon(Icons.Filled.PlayCircleOutline, contentDescription = null) }
                     )
                     Tab(
                         selected = tab == PickerTab.FOLDERS,
                         onClick = { tab = PickerTab.FOLDERS },
-                        text = { Text("Folders") },
+                        text = { Text("Folder") },
                         icon = { Icon(Icons.Filled.Folder, contentDescription = null) }
                     )
                 }

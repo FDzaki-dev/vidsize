@@ -9,6 +9,7 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
@@ -31,6 +32,7 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -68,6 +70,7 @@ import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -80,6 +83,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -124,6 +128,10 @@ class MainActivity : ComponentActivity() {
     @androidx.annotation.OptIn(UnstableApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Batch 74 (guard "WindowInsets edge-to-edge"): jendela digambar di balik status/navigation bar sejak frame pertama.
+        // Gaya bar mengikuti tema aplikasi lewat `VideoResizerTheme` (DisposableEffect -> enableEdgeToEdge); inset ditangani
+        // Scaffold/TopAppBar (status bar), `padding(padding)` tiap layar (bar bawah), dan Surface akar di bawah (keyboard + cutout).
+        enableEdgeToEdge()
         setContent {
             // Batch 57 (root-cause fix — user: "regresi persisten pada theme
             // yang di select user"): this used to be `remember { mutableStateOf(
@@ -164,7 +172,14 @@ class MainActivity : ComponentActivity() {
             val strongHaptic = remember(baseHaptic) { VibratorHapticFeedback(context, baseHaptic) }
             androidx.compose.runtime.CompositionLocalProvider(LocalHapticFeedback provides strongHaptic) {
                 VideoResizerTheme(style = resolvedStyle, dynamicColor = false) {
-                    Surface(color = MaterialTheme.colorScheme.background) {
+                    // Batch 74: jendela tak lagi di-resize sistem saat keyboard muncul (decorFitsSystemWindows = false), jadi
+                    // keyboard (imePadding) dan cutout layar samping (landscape) ditangani sekali di akar untuk semua layar.
+                    Surface(
+                        modifier = Modifier
+                            .windowInsetsPadding(WindowInsets.displayCutout.only(WindowInsetsSides.Horizontal))
+                            .imePadding(),
+                        color = MaterialTheme.colorScheme.background
+                    ) {
                         VideoResizerApp(onThemePrefChange = {
                             themePref = it
                             themePrefsStore.edit().putString("theme_preference", it.name).apply()
@@ -623,27 +638,27 @@ private fun ResizerScreen(
     var downloadProgress by remember { mutableStateOf<Float?>(null) }
     var downloadedApk by remember { mutableStateOf<File?>(null) }
 
-    var selectedUri by remember { mutableStateOf<Uri?>(null) }
+    var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     // PERF: mutableStateOf<Long/Int>() boxes every value on write. These are
     // read constantly (every OptionSection, the trim math, the resize
     // button) across a screen with high recomposition churn from dragging,
     // so the specialized mutableLongStateOf/mutableIntStateOf primitives
     // (which store an unboxed long/int under the hood) avoid that per-write
     // allocation.
-    var durationMs by remember { mutableLongStateOf(0L) }
-    var sourceWidth by remember { mutableIntStateOf(0) }
-    var sourceHeight by remember { mutableIntStateOf(0) }
-    var aspectRatio by remember { mutableStateOf(AspectRatioOption.ORIGINAL) }
-    var resolution by remember { mutableStateOf(ResolutionOption.ORIGINAL) }
-    var resizeMode by remember { mutableStateOf(ResizeMode.CROP) }
-    var rotation by remember { mutableStateOf(RotationOption.NONE) }
+    var durationMs by rememberSaveable { mutableLongStateOf(0L) }
+    var sourceWidth by rememberSaveable { mutableIntStateOf(0) }
+    var sourceHeight by rememberSaveable { mutableIntStateOf(0) }
+    var aspectRatio by rememberSaveable { mutableStateOf(AspectRatioOption.ORIGINAL) }
+    var resolution by rememberSaveable { mutableStateOf(ResolutionOption.ORIGINAL) }
+    var resizeMode by rememberSaveable { mutableStateOf(ResizeMode.CROP) }
+    var rotation by rememberSaveable { mutableStateOf(RotationOption.NONE) }
     // Flip/frame-rate: independent output-transform controls alongside
     // rotation. Kept as separate state (not folded into `rotation`) since
     // flip and rotation compose freely and the UI offers them as two
     // separate chip rows.
-    var flip by remember { mutableStateOf(FlipOption.NONE) }
-    var frameRate by remember { mutableStateOf(FrameRateOption.ORIGINAL) }
-    var muteAudio by remember { mutableStateOf(false) }
+    var flip by rememberSaveable { mutableStateOf(FlipOption.NONE) }
+    var frameRate by rememberSaveable { mutableStateOf(FrameRateOption.ORIGINAL) }
+    var muteAudio by rememberSaveable { mutableStateOf(false) }
     var trimRange by remember { mutableStateOf(0f..1f) }
     var isProcessing by remember { mutableStateOf(false) }
     // UX FIX: "Processing…" used to be an indefinite spinner with no
@@ -691,14 +706,14 @@ private fun ResizerScreen(
     }
     var showMoreMenu by remember { mutableStateOf(false) }
     var showCustomResDialog by remember { mutableStateOf(false) }
-    var customWidth by remember { mutableStateOf<Int?>(null) }
-    var customHeight by remember { mutableStateOf<Int?>(null) }
+    var customWidth by rememberSaveable { mutableStateOf<Int?>(null) }
+    var customHeight by rememberSaveable { mutableStateOf<Int?>(null) }
     // Quality/bitrate control: lets the user trade file size vs visual
     // quality instead of resolution being the only size lever, plus a live
     // "Perkiraan ukuran" estimate before committing to an export.
-    var quality by remember { mutableStateOf(QualityOption.ORIGINAL) }
+    var quality by rememberSaveable { mutableStateOf(QualityOption.ORIGINAL) }
     var showCustomBitrateDialog by remember { mutableStateOf(false) }
-    var customBitrateKbps by remember { mutableStateOf<Int?>(null) }
+    var customBitrateKbps by rememberSaveable { mutableStateOf<Int?>(null) }
     // "Ukuran target (MB)" — an alternate entry point into the same
     // quality=CUSTOM/customBitrateKbps fields above rather than a separate
     // ResizeRequest field: the dialog below just solves MB -> kbps via
@@ -710,23 +725,23 @@ private fun ResizerScreen(
     // Watermark/logo overlay — a still image, drawn in a fixed corner at a
     // fixed opacity/size for the whole clip. watermarkUri null = no watermark.
     var watermarkUri by remember { mutableStateOf<Uri?>(null) }
-    var watermarkPosition by remember { mutableStateOf(WatermarkPosition.BOTTOM_RIGHT) }
-    var watermarkOpacityPercent by remember { mutableFloatStateOf(70f) }
-    var watermarkScalePercent by remember { mutableFloatStateOf(18f) }
+    var watermarkPosition by rememberSaveable { mutableStateOf(WatermarkPosition.BOTTOM_RIGHT) }
+    var watermarkOpacityPercent by rememberSaveable { mutableFloatStateOf(70f) }
+    var watermarkScalePercent by rememberSaveable { mutableFloatStateOf(18f) }
     // Caption overlay — short burned-in text, same fixed-position idea as
     // the watermark above but rendered from typed text instead of a picked
     // image. captionText blank = no caption.
-    var captionText by remember { mutableStateOf("") }
-    var captionPosition by remember { mutableStateOf(WatermarkPosition.BOTTOM_RIGHT) }
+    var captionText by rememberSaveable { mutableStateOf("") }
+    var captionPosition by rememberSaveable { mutableStateOf(WatermarkPosition.BOTTOM_RIGHT) }
     // One-tap "export for TikTok/IG/YouTube" preset. Selecting one just sets
     // aspect/resolution/quality to matching values below — it's a shortcut,
     // not a separate code path, so it stays in sync with manual overrides:
     // touching resolution/quality manually afterward silently clears it.
-    var selectedSocialPreset by remember { mutableStateOf<SocialPreset?>(null) }
+    var selectedSocialPreset by rememberSaveable { mutableStateOf<SocialPreset?>(null) }
     // Tab aktif panel setting (Preset/Ukuran/Kualitas/Overlay/Lainnya) — lihat
     // ResizerSettingsTab. Reset ke PRESET tiap video baru dipilih supaya tab
     // yang tersisa terbuka dari sesi sebelumnya tidak nyangkut.
-    var selectedSettingsTab by remember { mutableStateOf(ResizerSettingsTab.PRESET) }
+    var selectedSettingsTab by rememberSaveable { mutableStateOf(ResizerSettingsTab.PRESET) }
     // Progress speed/ETA: derived purely from the existing percentage feed
     // (see VideoResizer.resize's poll loop) plus a wall-clock start time, no
     // new Media3 API surface needed — elapsed/percent*(100-percent) is the
@@ -1181,7 +1196,7 @@ private fun ResizerScreen(
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showMoreMenu = false; onOpenCompressor() }
                             )
                             DropdownMenuItem(
-                                text = { Text("Batch export") },
+                                text = { Text("Ekspor Batch") },
                                 leadingIcon = { Icon(Icons.Filled.Layers, contentDescription = null) },
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showMoreMenu = false; onOpenBatch() }
                             )
@@ -1207,12 +1222,12 @@ private fun ResizerScreen(
                             )
                             androidx.compose.material3.HorizontalDivider()
                             DropdownMenuItem(
-                                text = { Text("Tema: Dark") },
+                                text = { Text("Tema: Gelap") },
                                 leadingIcon = { Icon(Icons.Filled.DarkMode, contentDescription = null) },
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onThemePrefChange(ThemePreference.DARK); showMoreMenu = false }
                             )
                             DropdownMenuItem(
-                                text = { Text("Tema: Light") },
+                                text = { Text("Tema: Terang") },
                                 leadingIcon = { Icon(Icons.Filled.LightMode, contentDescription = null) },
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onThemePrefChange(ThemePreference.LIGHT); showMoreMenu = false }
                             )
@@ -1373,7 +1388,7 @@ private fun ResizerScreen(
                             )
 
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                Text("Resolution", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                                Text("Resolusi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                                     items(ResolutionOption.ENTRIES) { option ->
                                         val isSelected = option == resolution
@@ -2115,14 +2130,21 @@ private fun BatchScreen(onBack: () -> Unit) {
         contract = ActivityResultContracts.PickMultipleVisualMedia(20)
     ) { uris: List<Uri> ->
         if (uris.isNotEmpty()) {
-            items = uris.map { uri ->
-                runCatching {
-                    context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            // Batch 74 (guard threading): takePersistableUriPermission + query nama = IPC/I/O (hingga 20 URI berurutan);
+            // dulu jalan langsung di Main di callback launcher. Kini di Dispatchers.IO; state diisi kembali di Main.
+            scope.launch {
+                val picked = withContext(Dispatchers.IO) {
+                    uris.map { uri ->
+                        runCatching {
+                            context.contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        BatchItem(uri = uri, displayName = queryDisplayName(context, uri))
+                    }
                 }
-                BatchItem(uri = uri, displayName = queryDisplayName(context, uri))
+                items = picked
+                thumbnails = emptyMap()
+                summaryMessage = null
             }
-            thumbnails = emptyMap()
-            summaryMessage = null
         }
     }
 
@@ -3722,10 +3744,16 @@ private fun SettingsTabBar(
                             Modifier
                         }
                     )
-                    .clickable {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        onSelect(tab)
-                    }
+                    // Batch 74 (Prioritas 7): `selectable` + Role.Tab memberi TalkBack status terpilih/tidak ("tab, terpilih");
+                    // perilaku sentuh/ripple/haptic sama persis dengan `clickable` sebelumnya.
+                    .selectable(
+                        selected = isSelected,
+                        role = Role.Tab,
+                        onClick = {
+                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            onSelect(tab)
+                        }
+                    )
                     .padding(vertical = 10.dp),
                 contentAlignment = Alignment.Center
             ) {
@@ -4043,6 +4071,8 @@ private fun StudioEntryCard(
             .fillMaxWidth()
             .combinedClickable(
                 onClick = { if (selectionMode) onToggleSelect() },
+                // Batch 74 (Prioritas 7): aksi tekan-lama (masuk mode pilih) kini terdengar di TalkBack.
+                onLongClickLabel = "Pilih beberapa",
                 onLongClick = onLongPress
             )
     ) {

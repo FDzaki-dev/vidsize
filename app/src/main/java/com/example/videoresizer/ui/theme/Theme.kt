@@ -1,7 +1,9 @@
 package com.example.videoresizer.ui.theme
 
-import android.app.Activity
 import android.os.Build
+import androidx.activity.ComponentActivity
+import androidx.activity.SystemBarStyle
+import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
@@ -12,14 +14,16 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
-import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
-import androidx.core.view.WindowCompat
+
+// Scrim navigation bar (navigasi 3-tombol) untuk edge-to-edge; nilai standar rekomendasi AndroidX (terang 90% putih, gelap 50% hitam).
+private val EdgeToEdgeLightScrim = android.graphics.Color.argb(0xe6, 0xFF, 0xFF, 0xFF)
+private val EdgeToEdgeDarkScrim = android.graphics.Color.argb(0x80, 0x1b, 0x1b, 0x16)
 
 /**
  * Whether Midnight Blue Glass is the currently active theme. Read by each
@@ -188,14 +192,18 @@ fun VideoResizerTheme(
         else -> Typography // unchanged from before this feature.
     }
 
+    // Batch 74 (guard "WindowInsets edge-to-edge"): `statusBarColor`/`navigationBarColor` opak dihapus (deprecated dan tak
+    // berefek di targetSdk 35; membuat jendela non-edge-to-edge). Gaya bar sistem kini diatur ulang saat `isDark` berubah:
+    // status bar transparan, ikon terang/gelap mengikuti TEMA APLIKASI (bukan tema sistem), scrim navigation bar hanya
+    // untuk navigasi 3-tombol. `MainActivity.onCreate` sudah memanggil `enableEdgeToEdge()` sebelum frame pertama.
     val view = LocalView.current
     if (!view.isInEditMode) {
-        SideEffect {
-            val window = (view.context as Activity).window
-            window.statusBarColor = colorScheme.background.toArgb()
-            window.navigationBarColor = colorScheme.background.toArgb()
-            WindowCompat.getInsetsController(window, view).isAppearanceLightStatusBars = !isDark
-            WindowCompat.getInsetsController(window, view).isAppearanceLightNavigationBars = !isDark
+        DisposableEffect(isDark) {
+            (view.context as ComponentActivity).enableEdgeToEdge(
+                statusBarStyle = SystemBarStyle.auto(android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT) { isDark },
+                navigationBarStyle = SystemBarStyle.auto(EdgeToEdgeLightScrim, EdgeToEdgeDarkScrim) { isDark }
+            )
+            onDispose { }
         }
     }
 

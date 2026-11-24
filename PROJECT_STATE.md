@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 73**. This is the first-read file per the context
+Snapshot as of **Batch 74**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,9 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 74 (4 berkas kode/konfigurasi):** audit UI/UX vs Vital Guards + perbaikan: edge-to-edge (`enableEdgeToEdge` di `MainActivity.onCreate`, `Theme.kt` `DisposableEffect` `SystemBarStyle.auto`, `Surface` akar `imePadding`+cutout,
+  `VideoPickerScreen.kt` `navigationBars`); `configChanges` diperluas; 22 state inti `ResizerScreen` -> `rememberSaveable`; `BatchScreen` pemilih -> `Dispatchers.IO`; 6 string UI Indonesia; tab bar `selectable`+`Role.Tab`; Studio `onLongClickLabel`.
+  NOT VERIFIED di CI/HP. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 73 (docs saja, nol perubahan kode):** run #14 HIJAU PENUH (SpotBugs 0, detekt 20, kompilator 0, lint 0, ArchUnit 12/0; semua prediksi Batch 72 terbukti). Tidak ada temuan CI yang bisa ditindak;
   verifikasi perilaku di HP masih NOT VERIFIED. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 72 (4 berkas kode/tes):** run #13 HIJAU (SpotBugs 0, detekt 20, kompilator 0, lint 0, ArchUnit 12/0). `CrashLogger.logCaught` dipasang di 6 catch yang menelan pengecualian: `GifExporter.kt` (2),
@@ -270,6 +273,11 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 74]** Audit UI/UX vs Vital Guards + perbaikan (edge-to-edge, `rememberSaveable` 22 state `ResizerScreen`, `configChanges` diperluas, I/O pemilih Batch ke IO, bahasa UI, semantics tab/Studio) -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP; run #15 diharapkan: build hijau, SpotBugs 0, detekt 20 (bisa bergeser), lint 0, kompilator 0, ArchUnit 12/0. API `enableEdgeToEdge`/`SystemBarStyle.auto`/`rememberSaveable`/`selectable` BELUM pernah dikompilasi di sandbox: bila build MERAH baca `e:` di laporan, jalan balik per butir di CHANGELOG Batch 74 (edge-to-edge: hapus `enableEdgeToEdge()` + modifier `Surface` akar + inset `VideoPickerScreen`, kembalikan `SideEffect` warna opak `Theme.kt`).
+(2) Uji manual di HP (user): bar status/navigasi transparan & konten tidak tertutup (portrait + landscape, navigasi gestur + 3-tombol); keyboard pada kolom teks caption/dialog tidak menutupi; ubah mode gelap sistem / ukuran font saat video terpilih -> pilihan TIDAK hilang; taruh app di background lama lalu buka lagi -> pengaturan layar utama pulih (video: bila gagal terbaca, pesan galat wajar, bukan crash); `Documents/VideoResizer/logs/error_*.txt` bila ada galat; TalkBack: tab terbaca "terpilih".
+(3) Sisa kandidat: `rememberSaveable` untuk Batch/GIF/Kompres/Studio; `Saver` `trimRange`; aksi aksesibilitas `TrimHandle`; label konteks progress; minSdk 24 vs prioritas API 31+ (menunggu keputusan user); WorkManager TIDAK dikerjakan (konflik dgn MICRO_POLISH_GUIDE "DILARANG refactor arsitektur"). Tidak diverifikasi di sandbox: kompilasi Kotlin, build/tes/lint/SpotBugs/detekt, perilaku di HP. Resume point Batch 73 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 73]** Verifikasi run #14 (hijau penuh) -> **SELESAI di CI untuk statis/kompilasi; perilaku di HP NOT VERIFIED** (kode TIDAK berubah, hanya docs) ->
 **LANGKAH BERIKUTNYA:** (1) push ZIP (docs saja; push tetap memicu build rilis baru oleh `build.yml`). (2) Uji manual di HP (user) = satu-satunya verifikasi tersisa: pilih video rusak/tak terbaca ->
 cek `Documents/VideoResizer/logs/error_*.txt` (`Tag: loadSourceMetadata`/`loadSourceInfo` + stacktrace mentah); ekspor video/GIF yang gagal -> `error_*.txt`; "Unduh & Pasang" pembaruan tetap berjalan.
@@ -509,6 +517,9 @@ sesi berikutnya:
    "Kompres GIF"): itu instruksi baru yang eksplisit, belum dieksekusi.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 74** — User: "audit kepatuhan UI/UX project terhadap aturan yang berlaku" (upload `Vidsize_v73.zip`), lalu "ya" atas tawaran perbaikan. Audit statis menemukan 4 FAIL (tidak edge-to-edge, 0 `rememberSaveable`/ViewModel dgn rotasi hanya
+  ditopang `configChanges` sempit, I/O pemilih Batch di Main, string campur Inggris/Indonesia) + semantics parsial. Perbaikan: `MainActivity.kt`, `Theme.kt`, `VideoPickerScreen.kt`, `AndroidManifest.xml` (4 berkas kode/konfigurasi, dalam batas).
+  Detail, daftar state, jalan balik, dan butir yang sengaja TIDAK dikerjakan: CHANGELOG.md Batch 74.
 - **Batch 70** — User: "keputusan ditangan mu. yang penting terus berproses" (+ upload laporan CI run #11). Run #11 membenarkan semua prediksi Batch 69 (OkHttp+Okio terkompilasi; SpotBugs 7, detekt 20, kompilator 0).
   Keputusan arsitektur: log tangkapan masuk `Documents/` (`CrashLogger.logCaught`, `error_*.txt`, thread latar, retensi 50 per awalan); dipasang di `VideoResizer.kt` (4 titik), `PublicMovieExporter.kt`
   (4), `ExportForegroundService.kt` (1); `ArchitectureTest.kt`: "mandiri" boleh bergantung ke `CrashLogger.kt` saja untuk 3 berkas itu (aturan tetap 12). 5 berkas kode/tes (dalam batas).

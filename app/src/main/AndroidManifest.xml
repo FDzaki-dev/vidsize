@@ -64,10 +64,13 @@
                 android:resource="@xml/file_paths" />
         </provider>
 
+        <!-- Batch 74: state Compose layar utama kini rememberSaveable, tetapi Activity tetap menangani sendiri perubahan
+             konfigurasi (rotasi, mode gelap sistem, ukuran font, bahasa, density, split-screen/foldable) supaya TIDAK
+             dibuat ulang: state layar lain (Batch/GIF/Kompres/Studio) masih `remember` biasa dan akan hilang bila dibuat ulang. -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
-            android:configChanges="orientation|screenSize|keyboardHidden"
+            android:configChanges="orientation|screenSize|keyboardHidden|screenLayout|smallestScreenSize|uiMode|fontScale|density|locale|layoutDirection|colorMode"
             android:theme="@style/Theme.VideoResizer">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

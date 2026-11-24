@@ -1,5 +1,38 @@
 # Changelog
 
+## Batch 74: Audit kepatuhan UI/UX terhadap aturan (Vital Guards + MICRO_POLISH_GUIDE) + perbaikan temuan
+
+User mengunggah `Vidsize_v73.zip` dan meminta "audit kepatuhan UI/UX project terhadap aturan yang berlaku"; setelah laporan audit statis (grep + baca kode di titik temuan) user menjawab "ya" -> perbaikan dikerjakan. Batch ini 4 berkas kode/konfigurasi (dalam batas 3-5) + 3 berkas dokumentasi.
+
+### TEMUAN AUDIT -> PERBAIKAN
+1. **Edge-to-edge/WindowInsets (FAIL -> diperbaiki).** Sebelumnya tidak ada `enableEdgeToEdge()`; `Theme.kt` mewarnai status/navigation bar opak (`statusBarColor`/`navigationBarColor`, deprecated & tak berefek di targetSdk 35).
+   - `MainActivity.kt`: `enableEdgeToEdge()` di `onCreate` sebelum `setContent`; `Surface` akar diberi `windowInsetsPadding(WindowInsets.displayCutout.only(Horizontal))` + `imePadding()` (jendela tak lagi di-resize sistem saat keyboard muncul).
+   - `Theme.kt`: `SideEffect` warna bar opak diganti `DisposableEffect(isDark)` -> `enableEdgeToEdge(statusBarStyle, navigationBarStyle)` dgn `SystemBarStyle.auto { isDark }` (ikon bar mengikuti TEMA APLIKASI; scrim hanya navigasi 3-tombol). Impor `Activity`/`SideEffect`/`toArgb`/`WindowCompat` yang tak terpakai dibuang.
+   - `VideoPickerScreen.kt`: layar ini menimpa seluruh jendela (bukan dalam Scaffold) -> `windowInsetsPadding(WindowInsets.navigationBars)` pada Column; status bar ditangani `TopAppBar`.
+   - Enam `Scaffold` layar lain TIDAK diubah: semuanya sudah memakai `padding(padding)` (dibaca satu per satu: baris 482, 1253, 2394, 3926/3937, 4643, 5104).
+2. **State tahan konfigurasi (FAIL -> diperbaiki, parsial).** Sebelumnya 0 `rememberSaveable`/ViewModel; rotasi selamat HANYA karena `configChanges` sempit (perubahan `uiMode`/`fontScale`/locale/density/split-screen membuat Activity dibuat ulang dan menghapus semua state).
+   - `AndroidManifest.xml`: `configChanges` diperluas (`screenLayout|smallestScreenSize|uiMode|fontScale|density|locale|layoutDirection|colorMode`) -> Activity tidak dibuat ulang untuk semua layar.
+   - `MainActivity.kt` `ResizerScreen`: 22 state inti -> `rememberSaveable` (hanya tipe aman-Bundle: `Uri?`, enum, `Int`/`Long`/`Float`/`Boolean`/`String`): `selectedUri`, `durationMs`, `sourceWidth`, `sourceHeight`, `aspectRatio`, `resolution`, `resizeMode`, `rotation`, `flip`, `frameRate`, `muteAudio`, `customWidth`, `customHeight`, `quality`, `customBitrateKbps`, `watermarkPosition`, `watermarkOpacityPercent`, `watermarkScalePercent`, `captionText`, `captionPosition`, `selectedSocialPreset`, `selectedSettingsTab`. Filmstrip diekstrak ulang otomatis oleh `LaunchedEffect(selectedUri, durationMs)` yang sudah ada.
+   - SENGAJA tidak disimpan: `trimRange` (`ClosedFloatingPointRange` bukan tipe Bundle; butuh `Saver` kustom), `watermarkUri` (URI Photo Picker hanya sementara; tak valid setelah proses mati), `File`/`Bitmap`/`Transformer`/flag dialog/progres.
+3. **I/O di Main (FAIL -> diperbaiki).** `BatchScreen`: callback `PickMultipleVisualMedia` memanggil `takePersistableUriPermission` + `queryDisplayName` (hingga 20 URI berurutan) langsung di Main -> kini `scope.launch { withContext(Dispatchers.IO) { ... } }`, state (`items`, `thumbnails`, `summaryMessage`) diisi di Main setelahnya.
+4. **Bahasa UI (regresi Prioritas 1, FAIL -> diperbaiki).** Batch 36 hanya menyapu 8 kata contoh; sisa campuran: `"Batch export"` -> `"Ekspor Batch"`, `"Resolution"` -> `"Resolusi"`, `"Tema: Dark/Light"` -> `"Tema: Gelap/Terang"`, `"Videos"`/`"Folders"` -> `"Video"`/`"Folder"`. Nama tema (Midnight Neon dst.) = nama diri, dibiarkan.
+5. **Semantics (Prioritas 7, parsial -> diperbaiki sebagian).** Tab bar kustom (`Box.clickable`) -> `Modifier.selectable(selected, role = Role.Tab)`; kartu Studio `combinedClickable` + `onLongClickLabel = "Pilih beberapa"`.
+
+### VERIFIED (statis, sandbox)
+- `diff -rq` terhadap `Vidsize_v73.zip`: HANYA `AndroidManifest.xml`, `MainActivity.kt`, `VideoPickerScreen.kt`, `Theme.kt` berubah (+ 3 dokumentasi).
+- Keseimbangan `{}`/`()`/`[]` (komentar & string dibuang): `MainActivity.kt` 1167/1167, 2291/2291, 11/11; `VideoPickerScreen.kt` 106/106, 232/232; `Theme.kt` 13/13, 47/47. `AndroidManifest.xml` XML well-formed.
+- Residual `Text("Batch export"|"Resolution"|"Videos"|"Folders"|"Tema: Dark"|"Tema: Light")` = 0. Tipe tiap state `rememberSaveable` dibaca di deklarasinya (semua enum/primitif/`Uri?`).
+- Tidak ada rename identifier, tidak ada perubahan logika resize/compress/export, navigasi, persistence, signing, versi, CI.
+
+### NOT VERIFIED
+Kompilasi Kotlin/Gradle, lint, detekt, SpotBugs, ArchUnit, dan SEMUA perilaku di HP (tak ada kotlinc/SDK/perangkat di sandbox): API `enableEdgeToEdge`/`SystemBarStyle.auto`/`rememberSaveable`/`selectable` belum pernah dikompilasi di proyek ini; tampilan bar sistem/keyboard/cutout, pemulihan state setelah proses mati, dan TalkBack belum dicoba.
+
+### TIDAK DIKERJAKAN (disengaja)
+WorkManager (guard) — konflik dengan MICRO_POLISH_GUIDE "DILARANG refactor arsitektur"; ekspor tetap `ExportForegroundService`. minSdk 24 vs prioritas API 31+ — perubahan konfigurasi/versi, menunggu keputusan user. `rememberSaveable` untuk Batch/GIF/Kompres/Studio, `Saver` `trimRange`, aksi aksesibilitas `TrimHandle`, label konteks progress, `themes.xml` (warna bar statis ditimpa runtime) — di luar batas 5 berkas / micro-patch.
+
+### JALAN BALIK (bila build MERAH atau perilaku HP rusak)
+Edge-to-edge: hapus `enableEdgeToEdge()` di `onCreate`, modifier `Surface` akar, `windowInsetsPadding` di `VideoPickerScreen`, kembalikan `SideEffect` warna opak di `Theme.kt`. State: `rememberSaveable` -> `remember` (22 baris, `MainActivity.kt` ~626-729). `configChanges`: kembalikan ke `orientation|screenSize|keyboardHidden`. Batch picker: kembalikan blok sinkron di callback `pickVideosLauncher`.
+
 ## Batch 73: Verifikasi run #14 (hijau penuh) — docs saja, nol perubahan kode
 
 User mengunggah `Vidsize_laporan-untuk-claude_run14.zip` (hasil push Batch 72, commit a70e94a, run #14), tanpa instruksi tambahan.

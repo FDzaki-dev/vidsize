@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 67**. This is the first-read file per the context
+Snapshot as of **Batch 68**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,9 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 68 (1 berkas kode + `exclude.xml` + `android-artifact.yml`):** run #9 HIJAU (SpotBugs 31, detekt 20, kompilator 1); `exclude.xml` menyaring UUF x field `$stable` (24/24 titik,
+  SEMPIT per nama field); `VideoResizer.kt` memakai `Transformer.Builder.setVideoMimeType(VIDEO_H265)` (ganti `setTransformationRequest` deprecated; ada di Media3 1.4.1, perilaku identik);
+  blok "Contoh SARIF mentah" dihapus dari laporan CI. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 67 (2 berkas kode + `exclude.xml` + `android-artifact.yml`):** run #8 HIJAU (SpotBugs 33, detekt 21, kompilator 1); `ExportForegroundService.kt` mencatat `startForeground`
   yang gagal mentah ke logcat; `PublicMovieExporter.kt` menghapus baris MediaStore `IS_PENDING=1` yatim (video + GIF); `exclude.xml` menyaring NP_PARAMETER x `AppUpdater.kt`
   (2 titik :0, terbukti sintetis); laporan CI memuat `[elemen kode]` per temuan SpotBugs + contoh SARIF mentah. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
@@ -254,6 +257,15 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 68]** Triase run #9: filter UUF `$stable` + `setTransformationRequest` -> `Transformer.Builder.setVideoMimeType` + blok contoh SARIF dihapus ->
+**SELESAI di ZIP, NOT VERIFIED di CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #10 diharapkan: build hijau, SpotBugs 31 -> 7 (hanya RV x7; bila UUF muncul lagi, baca nama field di
+`[elemen kode]`, jangan perluas filter), kompilator 1 -> 0 (bila tetap 1, baca baris `w:`), detekt 20, lint 0, ArchUnit 12/0. Bila build MERAH di `VideoResizer.kt`: periksa
+`setVideoMimeType` pada `compressInternal` (ada di Media3 1.4.1 menurut sumber tag, tapi kompilasi belum pernah dijalankan di sandbox) -> kembalikan ke `setTransformationRequest` bila perlu.
+(2) Sisa kandidat: `RV_RETURN_VALUE_IGNORED` x7 (`mkdirs()`/`delete()`) dibiarkan terlihat; detekt `TooGenericExceptionCaught` x20 (`startForeground` HARUS tetap `Exception`);
+`AppUpdater.download()` belum OkHttp+Okio (aturan guard user: butuh dependency baru, verifikasi di CI). (3) KEPUTUSAN ARSITEKTUR menunggu user: catch yang kini hanya ke logcat belum
+tertulis ke `Documents/` (aturan ArchUnit "mandiri" melarang `PublicMovieExporter.kt`/`ExportForegroundService.kt` memanggil `CrashLogger.kt`). Tidak diverifikasi di sandbox:
+kompilasi Kotlin, build/tes/lint/SpotBugs/detekt. Resume point Batch 67 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 67]** Triase run #8: log mentah `startForeground` + baris MediaStore yatim + filter NP `AppUpdater.kt` + elemen kode/contoh SARIF di laporan CI ->
 **SELESAI di ZIP, NOT VERIFIED di CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #9 diharapkan: build hijau, detekt 21 -> 20 (bila tetap 21, `ExportForegroundService.kt:69`
 masih `SwallowedException` -> baca laporan, jangan matikan aturan), SpotBugs 33 -> 31 (UUF 24 + RV 7; bila tetap 33, filter `<Source name="AppUpdater.kt"/>` tak cocok -> baca contoh SARIF,
@@ -445,6 +457,10 @@ sesi berikutnya:
    "Kompres GIF"): itu instruksi baru yang eksplisit, belum dieksekusi.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 68** — Tanpa teks user (dua upload: `Vidsize_v67.zip` + laporan CI run #9). Run #9 membenarkan semua prediksi Batch 67 (detekt 21 -> 20, SpotBugs 33 -> 31, kompilator 1).
+  `exclude.xml`: UUF x24 semuanya field `$stable` (sintetis Compose) -> disaring per nama field. `VideoResizer.kt`: `setTransformationRequest` (deprecated) -> `Transformer.Builder.setVideoMimeType`
+  (diverifikasi di sumber Media3 1.4.1). `android-artifact.yml`: blok contoh SARIF dihapus. Tidak disentuh: RV x7 (dibiarkan terlihat), detekt TooGeneric x20, `AppUpdater.download()` OkHttp.
+  1 berkas kode + 2 konfigurasi/workflow (3 total).
 - **Batch 67** — Tanpa teks user (dua upload: `Vidsize_v66.zip` + laporan CI run #8). Run #8 membenarkan semua prediksi Batch 66 (detekt 37 -> 21, SpotBugs 64 -> 33, kompilator 1).
   `ExportForegroundService.kt`: catch `startForeground` kini `Log.e` mentah (tag `VidsizeExportService`). `PublicMovieExporter.kt`: `openOutputStream(...)?.use{} ?: return null` meninggalkan
   baris `IS_PENDING=1` yatim (video + GIF) -> kini dihapus sebelum `return null`. `exclude.xml`: NP_PARAMETER x `AppUpdater.kt` disaring (0 parameter nullable di sumber; 2 lambda suspend =

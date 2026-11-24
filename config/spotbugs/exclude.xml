@@ -9,6 +9,12 @@
   per file/kelas). Daftar SpotBugs di laporan memuat SEMUA temuan non-filter (maks 120 titik), jadi filter bisa diaudit dari laporan.
 
   Disaring sekarang (terbukti bukan kode proyek / bukan bug, tanpa perlu data run):
+  - Batch 68 (bukti laporan run #9; 24/24 titik terbaca): UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD x24 = SEMUA bernama field `$stable`
+    (`AppUpdater`, `AppUpdater$CheckResult`+3 turunan, `AppUpdater$UpdateInfo`, `CrashLogger`, `FilmstripExtractor`, `GifEncoder`,
+    `GifExporter`+2, `MainActivity`+5 `BatchStatus$*`, `PublicMovieExporter`, `VideoHistoryEntry`/`VideoHistoryStore`, `ResizeResult`+`Failure`,
+    `VideoResizerApp`); nol nama field lain, nol di luar pola `$stable`. `$stable` = konstanta int sintetis yang disisipkan kompilator Compose
+    (stabilitas kelas) dan dibaca runtime Compose, bukan field tulisan proyek. Disaring SEMPIT per NAMA FIELD `$stable` (BUKAN per berkas/kelas):
+    field tak terpakai sungguhan di kode proyek tetap terlapor. Jalur audit: SpotBugs run #10 harus 31 -> 7 (hanya RV_RETURN_VALUE_IGNORED x7).
   - Batch 67 (bukti laporan run #8 + kode dibaca): NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE x2 `AppUpdater.kt:0` (:0 = metode
     sintetis tanpa nomor baris). Bukti: (a) `AppUpdater.kt` TIDAK punya satu pun parameter bertipe nullable (grep `fun ...?` = kosong; semua
     parameter `Context`/`UpdateInfo`/`File`/`(Float) -> Unit`), jadi temuan tak mungkin berasal dari parameter yang ditulis di sumber;
@@ -119,5 +125,9 @@
   </Match>
   <Match>
     <Bug pattern="REC_CATCH_EXCEPTION"/>
+  </Match>
+  <Match>
+    <Bug pattern="UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD"/>
+    <Field name="$stable"/>
   </Match>
 </FindBugsFilter>

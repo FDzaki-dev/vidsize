@@ -1,5 +1,29 @@
 # Changelog
 
+## Batch 68: Triase run #9 — filter `$stable` (UUF x24), peringatan kompilator `setTransformationRequest`, blok contoh SARIF dihapus
+
+User mengunggah `Vidsize_v67.zip` + `Vidsize_laporan-untuk-claude_run9.zip` tanpa teks (hasil push Batch 67, commit 90b3ebb).
+
+Hasil run #9 (dibaca dari laporan): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); 1 tes unit lulus (hanya generator laporan ArchUnit, BUKAN bukti
+perilaku); lintDebug LULUS (0 isu); detekt 21 -> 20; SpotBugs 33 -> 31 (UUF 24 + RV 7); peringatan kompilator 1. Semua prediksi Batch 67 TERBUKTI di CI: detekt 20
+(`ExportForegroundService.kt` tak lagi `SwallowedException`), SpotBugs 31 (filter NP `AppUpdater.kt` cocok), kompilator 1, ArchUnit 12/0.
+
+Perubahan (1 berkas kode + 1 konfigurasi + 1 workflow):
+- `config/spotbugs/exclude.xml` — `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` x field `$stable` disaring. Bukti: laporan run #9 memuat 24 titik UUF dan SEMUA 24 bernama
+  `<kelas>.$stable` (elemen kode `[...]`; nol nama field lain). `$stable` = konstanta int sintetis kompilator Compose, bukan field tulisan proyek. Disaring SEMPIT per NAMA FIELD
+  (bukan per berkas/kelas): field tak terpakai sungguhan tetap terlapor. Jalur audit: SpotBugs run #10 harus 31 -> 7 (hanya `RV_RETURN_VALUE_IGNORED_BAD_PRACTICE` x7).
+- `VideoResizer.kt` (`compressInternal`) — `Transformer.Builder.setTransformationRequest(TransformationRequest.Builder().setVideoMimeType(VIDEO_H265).build())` (deprecated)
+  diganti `Transformer.Builder.setVideoMimeType(VIDEO_H265)`. Penggantinya TERVERIFIKASI ada di Media3 1.4.1 (sumber `Transformer.java` tag 1.4.1: `setVideoMimeType(String)`
+  baris 227; `build()` melipat `videoMimeType` ke `TransformationRequest`, jadi perilaku identik; KDoc deprecation menunjuk penggantinya). Satu-satunya pemakai
+  `setTransformationRequest` di proyek (grep). Target: peringatan kompilator 1 -> 0.
+- `.github/workflows/android-artifact.yml` — blok "Contoh SARIF mentah" (3 baris) dihapus dari laporan: UUF sudah terjawab, dan `[elemen kode]` per titik sudah cukup untuk RV.
+  YAML valid + `bash -n` semua blok `run` LULUS.
+
+Sengaja TIDAK disentuh: `RV_RETURN_VALUE_IGNORED_BAD_PRACTICE` x7 (tetap terlihat di laporan, tidak disaring; kode dibaca: `mkdirs()` pada `thumbs`/`updates` diikuti tulis
+berkas yang gagal terlihat — `extractVideoThumbnail` menangkap + log + `false`, `AppUpdater.download` melempar dalam `try`; `PublicMovieExporter` `mkdirs()` diikuti `copyTo` yang
+melempar; `outFile.delete()` = bersih-bersih sebelum `throw e`), detekt `TooGenericExceptionCaught` x20, `AppUpdater.download()` OkHttp+Okio.
+NOT VERIFIED: kompilasi Kotlin (tak ada kotlinc di sandbox; Maven diblokir proxy), build/tes/lint/SpotBugs/detekt, perilaku di HP.
+
 ## Batch 67: Triase run #8 — sisa catch menelan pengecualian, baris MediaStore yatim, filter NP `AppUpdater.kt`, nama elemen kode di laporan SpotBugs
 
 User mengunggah `Vidsize_v66.zip` + `Vidsize_laporan-untuk-claude_run8.zip` tanpa teks (hasil push Batch 66, commit ce6850f).

@@ -188,9 +188,6 @@ jobs:
                 echo ""
                 echo "Titik temuan (noise Kotlin disaring di config/spotbugs/exclude.xml; maks 120; [..] = elemen kode dari logicalLocations SARIF bila ada; setelah | = pesan mentah SpotBugs, dipotong 160 karakter):"
                 jq -r '[.runs[].results[]?] | map({k: "\(.ruleId) @ \(.locations[0].physicalLocation.artifactLocation.uri // "?"):\(.locations[0].physicalLocation.region.startLine // 0)", l: ((.locations[0].logicalLocations // []) | map(.fullyQualifiedName // .name // empty) | join(", ") | .[0:160]), m: ((.message.text // "") | gsub("\\s+"; " ") | .[0:160])}) | group_by(.k + "|" + .l + "|" + .m) | map("- \(.[0].k)" + (if .[0].l != "" then " [\(.[0].l)]" else "" end) + (if .[0].m != "" then " | \(.[0].m)" else "" end) + (if length > 1 then " x\(length)" else "" end)) | .[:120][]' "$SARIF" 2>/dev/null
-                echo ""
-                echo "Contoh SARIF mentah (Batch 67: 1 temuan per aturan, maks 6 aturan, tanpa sidik jari, dipotong 600 karakter; untuk menamai field/parameter yang tak muncul di pesan atau baris :0):"
-                jq -r '[.runs[].results[]?] | group_by(.ruleId) | map(.[0]) | .[:6][] | del(.partialFingerprints, .fingerprints, .ruleIndex) | tojson | .[0:600]' "$SARIF" 2>/dev/null
               fi
             } > report-sarif.tmp
           else

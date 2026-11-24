@@ -531,8 +531,11 @@ the GitHub Actions route above is much faster in practice.
 
 ## Project & CI notes (baca ini dulu sebelum ubah setup build/git)
 
+- **Filter `$stable` & Media3 1.4.1 (Batch 68)**: `exclude.xml` menyaring `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` HANYA untuk nama field `$stable` (konstanta sintetis kompilator Compose;
+  24/24 titik run #9) — jangan ganti ke filter per berkas/kelas. `Transformer.Builder.setTransformationRequest` deprecated: gunakan `Transformer.Builder.setVideoMimeType(...)`
+  (ada di Media3 1.4.1). Blok "Contoh SARIF mentah" di laporan CI sudah dihapus; `[elemen kode]` per titik tetap ada.
 - **Laporan SpotBugs memuat elemen kode (Batch 67)**: baris "Titik temuan" di `laporan-untuk-claude.txt` kini `RULE @ berkas:baris [elemen kode] | pesan` (elemen dari
-  `logicalLocations` SARIF bila ada) + blok "Contoh SARIF mentah" (1 temuan per aturan). Dipakai untuk menamai field `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` (baris :0) sebelum
+  `logicalLocations` SARIF bila ada) + blok "Contoh SARIF mentah" (1 temuan per aturan; dihapus Batch 68). Dipakai untuk menamai field `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` (baris :0) sebelum
   menyaringnya. Pola `?.use { ... } ?: return null` pada baris MediaStore `IS_PENDING=1` dilarang (meninggalkan baris yatim): buka stream dulu, hapus baris bila `null`.
 - **Log pengecualian tertangkap & laporan SpotBugs (Batch 66)**: `catch` yang mengembalikan fallback (`null`/`false`) TIDAK boleh menelan pengecualian
   tanpa jejak — catat mentah dengan `Log.e(TAG, "<nama fungsi>", e)` (stacktrace apa adanya, tanpa kalimat penjelasan). Sejauh ini hanya ke logcat

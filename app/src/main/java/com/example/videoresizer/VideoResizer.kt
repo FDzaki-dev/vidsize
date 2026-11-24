@@ -505,11 +505,7 @@ class VideoResizer(private val context: Context) {
 
         val targetBitrateBps = computeCompressTargetBitrateBps(request, w, h)
         val transformerBuilder = Transformer.Builder(context)
-            .setTransformationRequest(
-                androidx.media3.transformer.TransformationRequest.Builder()
-                    .setVideoMimeType(androidx.media3.common.MimeTypes.VIDEO_H265)
-                    .build()
-            )
+            .setVideoMimeType(androidx.media3.common.MimeTypes.VIDEO_H265)
             .setEncoderFactory(
                 androidx.media3.transformer.DefaultEncoderFactory.Builder(context)
                     .setRequestedVideoEncoderSettings(

@@ -280,6 +280,7 @@ private data class GifPrefill(
 private val IosPushEasing = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
 private const val IOS_PUSH_MS = 350
 private const val IOS_POP_MS = 300
+private const val LOG_TAG = "VidsizeMain"
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
@@ -4312,8 +4313,10 @@ private fun openInGallery(context: android.content.Context, uri: Uri) {
         }
         context.startActivity(intent)
     } catch (e: android.content.ActivityNotFoundException) {
+        android.util.Log.w(LOG_TAG, "openInGallery", e)
         android.widget.Toast.makeText(context, "Tidak ada aplikasi Galeri yang bisa membuka video ini.", android.widget.Toast.LENGTH_LONG).show()
     } catch (e: SecurityException) {
+        android.util.Log.w(LOG_TAG, "openInGallery", e)
         android.widget.Toast.makeText(context, "Tidak bisa membuka video ini di Galeri.", android.widget.Toast.LENGTH_LONG).show()
     }
 }
@@ -4342,6 +4345,7 @@ private fun decodeSampledBitmapFromFile(path: String, reqHeightPx: Int): Bitmap?
         val decodeOptions = BitmapFactory.Options().apply { inSampleSize = sampleSize }
         BitmapFactory.decodeFile(path, decodeOptions)
     } catch (e: Exception) {
+        android.util.Log.e(LOG_TAG, "decodeSampledBitmapFromFile", e)
         null
     }
 }
@@ -4358,6 +4362,7 @@ private fun extractVideoThumbnail(videoFile: File, thumbnailFile: File): Boolean
         frame.recycle()
         true
     } catch (e: Exception) {
+        android.util.Log.e(LOG_TAG, "extractVideoThumbnail", e)
         false
     } finally {
         retriever.release()
@@ -4423,8 +4428,10 @@ private fun openGifInGallery(context: android.content.Context, uri: Uri) {
         }
         context.startActivity(intent)
     } catch (e: android.content.ActivityNotFoundException) {
+        android.util.Log.w(LOG_TAG, "openGifInGallery", e)
         android.widget.Toast.makeText(context, "Tidak ada aplikasi Galeri yang bisa membuka GIF ini.", android.widget.Toast.LENGTH_LONG).show()
     } catch (e: SecurityException) {
+        android.util.Log.w(LOG_TAG, "openGifInGallery", e)
         android.widget.Toast.makeText(context, "Tidak bisa membuka GIF ini di Galeri.", android.widget.Toast.LENGTH_LONG).show()
     }
 }
@@ -4483,6 +4490,7 @@ private fun GifScreen(
             val h = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
             if (d > 0) Triple(d, w, h) else null
         } catch (e: Exception) {
+            android.util.Log.e(LOG_TAG, "loadSourceMetadata", e)
             null
         } finally {
             retriever.release()
@@ -4949,6 +4957,7 @@ private fun CompressorScreen(onBack: () -> Unit) {
             probed.onSuccess { hasAudio = it }
             if (d > 0 && size > 0) CompressSourceInfo(d, w, h, size, fps, hasAudio, audioBitrateBps) else null
         } catch (e: Exception) {
+            android.util.Log.e(LOG_TAG, "loadSourceInfo", e)
             null
         } finally {
             retriever.release()

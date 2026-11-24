@@ -531,6 +531,11 @@ the GitHub Actions route above is much faster in practice.
 
 ## Project & CI notes (baca ini dulu sebelum ubah setup build/git)
 
+- **Log pengecualian tertangkap & laporan SpotBugs (Batch 66)**: `catch` yang mengembalikan fallback (`null`/`false`) TIDAK boleh menelan pengecualian
+  tanpa jejak — catat mentah dengan `Log.e(TAG, "<nama fungsi>", e)` (stacktrace apa adanya, tanpa kalimat penjelasan). Sejauh ini hanya ke logcat
+  (`PublicMovieExporter.kt`, `CrashLogger.kt`, `MainActivity.kt`); belum ke `Documents/`. Laporan CI `laporan-untuk-claude.txt` kini memuat pesan mentah
+  SpotBugs per titik (`RULE @ berkas:baris | pesan`). Filter `exclude.xml` hanya boleh ditambah bila SEMUA titik temuan sudah dibaca dan terbukti noise
+  (alasan per pola ada di komentar berkas itu).
 - **Impor bintang membayangi java.lang (Batch 64)**: `MainActivity.kt` dan `VideoPickerScreen.kt` memakai `import androidx.compose.runtime.*`;
   impor bintang mengalahkan impor default `java.lang.*`, jadi `ThreadLocal` terselesaikan ke kelas `internal` Compose dan build gagal
   (run #5). Pakai nama penuh `java.lang.ThreadLocal`. Sandbox Claude tak bisa mengompilasi: perubahan tipe/impor baru terbukti hanya di CI.

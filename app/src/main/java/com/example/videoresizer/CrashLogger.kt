@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
+import android.util.Log
 import java.io.PrintWriter
 import java.io.StringWriter
 import java.text.SimpleDateFormat
@@ -32,6 +33,7 @@ object CrashLogger {
 
     private const val RELATIVE_DIR = "Documents/VideoResizer/logs/"
     private const val MAX_RETAINED_LOGS = 50
+    private const val TAG = "VidsizeCrashLogger"
 
     /** Registers the crash handler. Call once, from Application.onCreate(). */
     fun install(context: Context) {
@@ -42,6 +44,8 @@ object CrashLogger {
                 writeLog(appContext, thread, throwable)
             } catch (loggingFailure: Throwable) {
                 // Never let the logger itself interfere with the real crash.
+                // Batch 66: kegagalan penulisan log dicatat mentah ke logcat; runCatching menjaga previousHandler tetap terpanggil.
+                runCatching { Log.e(TAG, "install.writeLog", loggingFailure) }
             }
             previousHandler?.uncaughtException(thread, throwable)
         }
@@ -70,6 +74,7 @@ object CrashLogger {
                 return
             }
         } catch (e: Exception) {
+            Log.e(TAG, "writeLog", e)
             resolver.delete(itemUri, null, null)
             return
         }
@@ -86,6 +91,7 @@ object CrashLogger {
             else @Suppress("DEPRECATION") pkgInfo.versionCode.toLong()
             "${pkgInfo.versionName} ($code)"
         } catch (e: Exception) {
+            Log.e(TAG, "buildLogBody.versionInfo", e)
             "unknown"
         }
 
@@ -125,6 +131,7 @@ object CrashLogger {
             }
         } catch (e: Exception) {
             // Retention is best-effort; a failure here must not affect the app.
+            Log.e(TAG, "enforceRetention", e)
         }
     }
 }

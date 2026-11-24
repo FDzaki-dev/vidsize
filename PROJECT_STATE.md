@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 65**. This is the first-read file per the context
+Snapshot as of **Batch 66**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,9 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 66 (3 berkas kode + `exclude.xml` + `android-artifact.yml`):** run #7 HIJAU (SpotBugs 64, detekt 37, kompilator 1); catch yang menelan pengecualian di
+  `PublicMovieExporter.kt` (4), `CrashLogger.kt` (4), `MainActivity.kt` (8) kini mencatat stacktrace MENTAH ke logcat; `exclude.xml` menyaring 31 temuan
+  SpotBugs terbukti noise; laporan CI memuat pesan mentah SpotBugs per titik. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 65 (2 berkas non-docs + `exclude.xml`):** run #6 HIJAU; `VideoResizerApp.themePref` (tak terpakai) dihapus, `formatPickerDate` aman-null,
   `exclude.xml` + pola NP_PARAMETER_* untuk 3 berkas Compose. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 64 (1 berkas non-docs):** memperbaiki build rusak run #5: `VideoPickerScreen.kt` `ThreadLocal` -> `java.lang.ThreadLocal`
@@ -248,6 +251,18 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 66]** Triase run #7: log mentah untuk catch yang menelan pengecualian + 31 filter SpotBugs terbukti + pesan SARIF di laporan CI -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP; run #8 diharapkan: build hijau, detekt 37 -> 21 (bila tetap 37, detekt TIDAK menganggap `e` di `Log.*` sebagai terpakai -> baca laporan,
+jangan matikan aturan), SpotBugs 64 -> 33 (UUF 24 + RV 7 + NP_PARAM 2), kompilator 1, ArchUnit 12/0. Run #7 sudah TERVERIFIKASI di CI: prediksi Batch 65 (157 -> 64, kompilator 3 -> 1) benar.
+(2) BACA pesan SpotBugs baru di bagian "Titik temuan" (format `RULE @ berkas:baris | pesan`): bila 24 UUF ternyata semua `...$stable` (field Compose) -> saring dengan
+`<Match><Bug pattern="UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD"/><Field name="$stable"/></Match>` (SEMPIT per nama field), JANGAN per berkas. (3) Sisa kandidat: `ExportForegroundService.kt:69`
+(catch menelan `startForeground`; di API 31+ bisa `ForegroundServiceStartNotAllowedException`) -> `Log.e` mentah; bug nyata kecil `PublicMovieExporter` `?: return null` meninggalkan baris
+MediaStore `IS_PENDING=1` yatim (hapus baris seperti pola `CrashLogger.writeLog`); `AppUpdater.kt` NP_PARAMETER x2 (:0) belum dibaca; `RV_RETURN_VALUE_IGNORED` x7 (`mkdirs()`/`delete()`) dibiarkan;
+detekt `TooGenericExceptionCaught` x20 (menyempitkan tipe butuh kompilator -> hati-hati, pelajaran Batch 63/64); `setTransformationRequest` deprecated (cek API pengganti Media3 1.4.1);
+`AppUpdater.download()` belum OkHttp+Okio (butuh dependency baru, tak bisa diverifikasi tanpa CI). (4) KEPUTUSAN ARSITEKTUR menunggu user: catch yang kini hanya ke logcat belum
+tertulis ke `Documents/` (aturan ArchUnit "mandiri" melarang `PublicMovieExporter.kt` memanggil `CrashLogger.kt`; bila log tangkapan harus ke Documents, aturan itu perlu diubah).
+Tidak diverifikasi di sandbox: kompilasi Kotlin, build/tes/lint/SpotBugs/detekt. Resume point Batch 65 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 65]** Verifikasi run #6 + 2 peringatan baru ditutup + filter NP Compose -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
 **LANGKAH BERIKUTNYA:** (1) push ZIP; run #7 diharapkan: build hijau, peringatan kompilator 3 -> 1 (sisa `setTransformationRequest`
 `VideoResizer.kt:508`), SpotBugs 157 -> 64 (bila tetap 157, filter NP tak cocok -> baca SARIF, jangan perluas tanpa bukti). Run #6 sudah

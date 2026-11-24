@@ -7,6 +7,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Log
 import java.io.File
 import java.io.FileInputStream
 
@@ -25,6 +26,7 @@ import java.io.FileInputStream
 object PublicMovieExporter {
 
     private const val RELATIVE_SUBFOLDER = "VideoResizer"
+    private const val TAG = "VidsizePublicExport"
 
     /**
      * @param sourceFile the freshly-exported file produced by [VideoResizer].
@@ -62,6 +64,7 @@ object PublicMovieExporter {
             resolver.update(itemUri, values, null, null)
             itemUri
         } catch (e: Exception) {
+            Log.e(TAG, "publishViaMediaStore", e)
             resolver.delete(itemUri, null, null)
             null
         }
@@ -89,6 +92,7 @@ object PublicMovieExporter {
 
             resultUri ?: Uri.fromFile(destFile)
         } catch (e: Exception) {
+            Log.e(TAG, "publishViaLegacyStorage", e)
             null
         }
     }
@@ -128,6 +132,7 @@ object PublicMovieExporter {
             resolver.update(itemUri, values, null, null)
             itemUri
         } catch (e: Exception) {
+            Log.e(TAG, "publishImageViaMediaStore", e)
             resolver.delete(itemUri, null, null)
             null
         }
@@ -153,6 +158,7 @@ object PublicMovieExporter {
 
             resultUri ?: Uri.fromFile(destFile)
         } catch (e: Exception) {
+            Log.e(TAG, "publishImageViaLegacyStorage", e)
             null
         }
     }

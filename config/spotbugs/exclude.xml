@@ -9,6 +9,26 @@
   per file/kelas). Daftar SpotBugs di laporan memuat SEMUA temuan non-filter (maks 120 titik), jadi filter bisa diaudit dari laporan.
 
   Disaring sekarang (terbukti bukan kode proyek / bukan bug, tanpa perlu data run):
+  - Batch 66 (bukti laporan run #7 + kode dibaca di setiap titik; pola x berkas, SEMPIT):
+    * MS_EXPOSE_REP x10 (`VideoResizer.kt` 49/62/72/84/110/130/146/165/188, `SocialPreset.kt` 58) = PERSIS 10 deklarasi
+      `val ENTRIES: List<T> = values().toList()` di companion enum (pencocokan nomor baris 10/10). Tipe publiknya `List` baca-saja
+      Kotlin; "ekspos representasi internal" hanya teoretis (butuh cast ke MutableList), tak ada pemanggil yang memutasi. Disaring
+      per berkas `VideoResizer.kt` dan `SocialPreset.kt`.
+    * BC_BAD_CAST_TO_ABSTRACT_COLLECTION x9 = SEMUA berada di baris MELEWATI akhir berkas (`GifExporter.kt:241` > 235 baris,
+      `MainActivity.kt:5313/5314/7192/7196` > 5309, `VideoPickerScreen.kt:556/596` > 518). Nomor baris di luar berkas = tubuh fungsi
+      `inline` stdlib yang disalin kompilator Kotlin, bukan kode proyek. Disaring per berkas ketiganya. Catatan: temuan BC masa
+      depan di berkas yang sama ikut tersaring; jalur audit = bandingkan jumlah dengan laporan run berikutnya.
+    * NP_NULL_ON_SOME_PATH x4 (`VideoResizer.kt` 421/472/548/576) = PERSIS 4 dereferensi `lateinit var transformer` (421 & 548
+      `transformer.getProgress`, 472 & 576 `transformer.start`). Kotlin menjaga `lateinit` dengan UninitializedPropertyAccessException,
+      bukan NPE; SpotBugs tak mengenali jalur lempar itu. Disaring per berkas `VideoResizer.kt`.
+    * SA_LOCAL_SELF_ASSIGNMENT x1 (`MainActivity.kt` 4944 lama) = ekspresi hasil `try { ...; foundAudio } finally { ... }`; tak ada
+      penugasan `foundAudio = foundAudio` di sumber (grep). Artefak salinan blok finally. Disaring per berkas `MainActivity.kt`.
+    * OBL_UNSATISFIED_OBLIGATION x1 (`AppUpdater.kt` 158) = `FileOutputStream(outFile).use { ... }` yang ditutup oleh `use` Kotlin
+      (sudah dibaca, tubuhnya `try/finally` inline yang tak dikenali SpotBugs). Disaring per berkas `AppUpdater.kt`.
+    * REC_CATCH_EXCEPTION x6 = SEMUA 6 titik (`AppUpdater.kt` 171, `CrashLogger.kt` 72, `MainActivity.kt` 4360/4951,
+      `PublicMovieExporter.kt` 64/130) adalah `catch (e: Exception)` yang JUGA dilaporkan detekt `TooGenericExceptionCaught` pada baris
+      yang sama (6/6 cocok). Kotlin tak punya checked exception, jadi "Exception tidak dilempar di blok try" tak bisa dinilai dari
+      bytecode; temuan tetap terlihat lewat detekt, jadi tak ada informasi yang hilang. Disaring tanpa batas berkas.
   - NM_METHOD_NAMING_CONVENTION: fungsi @Composable WAJIB berawalan huruf besar (pedoman API Compose) — aturan
     penamaan, bukan cacat; tak ada perbaikan yang valid.
   - Kelas hasil generate: ComposableSingletons (Compose compiler), R, BuildConfig — bukan kode proyek.
@@ -52,5 +72,40 @@
   <Match>
     <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
     <Source name="Theme.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="MS_EXPOSE_REP"/>
+    <Source name="VideoResizer.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="MS_EXPOSE_REP"/>
+    <Source name="SocialPreset.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="BC_BAD_CAST_TO_ABSTRACT_COLLECTION"/>
+    <Source name="GifExporter.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="BC_BAD_CAST_TO_ABSTRACT_COLLECTION"/>
+    <Source name="MainActivity.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="BC_BAD_CAST_TO_ABSTRACT_COLLECTION"/>
+    <Source name="VideoPickerScreen.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_NULL_ON_SOME_PATH"/>
+    <Source name="VideoResizer.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="SA_LOCAL_SELF_ASSIGNMENT"/>
+    <Source name="MainActivity.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="OBL_UNSATISFIED_OBLIGATION"/>
+    <Source name="AppUpdater.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="REC_CATCH_EXCEPTION"/>
   </Match>
 </FindBugsFilter>

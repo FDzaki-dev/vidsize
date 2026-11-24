@@ -186,8 +186,8 @@ jobs:
                 echo "Per aturan (terbanyak dulu):"
                 jq -r '[.runs[].results[]?] | group_by(.ruleId) | map({r: .[0].ruleId, n: length}) | sort_by(-.n)[] | "  \(.n)x \(.r)"' "$SARIF" 2>/dev/null | head -n 40
                 echo ""
-                echo "Titik temuan (noise Kotlin disaring di config/spotbugs/exclude.xml; maks 120):"
-                jq -r '[.runs[].results[]?] | map({k: "\(.ruleId) @ \(.locations[0].physicalLocation.artifactLocation.uri // "?"):\(.locations[0].physicalLocation.region.startLine // 0)"}) | group_by(.k) | map("- \(.[0].k)" + (if length > 1 then " x\(length)" else "" end)) | .[:120][]' "$SARIF" 2>/dev/null
+                echo "Titik temuan (noise Kotlin disaring di config/spotbugs/exclude.xml; maks 120; setelah | = pesan mentah SpotBugs, dipotong 160 karakter):"
+                jq -r '[.runs[].results[]?] | map({k: "\(.ruleId) @ \(.locations[0].physicalLocation.artifactLocation.uri // "?"):\(.locations[0].physicalLocation.region.startLine // 0)", m: ((.message.text // "") | gsub("\\s+"; " ") | .[0:160])}) | group_by(.k + "|" + .m) | map("- \(.[0].k)" + (if .[0].m != "" then " | \(.[0].m)" else "" end) + (if length > 1 then " x\(length)" else "" end)) | .[:120][]' "$SARIF" 2>/dev/null
               fi
             } > report-sarif.tmp
           else

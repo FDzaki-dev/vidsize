@@ -1,5 +1,59 @@
 # Changelog
 
+## Batch 66: Triase run #7 — log mentah untuk pengecualian yang ditelan + filter SpotBugs terbukti noise + pesan SARIF di laporan CI
+
+User mengunggah `Vidsize_v65.zip` + `Vidsize_laporan-untuk-claude_run7.zip` tanpa teks (hasil push Batch 65, commit a9af4dc).
+
+Hasil run #7 (dibaca dari laporan): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); 1 tes unit lulus (hanya generator laporan
+ArchUnit, BUKAN bukti perilaku); lintDebug "LULUS (0 isu)"; detekt 37 (sama dgn run #6); SpotBugs 157 -> 64; peringatan kompilator 3 -> 1.
+Kedua prediksi Batch 65 TERBUKTI di CI: filter NP Compose bekerja (157 -> 64) dan peringatan kompilator tinggal `setTransformationRequest`
+(`VideoResizer.kt:508`).
+
+Perubahan (3 berkas kode + 1 konfigurasi + 1 workflow):
+- `PublicMovieExporter.kt` — 4 `catch (e: Exception)` (`publishViaMediaStore`, `publishViaLegacyStorage`, `publishImageViaMediaStore`,
+  `publishImageViaLegacyStorage`) kini memanggil `Log.e(TAG, "<nama fungsi>", e)` (tag `VidsizePublicExport`) SEBELUM fallback. Dulu kegagalan
+  publish ke Movies/Pictures lenyap tanpa jejak (pemanggil hanya menerima `null`). Teks log = nama fungsi + stacktrace mentah, tanpa
+  penjelasan tambahan. Nilai kembalian/perilaku TIDAK berubah.
+- `CrashLogger.kt` — 4 catch (`install` handler, `writeLog`, `buildLogBody` versi aplikasi, `enforceRetention`) kini mencatat pengecualian mentah ke
+  logcat (tag `VidsizeCrashLogger`). Catch di dalam handler uncaught dibungkus `runCatching { Log.e(...) }` agar kegagalan `Log.e` (mis. OOM)
+  TIDAK mencegah `previousHandler.uncaughtException(...)` berjalan (sifat fail-safe logger dipertahankan).
+- `MainActivity.kt` — 8 catch yang menelan pengecualian kini mencatat mentah (tag `VidsizeMain`, konstanta file `LOG_TAG`): `openInGallery` x2 dan
+  `openGifInGallery` x2 (`Log.w`; Toast ke user tetap), `decodeSampledBitmapFromFile`, `extractVideoThumbnail`, `loadSourceMetadata`,
+  `loadSourceInfo` (`Log.e`; nilai kembalian `null`/`false` tetap). Tidak ada perubahan alur UI.
+- `config/spotbugs/exclude.xml` — 31 temuan disaring dengan bukti (rincian per pola di komentar berkas): `MS_EXPOSE_REP` x10 (PERSIS 10 deklarasi
+  `ENTRIES = values().toList()`, cocok nomor baris 10/10), `BC_BAD_CAST_TO_ABSTRACT_COLLECTION` x9 (semuanya di baris MELEWATI akhir berkas =
+  kode `inline` stdlib), `NP_NULL_ON_SOME_PATH` x4 (PERSIS 4 dereferensi `lateinit var transformer`), `SA_LOCAL_SELF_ASSIGNMENT` x1,
+  `OBL_UNSATISFIED_OBLIGATION` x1 (`use` Kotlin), `REC_CATCH_EXCEPTION` x6 (6/6 duplikat detekt `TooGenericExceptionCaught` pada baris yang sama).
+  Semua per pola x berkas, kecuali `REC_CATCH_EXCEPTION` (tanpa batas berkas; temuan tetap terlihat lewat detekt).
+- `.github/workflows/android-artifact.yml` — baris "Titik temuan" SpotBugs kini memuat pesan mentah SpotBugs setelah `|` (dirapatkan spasi, dipotong 160
+  karakter; duplikat identik tetap digabung `xN`). Alasan: 24 temuan `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` (baris :0) tak bisa dinilai karena nama
+  field tak ada di laporan. Ekspresi `jq` diuji pada SARIF tiruan (pesan multi-baris, tanpa pesan, pesan >160, duplikat).
+
+Dibaca tapi TIDAK diubah:
+- `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` x24 (:0): field bytecode memang tak punya nomor baris, jadi ":0" BUKAN bukti sintetis. Hipotesis `$stable` Compose
+  cocok untuk sebagian berkas (hitungan kasar kelas non-enum = jumlah temuan: `AppUpdater` 6, `CrashLogger` 1, `FilmstripExtractor` 1, `PublicMovieExporter` 1,
+  `VideoHistoryStore` 2, `VideoResizerApp` 1) tetapi TIDAK untuk `GifEncoder`, `GifExporter`, `MainActivity`, `VideoResizer` (lebih sedikit temuan dari kelas)
+  dan `ExportForegroundService`/`Haptics`/`VideoPickerScreen` (0 temuan). Tidak disaring; tunggu pesan SARIF run #8.
+- `RV_RETURN_VALUE_IGNORED_BAD_PRACTICE` x7: ketujuhnya `mkdirs()`/`delete()` (`AppUpdater.kt` 143/172, `MainActivity.kt` 1765/2233/5224,
+  `PublicMovieExporter.kt` 76/142); kegagalan baru terlihat di operasi berikutnya (kini tercatat mentah). Tidak disaring (pola sama bisa menandai `renameTo` dsb.).
+- `NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE` x2 `AppUpdater.kt:0` (bukan berkas Compose) — belum dibaca.
+- detekt `TooGenericExceptionCaught` x20 — menyempitkan tipe tanpa kompilator berisiko membuat build rusak (pelajaran Batch 63/64); detekt `SwallowedException`
+  tersisa 1: `ExportForegroundService.kt:69` (ditunda: batas 5 berkas/batch). Catatan: di API 31+ `startForeground` dari latar bisa melempar
+  `ForegroundServiceStartNotAllowedException`; kegagalannya masih diam-diam.
+- Temuan baru saat membaca (BUKAN dari alat): `PublicMovieExporter.publishViaMediaStore`/`publishImageViaMediaStore` memakai
+  `resolver.openOutputStream(itemUri)?.use { ... } ?: return null` di dalam `try`; bila stream `null`, baris MediaStore `IS_PENDING=1` yang baru di-`insert`
+  tertinggal yatim (tak dihapus, tidak seperti pola `CrashLogger.writeLog`). Bug kecil nyata; kandidat batch berikutnya.
+- `setTransformationRequest` deprecated (Media3 1.4.1) — API pengganti belum dicek.
+
+Prediksi run #8 (BELUM terverifikasi): detekt 37 -> 21 (16 `SwallowedException` ditutup karena variabel `e` kini dipakai; 20 `TooGenericExceptionCaught` tetap;
+asumsi: detekt menganggap `e` yang dipassing ke `Log.*` sebagai terpakai); SpotBugs 64 -> 33 (UUF 24 + RV 7 + NP_PARAM 2); peringatan kompilator 1;
+ArchUnit 12 aturan 0 pelanggaran (`android.util.Log` bukan kelas proyek); lint 0. Jika angka SpotBugs bukan 33, baca titik temuan di laporan — jangan perluas filter tanpa bukti.
+
+Verifikasi: `diff -ru` terhadap Batch 65 (5 berkas, tak ada berkas lain berubah); `xmllint --noout exclude.xml`; YAML workflow terurai (PyYAML);
+`jq` diuji pada SARIF tiruan; keseimbangan `{}` `()` `[]` Kotlin: selisih hanya penambahan murni (PublicMovieExporter () +4, CrashLogger {} +1 () +4,
+MainActivity () +8). NOT VERIFIED: kompilasi Kotlin (sandbox tanpa kotlinc/SDK), build, tes, lint, SpotBugs, detekt, efek filter, efek pesan SARIF, perilaku di HP.
+Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
+
 ## Batch 65: Verifikasi run #6 (build hijau) + 2 peringatan baru dari edit Batch 63/64 + filter NP Compose
 
 User mengunggah `Vidsize_laporan-untuk-claude_run6.zip` tanpa teks (hasil push Batch 64, commit ae786f2).

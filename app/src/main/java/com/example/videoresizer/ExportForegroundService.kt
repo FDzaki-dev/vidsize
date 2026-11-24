@@ -70,6 +70,7 @@ class ExportForegroundService : Service() {
             startForeground(NOTIFICATION_ID, buildNotification(this, progress = 0))
         } catch (e: Exception) {
             Log.e(TAG, "onCreate startForeground", e)
+            CrashLogger.logCaught(this, "onCreate startForeground", e)
             stopSelf()
         }
     }

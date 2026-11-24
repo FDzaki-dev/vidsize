@@ -11,6 +11,8 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.UUID
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 
 /**
  * Built-in crash logger. Installs a global [Thread.UncaughtExceptionHandler]
@@ -28,12 +30,28 @@ import java.util.UUID
  * Fail-safe by design: every write is wrapped in its own try/catch so a
  * logging failure (storage full, provider unavailable, permission revoked
  * mid-flight) can never mask, replace, or add to the original crash.
+ *
+ * Batch 70: [logCaught] mencatat pengecualian yang TERTANGKAP (bukan crash) secara mentah ke
+ * folder yang sama sebagai `error_<ts>_<uuid>.txt` (retensi 50 berkas per awalan, terpisah dari
+ * `crash_*`), supaya kegagalan ekspor/publikasi yang dulu hanya muncul sebagai pesan singkat di UI
+ * atau logcat tetap terdiagnosis tanpa adb. Berkas ini daun: tak bergantung ke berkas proyek lain.
  */
 object CrashLogger {
 
     private const val RELATIVE_DIR = "Documents/VideoResizer/logs/"
     private const val MAX_RETAINED_LOGS = 50
     private const val TAG = "VidsizeCrashLogger"
+    private const val CRASH_PREFIX = "crash"
+    private const val CAUGHT_PREFIX = "error"
+    private const val CRASH_TITLE = "=== Vidsize crash log ==="
+    private const val CAUGHT_TITLE = "=== Vidsize caught-exception log ==="
+
+    /** Thread latar tunggal untuk [logCaught]: I/O MediaStore tak pernah berjalan di thread pemanggil (sering main). */
+    private val caughtLogExecutor: ExecutorService by lazy {
+        Executors.newSingleThreadExecutor { runnable ->
+            Thread(runnable, "VidsizeCaughtLogger").apply { isDaemon = true }
+        }
+    }
 
     /** Registers the crash handler. Call once, from Application.onCreate(). */
     fun install(context: Context) {
@@ -51,10 +69,30 @@ object CrashLogger {
         }
     }
 
+    /**
+     * Mencatat [throwable] yang sudah TERTANGKAP (aplikasi tetap berjalan) mentah ke Documents lewat MediaStore.
+     * [tag] = nama situs/fungsi (konvensi sama dgn `Log.e(TAG, "<fungsi>", e)`), tanpa kalimat penjelasan buatan.
+     * Badan log (stacktrace) dibuat di thread pemanggil; penulisan berkas di thread latar. Tidak pernah melempar.
+     */
+    fun logCaught(context: Context, tag: String, throwable: Throwable) {
+        runCatching {
+            val appContext = context.applicationContext
+            val body = buildLogBody(appContext, Thread.currentThread(), throwable, CAUGHT_TITLE, tag)
+            caughtLogExecutor.execute {
+                runCatching { persist(appContext, CAUGHT_PREFIX, body) }
+                    .onFailure { Log.e(TAG, "logCaught.persist", it) }
+            }
+        }.onFailure { Log.e(TAG, "logCaught", it) }
+    }
+
     private fun writeLog(context: Context, thread: Thread, throwable: Throwable) {
+        persist(context, CRASH_PREFIX, buildLogBody(context, thread, throwable, CRASH_TITLE))
+    }
+
+    /** Menulis [body] sebagai `<prefix>_<ts>_<uuid>.txt` di [RELATIVE_DIR] lewat MediaStore, lalu retensi per [prefix]. */
+    private fun persist(context: Context, prefix: String, body: String) {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val fileName = "crash_${timestamp}_${UUID.randomUUID()}.txt"
-        val body = buildLogBody(context, thread, throwable)
+        val fileName = "${prefix}_${timestamp}_${UUID.randomUUID()}.txt"
 
         val resolver = context.contentResolver
         val values = ContentValues().apply {
@@ -79,10 +117,10 @@ object CrashLogger {
             return
         }
 
-        enforceRetention(context)
+        enforceRetention(context, prefix)
     }
 
-    private fun buildLogBody(context: Context, thread: Thread, throwable: Throwable): String {
+    private fun buildLogBody(context: Context, thread: Thread, throwable: Throwable, title: String, tag: String? = null): String {
         val stackTrace = StringWriter().also { throwable.printStackTrace(PrintWriter(it)) }.toString()
         val versionInfo = try {
             val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
@@ -96,27 +134,28 @@ object CrashLogger {
         }
 
         return buildString {
-            appendLine("=== Vidsize crash log ===")
+            appendLine(title)
             appendLine("Timestamp: ${Date()}")
             appendLine("App version: $versionInfo")
             appendLine("OS: Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine("Device model: ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine("Thread: ${thread.name}")
+            if (tag != null) appendLine("Tag: $tag")
             appendLine()
             appendLine("Stack trace:")
             append(stackTrace)
         }
     }
 
-    /** FIFO retention: keeps at most [MAX_RETAINED_LOGS] logs, oldest deleted first. */
-    private fun enforceRetention(context: Context) {
+    /** FIFO retention: keeps at most [MAX_RETAINED_LOGS] logs per [prefix] (crash / error), oldest deleted first. */
+    private fun enforceRetention(context: Context, prefix: String) {
         try {
             val resolver = context.contentResolver
             val collection = MediaStore.Files.getContentUri("external")
             val projection = arrayOf(MediaStore.Files.FileColumns._ID)
             val selection = "${MediaStore.Files.FileColumns.RELATIVE_PATH} = ? AND " +
                 "${MediaStore.Files.FileColumns.DISPLAY_NAME} LIKE ?"
-            val selectionArgs = arrayOf(RELATIVE_DIR, "crash_%.txt")
+            val selectionArgs = arrayOf(RELATIVE_DIR, "${prefix}_%.txt")
             val sortOrder = "${MediaStore.Files.FileColumns.DATE_ADDED} ASC"
 
             resolver.query(collection, projection, selection, selectionArgs, sortOrder)?.use { cursor ->

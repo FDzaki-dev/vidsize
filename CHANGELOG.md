@@ -1,5 +1,34 @@
 # Changelog
 
+## Batch 70: Verifikasi run #11 (build hijau) + keputusan arsitektur: pengecualian TERTANGKAP dicatat mentah ke `Documents/` lewat `CrashLogger.logCaught`
+
+User mengunggah `Vidsize_laporan-untuk-claude_run11.zip`, lalu menyerahkan keputusan arsitektur ke Claude ("keputusan ditangan mu. yang penting terus berproses").
+
+Hasil run #11 (hasil push Batch 69, commit db679d2): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); 1 tes unit lulus (hanya generator laporan, BUKAN bukti perilaku);
+lintDebug LULUS (0 isu); detekt 20; SpotBugs 7 (hanya RV x7, tanpa temuan baru dari kode OkHttp/Okio; baris `mkdirs()`/`delete()` AppUpdater bergeser ke 161/189); kompilator 0.
+Semua prediksi Batch 69 TERBUKTI: `AppUpdater.download()` OkHttp + Okio terkompilasi dan dependency `okhttp:4.12.0` + `okio:3.6.0` ter-resolve di CI.
+
+KEPUTUSAN (diambil Claude): log tangkapan MASUK ke `Documents/`, dengan mengubah aturan ArchUnit "mandiri" secara sempit. Alasan: aturan guard user mewajibkan logger menangkap pengecualian
+mentah ke `Documents/` (user memakai Termux tanpa adb, jadi logcat tak terjangkau), sedangkan kegagalan ekspor terpenting — `Transformer.Listener.onError` (`ExportException`) dan catch
+`resize`/`compress` — hanya meneruskan `e.message` ke UI (stacktrace + kode galat hilang). Aturan "mandiri" hanyalah potret kondisi Batch 59 ("SAAT INI tidak bergantung"), bukan desain
+yang dilarang; `CrashLogger.kt` tetap daun (tetap mandiri) sehingga tak ada siklus.
+
+Perubahan (5 berkas kode/tes; di dalam batas 3-5):
+- `CrashLogger.kt` — API publik baru `logCaught(context, tag, throwable)`: badan log (stacktrace mentah + versi app/OS/perangkat/thread + baris `Tag:`) dibuat di thread pemanggil, penulisan
+  berkas `error_<ts>_<uuid>.txt` ke `Documents/VideoResizer/logs/` lewat MediaStore di thread latar tunggal (`Executors.newSingleThreadExecutor`, daemon) -> tak pernah I/O di main thread;
+  dibungkus `runCatching` (tak pernah melempar). Refaktor tanpa mengubah jalur crash: `writeLog` -> `persist(context, prefix, body)`, `buildLogBody(..., title, tag)`, `enforceRetention(context, prefix)`
+  (retensi 50 berkas PER awalan: `crash_*` dan `error_*` terpisah). Judul crash tetap `=== Vidsize crash log ===`; handler uncaught-exception tidak berubah.
+- `VideoResizer.kt` — `logCaught` di 4 titik: catch awal `resize` (`resize.start`) dan `compress` (`compress.start`), serta kedua `onError` (`resize.onError <errorCodeName>`,
+  `compress.onError <errorCodeName>`; `ExportException.errorCodeName` ada di Media3 1.4.1, diverifikasi di sumber tag). Pesan UI (`ResizeResult.Failure`) TIDAK berubah.
+- `PublicMovieExporter.kt` — `logCaught` di 4 catch (`publishViaMediaStore`, `publishViaLegacyStorage`, `publishImageViaMediaStore`, `publishImageViaLegacyStorage`), tepat setelah `Log.e` yang sudah ada.
+- `ExportForegroundService.kt` — `logCaught(this, "onCreate startForeground", e)` setelah `Log.e` yang sudah ada (perilaku `stopSelf()` tetap).
+- `ArchitectureTest.kt` — `standalone(file, allowed)`: `VideoResizer.kt`, `PublicMovieExporter.kt`, `ExportForegroundService.kt` boleh bergantung HANYA ke `CrashLogger.kt` (nama aturan memuat
+  "(kecuali CrashLogger.kt = logger daun)"); `CrashLogger.kt` dan berkas mandiri lain tetap murni mandiri. Jumlah aturan tetap 12.
+
+Sengaja TIDAK disentuh: `GifExporter.kt` (catch 89/144) dan catch `MainActivity.kt` (1978/4347/4364/4492/4959) serta `AppUpdater.kt` (belum dipasangi `logCaught`; AppUpdater butuh pengecualian aturan
+"mandiri" yang sama), RV x7, detekt `TooGenericExceptionCaught` x20 (jumlah catch tak berubah; `logCaught` memakai `runCatching`, bukan catch baru).
+NOT VERIFIED: kompilasi Kotlin (tak ada kotlinc di sandbox), build/tes/lint/SpotBugs/detekt, ArchUnit pasca-ubah aturan, dan penulisan `error_*.txt` di HP (butuh ekspor yang gagal).
+
 ## Batch 69: Verifikasi run #10 (build hijau) + unduhan APK `AppUpdater.download()` ke OkHttp + Okio (aturan guard streaming)
 
 User mengunggah `Vidsize_laporan-untuk-claude_run10.zip` tanpa teks (hasil push Batch 68, commit c65a386).

@@ -531,6 +531,10 @@ the GitHub Actions route above is much faster in practice.
 
 ## Project & CI notes (baca ini dulu sebelum ubah setup build/git)
 
+- **Log pengecualian tertangkap ke `Documents/` (Batch 70)**: `CrashLogger.logCaught(context, "<fungsi>", e)` menulis stacktrace MENTAH ke `Documents/VideoResizer/logs/error_<ts>_<uuid>.txt` (MediaStore,
+  thread latar, retensi 50 berkas per awalan; `crash_*` terpisah). Dipasang pada kegagalan ekspor (`VideoResizer.kt`: start + `onError`), publikasi (`PublicMovieExporter.kt`), `startForeground`.
+  Catch baru yang menelan/mengubah pengecualian jadi pesan UI sebaiknya memanggilnya. Aturan ArchUnit "mandiri" mengizinkan `VideoResizer.kt`/`PublicMovieExporter.kt`/`ExportForegroundService.kt`
+  bergantung ke `CrashLogger.kt` SAJA (logger daun, ia sendiri tetap mandiri).
 - **OkHttp + Okio hanya untuk unduhan APK (Batch 69)**: `AppUpdater.download()` memakai OkHttp `ResponseBody.source()` -> Okio `sink().buffer()` dgn `emitCompleteSegments()` per potongan
   (aturan guard streaming; JANGAN `bytes()`/`readBytes()` dan JANGAN lupa `emitCompleteSegments()` — tanpa itu buffer Okio menampung seluruh APK). `check()` tetap HttpURLConnection + `org.json`.
   Dependency: `okhttp:4.12.0` + `okio:3.6.0` (`app/build.gradle.kts`); rilis tanpa R8 (`isMinifyEnabled = false`).

@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 69**. This is the first-read file per the context
+Snapshot as of **Batch 70**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,10 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 70 (5 berkas kode/tes):** run #11 HIJAU (SpotBugs 7, detekt 20, kompilator 0, lint 0, ArchUnit 12/0). KEPUTUSAN ARSITEKTUR (diserahkan user ke Claude): pengecualian TERTANGKAP kini dicatat
+  mentah ke `Documents/VideoResizer/logs/error_<ts>_<uuid>.txt` lewat `CrashLogger.logCaught` (thread latar, retensi 50 per awalan, tak pernah melempar); dipasang di `VideoResizer.kt` (start + `onError`
+  resize/compress), `PublicMovieExporter.kt` (4 catch), `ExportForegroundService.kt` (`startForeground`). Aturan ArchUnit "mandiri" dilonggarkan SEMPIT: 3 berkas itu boleh bergantung ke `CrashLogger.kt`
+  saja. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 69 (2 berkas kode/konfigurasi):** run #10 HIJAU (SpotBugs 7, detekt 20, kompilator 0, lint 0, ArchUnit 12/0); `AppUpdater.download()` kini OkHttp 4.12.0 + Okio 3.6.0
   (`ResponseBody.source()` -> `sink().buffer()`, `emitCompleteSegments()` per 8 KB; aturan guard streaming terpenuhi); `check()` tetap HttpURLConnection. Dependency baru HANYA
   untuk `download()`. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
@@ -260,6 +264,15 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 70]** Triase run #11 + `CrashLogger.logCaught` (catch tertangkap -> `Documents/`) + aturan ArchUnit "mandiri" dilonggarkan sempit -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP; run #12 diharapkan: build hijau, ArchUnit 12/0 (bila ada pelanggaran: baca `kelas proyek dari berkas lain` pada aturan "mandiri" — kemungkinan kelas sintetis
+`CrashLogger$...` salah dipetakan `fileOf`, JANGAN longgarkan lebih luas tanpa bukti), detekt 20, lint 0, kompilator 0, SpotBugs 7 (+ mungkin temuan baru di `CrashLogger.kt`, mis.
+`SIC_INNER_SHOULD_BE_STATIC_ANON` untuk lambda `ThreadFactory`: baca `[elemen kode]`, jangan menyaring tanpa bukti). Bila build MERAH: baca `e:` di laporan; jalan balik = hapus 9 panggilan
+`CrashLogger.logCaught(...)` + `logCaught` + `caughtLogExecutor` (+ kembalikan `standalone(file)` di `ArchitectureTest.kt`). (2) Uji manual di HP (user): picu ekspor yang gagal -> cek
+`Documents/VideoResizer/logs/error_*.txt` (berisi `Tag:` + stacktrace mentah). (3) Sisa kandidat: pasang `logCaught` di `GifExporter.kt` (89/144), catch `MainActivity.kt` (1978/4347/4364/4492/4959),
+`AppUpdater.kt` (butuh `LOGGER_CLIENT_FILES` += `AppUpdater.kt`); RV x7 dibiarkan terlihat; detekt `TooGenericExceptionCaught` x20 (`startForeground` HARUS tetap `Exception`). Tidak diverifikasi di
+sandbox: kompilasi Kotlin, build/tes/lint/SpotBugs/detekt, perilaku di HP. Resume point Batch 69 & di bawah tetap berlaku (butir "KEPUTUSAN ARSITEKTUR menunggu user" di dalamnya SUDAH diputuskan Batch 70).
+
 🟡 **[RESUME POINT — Batch 69]** Triase run #10 + `AppUpdater.download()` OkHttp+Okio -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #11
 diharapkan: build hijau (resolusi `okhttp:4.12.0` + `okio:3.6.0` dari mavenCentral), detekt 20, lint 0, ArchUnit 12/0, kompilator 0, SpotBugs 7 (+ mungkin temuan baru di `AppUpdater.kt`:
 baca `[elemen kode]` + pesan, JANGAN menyaring tanpa bukti). Bila build MERAH di `AppUpdater.kt`/resolusi dependency: baca `e:`/"Could not resolve" di laporan; jalan balik = kembalikan
@@ -468,6 +481,9 @@ sesi berikutnya:
    "Kompres GIF"): itu instruksi baru yang eksplisit, belum dieksekusi.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 70** — User: "keputusan ditangan mu. yang penting terus berproses" (+ upload laporan CI run #11). Run #11 membenarkan semua prediksi Batch 69 (OkHttp+Okio terkompilasi; SpotBugs 7, detekt 20, kompilator 0).
+  Keputusan arsitektur: log tangkapan masuk `Documents/` (`CrashLogger.logCaught`, `error_*.txt`, thread latar, retensi 50 per awalan); dipasang di `VideoResizer.kt` (4 titik), `PublicMovieExporter.kt`
+  (4), `ExportForegroundService.kt` (1); `ArchitectureTest.kt`: "mandiri" boleh bergantung ke `CrashLogger.kt` saja untuk 3 berkas itu (aturan tetap 12). 5 berkas kode/tes (dalam batas).
 - **Batch 69** — Tanpa teks user (satu upload: laporan CI run #10). Run #10 membenarkan semua prediksi Batch 68 (SpotBugs 31 -> 7, kompilator 1 -> 0, detekt 20, lint 0, ArchUnit 12/0).
   `AppUpdater.download()`: HttpURLConnection -> OkHttp 4.12.0 + Okio 3.6.0 (`source()` -> `sink().buffer()`, `emitCompleteSegments()` per 8 KB; pesan galat/progres/hapus-file-saat-gagal
   dipertahankan); `app/build.gradle.kts`: +2 dependency. API diverifikasi di sumber GitHub tag Okio 3.6.0 / OkHttp 4.12.0. Tidak disentuh: `check()`, RV x7, detekt TooGeneric x20. 2 berkas kode/konfigurasi.

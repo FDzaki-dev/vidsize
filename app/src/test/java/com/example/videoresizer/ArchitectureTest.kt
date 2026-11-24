@@ -127,11 +127,16 @@ class ArchitectureTest {
     private fun isUiClass(c: JavaClass): Boolean =
         isAppClass(c) && (fileOf(c) in UI_FILES || baseOf(c).packageName.startsWith(UI_THEME_PREFIX))
 
-    /** Berkas [file] tidak boleh bergantung ke kelas proyek dari berkas lain (R/BuildConfig tidak dihitung). */
-    private fun standalone(file: String): ArchRule =
+    /**
+     * Berkas [file] tidak boleh bergantung ke kelas proyek dari berkas lain (R/BuildConfig tidak dihitung), kecuali
+     * berkas daun di [allowed] (Batch 70: `CrashLogger.kt`, yang sendiri tetap mandiri sehingga tak ada siklus).
+     */
+    private fun standalone(file: String, allowed: Set<String> = emptySet()): ArchRule =
         noClasses()
             .that(predicate("kelas dari $file") { isAppClass(it) && fileOf(it) == file })
-            .should().dependOnClassesThat(predicate("kelas proyek dari berkas lain") { isAppClass(it) && fileOf(it) != file })
+            .should().dependOnClassesThat(
+                predicate("kelas proyek dari berkas lain") { isAppClass(it) && fileOf(it) != file && fileOf(it) !in allowed },
+            )
 
     private fun rules(): List<Pair<String, ArchRule>> {
         val engine = predicate("mesin (berkas non-UI)") { isAppClass(it) && fileOf(it) in ENGINE_FILES }
@@ -162,7 +167,14 @@ class ArchitectureTest {
                     .should().dependOnClassesThat(predicate("kelas dari MainActivity.kt") { isAppClass(it) && fileOf(it) == MAIN_FILE }),
         )
         STANDALONE_FILES.forEach { file ->
-            result.add("mandiri: $file tidak bergantung ke berkas proyek lain" to standalone(file))
+            if (file in LOGGER_CLIENT_FILES) {
+                result.add(
+                    "mandiri: $file tidak bergantung ke berkas proyek lain (kecuali $LOGGER_FILE = logger daun)" to
+                        standalone(file, setOf(LOGGER_FILE)),
+                )
+            } else {
+                result.add("mandiri: $file tidak bergantung ke berkas proyek lain" to standalone(file))
+            }
         }
         return result
     }
@@ -190,7 +202,13 @@ class ArchitectureTest {
         /** Semua berkas proyek yang dikenal (UI + non-UI); `SourceFile` lain (mis. `LazyDsl.kt`) = hasil inline, lihat [fileOf]. */
         val KNOWN_FILES = UI_FILES + ENGINE_FILES
 
-        /** Berkas yang SAAT INI tidak bergantung ke berkas proyek lain mana pun (Batch 59, dari kode sumber). */
+        /** Logger daun (Batch 70): satu-satunya berkas proyek yang boleh dipakai oleh [LOGGER_CLIENT_FILES]; ia sendiri tetap mandiri. */
+        const val LOGGER_FILE = "CrashLogger.kt"
+
+        /** Berkas mesin yang memanggil `CrashLogger.logCaught` (Batch 70) — dikecualikan dari "mandiri" HANYA untuk [LOGGER_FILE]. */
+        val LOGGER_CLIENT_FILES = setOf("VideoResizer.kt", "PublicMovieExporter.kt", "ExportForegroundService.kt")
+
+        /** Berkas yang SAAT INI tidak bergantung ke berkas proyek lain mana pun, kecuali logger daun (Batch 59/70, dari kode sumber). */
         val STANDALONE_FILES = listOf(
             "VideoResizer.kt", "VideoPickerScreen.kt", "AppUpdater.kt", "CrashLogger.kt",
             "ExportForegroundService.kt", "FilmstripExtractor.kt", "GifEncoder.kt", "PublicMovieExporter.kt",

@@ -71,6 +71,7 @@ object PublicMovieExporter {
             itemUri
         } catch (e: Exception) {
             Log.e(TAG, "publishViaMediaStore", e)
+            CrashLogger.logCaught(context, "publishViaMediaStore", e)
             resolver.delete(itemUri, null, null)
             null
         }
@@ -99,6 +100,7 @@ object PublicMovieExporter {
             resultUri ?: Uri.fromFile(destFile)
         } catch (e: Exception) {
             Log.e(TAG, "publishViaLegacyStorage", e)
+            CrashLogger.logCaught(context, "publishViaLegacyStorage", e)
             null
         }
     }
@@ -145,6 +147,7 @@ object PublicMovieExporter {
             itemUri
         } catch (e: Exception) {
             Log.e(TAG, "publishImageViaMediaStore", e)
+            CrashLogger.logCaught(context, "publishImageViaMediaStore", e)
             resolver.delete(itemUri, null, null)
             null
         }
@@ -171,6 +174,7 @@ object PublicMovieExporter {
             resultUri ?: Uri.fromFile(destFile)
         } catch (e: Exception) {
             Log.e(TAG, "publishImageViaLegacyStorage", e)
+            CrashLogger.logCaught(context, "publishImageViaLegacyStorage", e)
             null
         }
     }

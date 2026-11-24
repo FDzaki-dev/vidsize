@@ -1,5 +1,5 @@
 FILE_MANIFEST.txt — Video Resizer
-Generated: Batch 6, last updated Batch 69. Regenerate/update this file
+Generated: Batch 6, last updated Batch 70. Regenerate/update this file
 whenever files are added, removed, or renamed — it should always match
 `find . -type f` for real.
 Legend: [PROTECTED] = edit-parsial-only per user preferences; deleting or
@@ -29,7 +29,7 @@ app/
   proguard-rules.pro                       R8 rules (inactive while isMinifyEnabled=false)
 
 app/src/test/java/com/example/videoresizer/
-  ArchitectureTest.kt                      (new, Batch 59; Batch 60: perbaikan false positive) 12 aturan ArchUnit per berkas sumber Kotlin; aktif hanya dgn env VIDSIZE_ARCH_REPORT=1; menulis build/reports/archunit/archunit-report.txt; Batch 61: +Haptics.kt di UI_FILES
+  ArchitectureTest.kt                      Batch 70: aturan "mandiri" boleh bergantung ke CrashLogger.kt (logger daun) untuk VideoResizer/PublicMovieExporter/ExportForegroundService, jumlah aturan tetap 12; (new, Batch 59; Batch 60: perbaikan false positive) 12 aturan ArchUnit per berkas sumber Kotlin; aktif hanya dgn env VIDSIZE_ARCH_REPORT=1; menulis build/reports/archunit/archunit-report.txt; Batch 61: +Haptics.kt di UI_FILES
 
 app/src/main/
   AndroidManifest.xml                      [PROTECTED] android:name=".VideoResizerApp" (Batch 2), permissions, activity decl; Batch 21: +INTERNET, +REQUEST_INSTALL_PACKAGES for in-app updater; Batch 61: +VIBRATE
@@ -40,13 +40,13 @@ app/src/main/java/com/example/videoresizer/
   Haptics.kt                               (new, Batch 61) VibratorHapticFeedback: haptic Compose diganti getaran Vibrator (LongPress=HEAVY_CLICK, lainnya=CLICK), dipasang sekali di MainActivity; Batch 62: SecurityException dicatat via Log.w
   AppUpdater.kt                            Batch 69: `download()` -> OkHttp `ResponseBody.source()` + Okio `sink().buffer()` (`check()` tetap HttpURLConnection); (new, Batch 21) in-app updater — GitHub Releases API check, streamed chunk-by-chunk APK download to cacheDir/updates/, FileProvider install handoff, canInstall()/requestInstallPermission() for the API 26+ unknown-sources AppOps gate; hardcoded OWNER="FDzaki-dev" REPO="Video-resizer"; Batch 61: REPO=vidsize
   VideoResizerApp.kt                       [PROTECTED — Application] installs CrashLogger.install() in onCreate (Batch 2)
-  CrashLogger.kt                           Batch 66: 4 catch -> Log.e mentah ke logcat (handler dibungkus runCatching); uncaught-exception handler → MediaStore Documents/VideoResizer/logs/, FIFO 50 (Batch 2); Batch 62: guard SDK_INT>=28 utk longVersionCode
-  VideoResizer.kt                          Batch 68: `compressInternal` pakai `Transformer.Builder.setVideoMimeType` (ganti `setTransformationRequest` deprecated); core resize/export logic, Media3 Transformer setup, watermark + caption overlay, flip/frame-rate/target-size (Batch 9); Batch 19: added compress()/CompressRequest/CompressionLevel — separate H.265 encode path, ResizeRequest/resize() untouched
+  CrashLogger.kt                           Batch 70: +logCaught() (error_*.txt ke Documents, thread latar, retensi 50/awalan; persist/buildLogBody/enforceRetention diparametrisasi awalan); Batch 66: 4 catch -> Log.e mentah ke logcat (handler dibungkus runCatching); uncaught-exception handler → MediaStore Documents/VideoResizer/logs/, FIFO 50 (Batch 2); Batch 62: guard SDK_INT>=28 utk longVersionCode
+  VideoResizer.kt                          Batch 70: logCaught di resize/compress start + onError (errorCodeName); Batch 68: `compressInternal` pakai `Transformer.Builder.setVideoMimeType` (ganti `setTransformationRequest` deprecated); core resize/export logic, Media3 Transformer setup, watermark + caption overlay, flip/frame-rate/target-size (Batch 9); Batch 19: added compress()/CompressRequest/CompressionLevel — separate H.265 encode path, ResizeRequest/resize() untouched
   GifEncoder.kt                            (new, Batch 9) dependency-free GIF89a + LZW encoder; Batch 55: +encode() overload taking delays: List<Int> (per-frame delay, for GifCompressor's frame-dedup) — original delayCentiseconds: Int overload (GifExporter's call site) delegates to it unchanged; Batch 57: delays:List<Int> overload REMOVED (only GifCompressor.kt used it, now deleted) — back to a single encode() overload, byte-for-byte the pre-Batch-55 function body
   GifExporter.kt                           (new, Batch 9) frame extraction + palette quantization + GIF orchestration, used by GifScreen's "Video ke GIF" mode; NOT touched by Batch 55 (GifCompressor.kt was a separate pipeline, deliberately not sharing code with this file) nor by Batch 57's removal of that pipeline — this file and its call site are untouched throughout
-  ExportForegroundService.kt               Batch 67: catch startForeground -> Log.e mentah (tag VidsizeExportService) sebelum stopSelf(); foreground service wrapping VideoResizer for long exports
+  ExportForegroundService.kt               Batch 70: logCaught di catch startForeground; Batch 67: catch startForeground -> Log.e mentah (tag VidsizeExportService) sebelum stopSelf(); foreground service wrapping VideoResizer for long exports
   FilmstripExtractor.kt                    thumbnail filmstrip generation for trim UI
-  PublicMovieExporter.kt                   Batch 67: openOutputStream null -> hapus baris MediaStore IS_PENDING=1 yatim sebelum return null (video + GIF); Batch 66: 4 catch -> Log.e mentah (tag VidsizePublicExport); publishes finished videos to Movies/ via MediaStore + GIFs to Pictures/ (publishImage, Batch 9)
+  PublicMovieExporter.kt                   Batch 70: logCaught di 4 catch publish*; Batch 67: openOutputStream null -> hapus baris MediaStore IS_PENDING=1 yatim sebelum return null (video + GIF); Batch 66: 4 catch -> Log.e mentah (tag VidsizePublicExport); publishes finished videos to Movies/ via MediaStore + GIFs to Pictures/ (publishImage, Batch 9)
   VideoHistoryStore.kt                     Studio screen's history persistence (incl. caption fields Batch 8, flip/frameRate fields Batch 9, kind/gifFps/gifWidthPx for GIF entries Batch 12)
   SocialPreset.kt                          social-media aspect ratio/bitrate presets (Instagram/TikTok/etc.)
 

@@ -325,6 +325,7 @@ class VideoResizer(private val context: Context) {
         return try {
             resizeInternal(request, onProgress, onDone)
         } catch (e: Exception) {
+            CrashLogger.logCaught(context, "resize.start", e)
             onDone(ResizeResult.Failure(e.message ?: "Gagal memulai export"))
             null
         }
@@ -464,6 +465,7 @@ class VideoResizer(private val context: Context) {
                     exportException: ExportException
                 ) {
                     mainHandler.removeCallbacksAndMessages(null)
+                    CrashLogger.logCaught(context, "resize.onError ${exportException.errorCodeName}", exportException)
                     onDone(ResizeResult.Failure(exportException.message ?: "Export failed"))
                 }
             })
@@ -488,6 +490,7 @@ class VideoResizer(private val context: Context) {
         return try {
             compressInternal(request, onProgress, onDone)
         } catch (e: Exception) {
+            CrashLogger.logCaught(context, "compress.start", e)
             onDone(ResizeResult.Failure(e.message ?: "Gagal memulai kompresi"))
             null
         }
@@ -564,6 +567,7 @@ class VideoResizer(private val context: Context) {
                     exportException: ExportException
                 ) {
                     mainHandler.removeCallbacksAndMessages(null)
+                    CrashLogger.logCaught(context, "compress.onError ${exportException.errorCodeName}", exportException)
                     onDone(ResizeResult.Failure(exportException.message ?: "Export failed"))
                 }
             })

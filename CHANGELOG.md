@@ -1,5 +1,35 @@
 # Changelog
 
+## Batch 62: Penghitung lint laporan CI memberi "LULUS" palsu + guard API CrashLogger + log Haptics
+
+User mengunggah `Vidsize_laporan-untuk-claude_run3.zip` tanpa teks (hasil push Batch 61, commit 3fd9769).
+
+Hasil run #3: build + tes hijau (`Haptics.kt` terkompilasi di CI sungguhan); ArchUnit 12 aturan 0 pelanggaran (termasuk
+`Haptics.kt` di `UI_FILES`); SpotBugs 226 dan peringatan kompilator 13 IDENTIK dengan run #2; detekt 38 (+1 =
+`SwallowedException` `Haptics.kt:42`, milik Batch 61); lintDebug "LULUS (0 isu)" — TIDAK DAPAT DIPERCAYA, lihat bawah.
+
+Perubahan (3 berkas non-docs):
+- `.github/workflows/android-artifact.yml` — akar masalah: isu lint dihitung dengan `grep -c '<issue '` (ada spasi), sedangkan
+  XML lint menulis `<issue` lalu baris baru dan atribut di baris berikutnya (format dikonfirmasi dari contoh `lint-results-
+  debug.xml` nyata) -> hitungan SELALU 0 -> run #2 dan #3 melaporkan "LULUS" apa pun isi lint. Run #1 hanya terlihat dari
+  kutipan log Gradle. Perbaikan: `grep -cE '<issue([[:space:]]|$)'` (cocok satu baris maupun multibaris) dan detail isu
+  (id, severity, berkas:baris, pesan) kini diurai dari XML dengan `awk` (sebelumnya `head` ke `lint-results-debug.txt`,
+  berkas yang tidak dibuat tanpa `textReport`). Diuji pada XML contoh: 2 isu terhitung + terurai; XML kosong = LULUS.
+  Lint hanya dianggap LULUS bila XML ada DAN tak berisi `<issue`.
+- `CrashLogger.kt` — `pkgInfo.longVersionCode` (API 28, minSdk 24) dijaga `SDK_INT >= P`, selain itu `versionCode`.
+  Sebelumnya `NoSuchMethodError` (bukan `Exception`) lolos dari `catch (e: Exception)` dan membatalkan seluruh log crash
+  di API 24-27. Temuan lint `NewApi` run #1 (satu-satunya yang sempat terlihat).
+- `Haptics.kt` — `catch (SecurityException)` kini mencatat `Log.w(..., denied)` (bukan menelan diam-diam; menutup temuan
+  detekt run #3).
+
+Dampak: run berikutnya akan menampilkan temuan lint SUNGGUHAN untuk pertama kalinya (whitelist: WrongConstant, NewApi,
+MissingPermission, AutoboxingStateCreation, UseOfNonLambdaOffsetOverload, ConstantLocale). Status lint di laporan lama
+(run #2, #3) = NOT VERIFIED, bukan bersih. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
+
+Verifikasi: YAML + `bash -n` semua blok `run`; simulasi blok lint terhadap XML contoh (ada isu / kosong); `Haptics.kt` +
+ekspresi `CrashLogger` dikompilasi `kotlinc` 1.9.24 terhadap stub API. NOT VERIFIED: build/tes/lint sungguhan di CI,
+rasa getaran di HP.
+
 ## Batch 61: Haptic kuat terpusat + REPO updater + triase laporan CI run #2
 
 User mengunggah `Vidsize_v60.zip` + `Vidsize_laporan-untuk-claude_run2.zip` tanpa teks; langkah berikutnya diambil dari

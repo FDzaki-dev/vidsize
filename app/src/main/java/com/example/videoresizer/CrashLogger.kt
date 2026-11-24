@@ -81,7 +81,10 @@ object CrashLogger {
         val stackTrace = StringWriter().also { throwable.printStackTrace(PrintWriter(it)) }.toString()
         val versionInfo = try {
             val pkgInfo = context.packageManager.getPackageInfo(context.packageName, 0)
-            "${pkgInfo.versionName} (${pkgInfo.longVersionCode})"
+            // Batch 62: longVersionCode baru ada di API 28 (minSdk 24); NoSuchMethodError bukan Exception -> log crash API 24-27 hilang.
+            val code: Long = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) pkgInfo.longVersionCode
+            else @Suppress("DEPRECATION") pkgInfo.versionCode.toLong()
+            "${pkgInfo.versionName} ($code)"
         } catch (e: Exception) {
             "unknown"
         }

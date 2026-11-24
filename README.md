@@ -531,6 +531,8 @@ the GitHub Actions route above is much faster in practice.
 
 ## Project & CI notes (baca ini dulu sebelum ubah setup build/git)
 
+- **Laporan lint (Batch 62)**: XML lint menulis `<issue` lalu baris baru, jadi isu dihitung dengan `grep -cE '<issue([[:space:]]|$)'`
+  dan diurai dari XML (bukan dari `.txt`). Status lint pada laporan run #2/#3 ("LULUS (0 isu)") salah hitung = NOT VERIFIED.
 - **Haptic (Batch 61)**: `LocalHapticFeedback` di-override SEKALI di akar `MainActivity.setContent` oleh
   `VibratorHapticFeedback` (`Haptics.kt`, getaran `Vibrator`; `LongPress` = `EFFECT_HEAVY_CLICK`, tipe lain = `EFFECT_CLICK`).
   Titik panggil baru cukup memakai `LocalHapticFeedback.current` seperti biasa; jangan memanggil `View.performHapticFeedback`

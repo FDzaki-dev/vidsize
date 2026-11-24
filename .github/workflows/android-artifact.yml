@@ -219,7 +219,9 @@ jobs:
             NEED_STATIC_LOG=1
           fi
           if [ -f "$LINT_XML" ]; then
-            LNT=$(grep -c '<issue ' "$LINT_XML" 2>/dev/null)
+            # Batch 62: XML lint menulis `<issue` lalu baris baru (atribut di baris berikutnya) -> pola lama '<issue ' (dgn spasi)
+            # SELALU 0 = "LULUS" palsu di run #2/#3. Pola ERE ini cocok untuk format satu baris maupun multibaris.
+            LNT=$(grep -cE '<issue([[:space:]]|$)' "$LINT_XML" 2>/dev/null)
             LNE=$(grep -c 'severity="Error"\|severity="Fatal"' "$LINT_XML" 2>/dev/null)
             LNW=$(grep -c 'severity="Warning"' "$LINT_XML" 2>/dev/null)
             LNT=${LNT:-0}
@@ -230,8 +232,17 @@ jobs:
             else
               LINT_SUMMARY="lintDebug: $LNT isu ($LNE error, $LNW warning)"
               {
-                echo "lintDebug (maks 60 baris):"
-                head -n 60 "$LINT_TXT" 2>/dev/null
+                echo "lintDebug (maks 60):"
+                awk '
+                  /<issue([ \t]|$)/ { id = ""; sev = ""; msg = ""; file = ""; line = ""; inloc = 0; gid = 0; gsev = 0; gmsg = 0 }
+                  /(^|[ \t])id="/ && !gid { t = $0; sub(/^.*id="/, "", t); sub(/".*$/, "", t); id = t; gid = 1 }
+                  /(^|[ \t])severity="/ && !gsev { t = $0; sub(/^.*severity="/, "", t); sub(/".*$/, "", t); sev = t; gsev = 1 }
+                  /(^|[ \t])message="/ && !gmsg { t = $0; sub(/^.*message="/, "", t); sub(/"[ \t]*>?$/, "", t); msg = substr(t, 1, 120); gmsg = 1 }
+                  /<location/ { inloc = 1 }
+                  inloc && file == "" && /(^|[ \t])file="/ { t = $0; sub(/^.*file="/, "", t); sub(/".*$/, "", t); sub(/.*\/com\/example\/videoresizer\//, "", t); sub(/.*\/app\/src\//, "", t); file = t }
+                  inloc && line == "" && /(^|[ \t])line="/ { t = $0; sub(/^.*line="/, "", t); sub(/".*$/, "", t); line = t }
+                  /<\/issue>/ { print "- " id " (" sev ") @ " file ":" line " - " msg }
+                ' "$LINT_XML" | head -n 60
               } >> report-static.tmp
             fi
           else

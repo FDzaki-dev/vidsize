@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 61**. This is the first-read file per the context
+Snapshot as of **Batch 62**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,9 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 62 (3 berkas non-docs):** penghitung isu lint di `android-artifact.yml` diperbaiki (dulu SELALU 0 = "LULUS" palsu di run #2/#3),
+  `CrashLogger.kt` guard API 28 `longVersionCode`, `Haptics.kt` mencatat `SecurityException`. Versi/tag/keystore/signing/Stale Run
+  Guard TIDAK berubah.
 - **Batch 61 (5 berkas non-docs):** haptic kuat terpusat (`Haptics.kt` baru + 1 situs provider di `MainActivity.kt` + `VIBRATE`
   di manifest), `AppUpdater.REPO` = `vidsize`, `Haptics.kt` didaftarkan di `UI_FILES` `ArchitectureTest.kt`. Versi/tag/keystore/
   signing/Stale Run Guard TIDAK berubah.
@@ -236,6 +239,18 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 62]** Penghitung lint laporan CI + guard API `CrashLogger` + log `Haptics` -> **SELESAI di ZIP, NOT VERIFIED
+di CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #4 menampilkan temuan lint SUNGGUHAN untuk pertama kalinya — triase tiap
+temuan dengan membaca kode di titiknya; status lint run #2/#3 ("LULUS") JANGAN dipercaya. Bila lint masih "LULUS (0 isu)"
+padahal Gradle menandai isu, curigai penghitung lagi (format XML: `<issue` + baris baru). (2) Run #3 (Batch 61) terverifikasi
+di CI: build + tes hijau, ArchUnit 12 aturan 0 pelanggaran, detekt 38 (+1 `Haptics.kt` kini ditutup). (3) Rasa getaran di HP
+belum diverifikasi — tunggu laporan user; bila tetap lemah, minta setelan getaran/haptik HP, jangan ganti pendekatan tanpa bukti.
+(4) Sisa kandidat (alasan di CHANGELOG Batch 61): pengecualian ditelan tanpa jejak mentah di `PublicMovieExporter.kt`/`MainActivity.kt`
+(aturan ArchUnit "mandiri" melarang `PublicMovieExporter.kt` memanggil `CrashLogger.kt` -> perlu keputusan arsitektur);
+`AppUpdater.download()` belum OkHttp+Okio (sudah streaming 8 KB; butuh dependency baru, verifikasi di CI); 9 peringatan deprecated
+`Icons.Filled.*` -> AutoMirrored. SpotBugs `NP_*`/`SA_*`/`OBL_*` yang dibaca = false positive codegen. Tidak diverifikasi di sandbox:
+build/tes/lint sungguhan. Resume point Batch 61 & 60 & 59 & 58 di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 61]** Haptic kuat terpusat + `AppUpdater.REPO` -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
 **LANGKAH BERIKUTNYA:** (1) push ZIP; di HP rasakan ketukan biasa (klik tegas) dan aksi `LongPress` (mulai/batal/konfirmasi,
 lebih berat). Bila TETAP tak terasa, cek setelan sistem getaran/haptik HP dan kirim hasilnya — jangan ganti pendekatan tanpa
@@ -351,6 +366,10 @@ sesi berikutnya:
    "Kompres GIF"): itu instruksi baru yang eksplisit, belum dieksekusi.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 62** — Tanpa teks user (upload laporan CI run #3). Ditemukan penghitung lint `grep -c '<issue '` selalu 0 karena XML
+  lint multibaris -> "LULUS (0 isu)" palsu di run #2/#3; diganti pola ERE + penguraian detail dari XML (diuji pada XML contoh).
+  Sekalian: `CrashLogger.kt` guard `longVersionCode` API 28 (lint `NewApi` run #1), `Haptics.kt` tidak lagi menelan
+  `SecurityException` (detekt run #3). 3 berkas non-docs: `android-artifact.yml`, `CrashLogger.kt`, `Haptics.kt`.
 - **Batch 61** — Tanpa teks user (dua upload: `Vidsize_v60.zip` + laporan CI run #2); pengingat user: haptic selalu lemah.
   Haptic bawaan Compose (`TextHandleMove`, 90 titik panggil) diganti SEKALI di akar lewat `VibratorHapticFeedback`
   (`Haptics.kt`); `AppUpdater.REPO` -> `vidsize` (bukti: nama lama = 301). Triase run #2: temuan yang dibaca ternyata false

@@ -5,6 +5,7 @@ import android.os.Build
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
+import android.util.Log
 import androidx.annotation.RequiresApi
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -40,6 +41,7 @@ class VibratorHapticFeedback(
             target.vibrate(effectFor(strong))
             true
         } catch (denied: SecurityException) {
+            Log.w(TAG, "Getaran ditolak, pakai haptic bawaan Compose", denied)
             false
         }
     }
@@ -55,6 +57,7 @@ class VibratorHapticFeedback(
         }
 
     private companion object {
+        const val TAG = "VidsizeHaptics"
         const val TAP_MS = 30L
         const val STRONG_MS = 45L
 

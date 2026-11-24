@@ -1,0 +1,41 @@
+# Batch 59 — detekt FOKUS & NON-BLOCKING, diadaptasi dari config/detekt/detekt.yml SONIX (Batch 531).
+# Prinsip (sama dgn SONIX): hanya aturan yang temuannya BISA DIAMATI di laporan dan BISA DIPERBAIKI di source.
+# Dipakai bersama buildUponDefaultConfig=true (app/build.gradle.kts): file ini hanya menimpa default detekt 1.23.8.
+# Sengaja HANYA properti/rule yang pasti valid di 1.23.8 (validasi config aktif: salah eja = detekt gagal
+# sebelum menganalisis apa pun).
+#
+# AKTIF (default detekt): potential-bugs, exceptions, empty-blocks, performance, coroutines.
+# DIMATIKAN dan alasannya (kategori gaya/refactor — bukan cacat, tidak actionable tanpa structural rewrite):
+#  - complexity / style / naming / comments: perbaikannya refactor besar. MainActivity.kt = 5306 baris dengan fungsi
+#    Compose sangat panjang, angka dp/alpha dianggap MagicNumber -> melanggar "tanpa structural rewrite".
+#  - formatting (ktlint) TIDAK dipasang sebagai plugin detekt di proyek ini, jadi tak perlu entri di sini.
+# SENGAJA TIDAK dimatikan (beda dari SONIX): SwallowedException, TooGenericExceptionCaught, SpreadOperator.
+# Di SONIX ketiganya dimatikan berdasarkan bukti laporan run #508 (semua fallback disengaja). Vidsize belum punya
+# laporan run apa pun -> menyaring tanpa bukti = menyembunyikan temuan yang belum terverifikasi. Evaluasi setelah
+# laporan pertama (hasil mentah ikut di artifact `Vidsize_laporan-mentah_run<N>`); matikan HANYA bila terbukti
+# fallback disengaja, dengan kutipan bukti di komentar ini.
+# Tidak memblokir: `ignoreFailures = true` di app/build.gradle.kts (bukan di sini).
+
+build:
+  maxIssues: 0
+
+config:
+  validation: true
+  warningsAsErrors: true
+
+complexity:
+  active: false
+
+style:
+  active: false
+
+naming:
+  active: false
+
+comments:
+  active: false
+
+coroutines:
+  # Guard "Battery & Background": jangan GlobalScope — pakai viewModelScope/lifecycleScope/WorkManager.
+  GlobalCoroutineUsage:
+    active: true

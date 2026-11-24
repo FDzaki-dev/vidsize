@@ -1,6 +1,8 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    // Batch 59 — analisis statis detekt, non-blocking. Versi + alasan: lihat root build.gradle.kts.
+    id("io.gitlab.arturbosch.detekt")
 }
 
 android {
@@ -103,7 +105,63 @@ android {
     // gating on lint findings, so skip it rather than pay for it every push.
     lint {
         checkReleaseBuilds = false
+        // Batch 59 — lintDebug FOKUS & NON-BLOCKING (adaptasi SONIX Batch 531). checkReleaseBuilds=false (Batch 4)
+        // TIDAK diubah -> lintVitalRelease tetap lepas dari assembleRelease, jalur rilis utuh; lintDebug hanya jalan
+        // lewat `gradle lintDebug` (workflow `android-artifact.yml`).
+        abortOnError = false
+        warningsAsErrors = false
+        // WHITELIST kelas cacat nyata (bukan gaya/i18n/nag versi): WrongConstant, NewApi (minSdk 24 -> relevan),
+        // MissingPermission + pemeriksaan performa Compose + locale. Dikeluarkan sengaja: GradleDependency/
+        // NewerVersionAvailable (nag versi; Media3 sengaja dipin 1.4.1, lihat komentar dependency di bawah), HardcodedText/
+        // ContentDescription (i18n/gaya), UseKtx. ConfigurationScreenWidthHeight TIDAK dimasukkan: baru ada di Compose UI
+        // 1.7+ (proyek ini BOM 2024.06.00 = 1.6.x). Baseline TIDAK dipakai: baseline menyembunyikan temuan.
+        // Daftar ini belum diuji di CI vidsize: bila laporan memuat "Unknown issue id", hapus id itu.
+        checkOnly.addAll(
+            listOf(
+                "WrongConstant",
+                "NewApi",
+                "MissingPermission",
+                "AutoboxingStateCreation",
+                "UseOfNonLambdaOffsetOverload",
+                "ConstantLocale",
+                "NonObservableLocale"
+            )
+        )
     }
+}
+
+// Batch 59 — detekt FOKUS & NON-BLOCKING (adaptasi SONIX Batch 531): hanya aturan yang temuannya bisa diamati +
+// diperbaiki (lihat config/detekt/detekt.yml). `ignoreFailures = true` = temuan tercatat di laporan tapi task TIDAK gagal.
+// `autoCorrect = false`: detekt tidak menulis ulang source. Tanpa baseline (menyembunyikan temuan). Task `detekt` polos
+// (TANPA type resolution): detektDebug/detektMain akan membaca classpath Kotlin proyek dgn compiler 2.0.21 milik
+// detekt 1.23.8 -> tidak dipakai. `assembleRelease` (build.yml) TIDAK bergantung ke `detekt`/`check` -> jalur rilis
+// tidak menjalankan analisis; hanya plugin-nya yang dimuat.
+detekt {
+    toolVersion = "1.23.8"
+    buildUponDefaultConfig = true
+    allRules = false
+    parallel = true
+    ignoreFailures = true
+    autoCorrect = false
+    config.setFrom(rootProject.file("config/detekt/detekt.yml"))
+}
+
+// Resep resmi detekt (docs "Gradle > Dependencies"): detekt erat dgn versi compiler Kotlin-nya. Pin HANYA konfigurasi
+// detekt/detektPlugins ke 2.0.21 (versi build detekt 1.23.8); compile app tetap Kotlin 1.9.24 — konfigurasi
+// compileClasspath/kotlin plugin TIDAK disentuh. Sama dgn SONIX.
+configurations.matching { it.name == "detekt" || it.name == "detektPlugins" }.configureEach {
+    resolutionStrategy.eachDependency {
+        if (requested.group == "org.jetbrains.kotlin") {
+            useVersion("2.0.21")
+        }
+    }
+}
+
+// Batch 59 — SpotBugs (laporan SARIF) OPT-IN utk `.github/workflows/android-artifact.yml`: hanya aktif bila
+// `-Pvidsize.spotbugs=true`. Tanpa flag itu, plugin/dependency/task SpotBugs TIDAK dimuat sama sekali -> `build.yml`
+// (`assembleRelease`) tak tersentuh. Isi + alasan: config/spotbugs/spotbugs.gradle.kts.
+if (providers.gradleProperty("vidsize.spotbugs").isPresent) {
+    apply(from = rootProject.file("config/spotbugs/spotbugs.gradle.kts"))
 }
 
 dependencies {
@@ -141,4 +199,11 @@ dependencies {
     implementation("com.google.guava:guava:33.2.1-android")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
+
+    // Batch 59 — ArchUnit (aturan arsitektur) utk app/src/test/.../ArchitectureTest.kt, dijalankan HANYA oleh
+    // `.github/workflows/android-artifact.yml` (env VIDSIZE_ARCH_REPORT=1; tanpa env itu tes dilewati). `archunit` inti,
+    // BUKAN `archunit-junit5`: tes proyek ini JUnit 4. 1.4.2 = versi yang SAMA dgn SONIX. Dependency tes ini tidak
+    // ikut APK dan tidak dimuat oleh `assembleRelease`.
+    testImplementation("junit:junit:4.13.2")
+    testImplementation("com.tngtech.archunit:archunit:1.4.2")
 }

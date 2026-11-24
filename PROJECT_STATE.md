@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 57**. This is the first-read file per the context
+Snapshot as of **Batch 59**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -10,6 +10,18 @@ Batch 35) sebelum mulai.
 
 ## Standing rules (permanent — read first, applies to every future session without exception)
 
+- **Aturan pipeline CI (ditambahkan Batch 59; adaptasi workflow SONIX).** Ada DUA workflow terpisah:
+  `build.yml` ("Build APK": build + GitHub Release + artifact APK; satu-satunya jalur rilis) dan
+  `android-artifact.yml` (laporan evaluasi NON-BLOCKING: ArchUnit, tes unit, SpotBugs, detekt, lintDebug,
+  peringatan kompilator Kotlin -> artifact `Vidsize_laporan-untuk-claude_run<N>` berisi `laporan-untuk-claude.txt`
+  + `Vidsize_laporan-mentah_run<N>`; retensi 7 hari). JANGAN gabungkan keduanya dan JANGAN jadikan analisis
+  gerbang rilis. Laporan WAJIB membedakan `PASS` / `FAIL` / `NOT VERIFIED` (alat gagal atau laporan tak terbentuk
+  != lulus). Skema versi/tag (`1.<run>` / `v1.<run>-build<run>`, dibaca `Regex("build(\\d+)")` di `AppUpdater.kt`),
+  keystore ter-commit `release.keystore` + secret `RELEASE_KEYSTORE_PASSWORD`, Stale Run Guard, Gradle 8.7 TIDAK
+  boleh diganti dengan skema SONIX (commit-count / secret keystore base64 / Gradle 8.14.3). Plugin detekt
+  dimuat di setiap build (`ignoreFailures = true`); SpotBugs OPT-IN (`-Pvidsize.spotbugs=true`), ArchitectureTest
+  aktif hanya dgn env `VIDSIZE_ARCH_REPORT=1`. Filter noise (detekt.yml, exclude.xml, lint `checkOnly`) hanya
+  boleh ditambah dengan BUKTI dari laporan run + pembacaan kode di titik temuan.
 - **[BRANDING_NAME: Vidsize] [TERMUX_ROOT: VideoResizer]** (ditambahkan
   Batch 56, koreksi user). TERMUX_ROOT = `rootProject.name` di
   `settings.gradle.kts` — TANPA hyphen. JANGAN pakai `REPO = "Video-resizer"`
@@ -53,14 +65,20 @@ Batch 35) sebelum mulai.
   still exists anywhere is `appVersionMajor` in `app/build.gradle.kts`
   (currently `1`) — touch it ONLY for a deliberate breaking/milestone
   release, never as routine batch work, and if it IS deliberately changed,
-  the matching literal `"1"` in `.github/workflows/build.yml`'s two
-  `VERSION_NAME="1.${GITHUB_RUN_NUMBER}"` lines must be updated to match in
-  the same batch (both sites carry a cross-reference comment pointing at
-  each other and at this rule). This rule itself is not a batch-history
+  the matching literal `"1"` in `.github/workflows/build.yml`'s
+  `VERSION_NAME="1.${GITHUB_RUN_NUMBER}"` line (step "Determine version name",
+  satu-satunya situs sejak Batch 59 — sebelumnya dua) must be updated to match
+  in the same batch (situs itu dan `app/build.gradle.kts` saling merujuk di komentar). This rule itself is not a batch-history
   item and must not be treated as "resolved and removable" — it's a
   permanent policy.
 
 ## Current version
+- **Batch 59 (CI saja, nol perubahan source app):** pipeline CI diadaptasi maksimal dari workflow SONIX —
+  `build.yml` diperbarui (ubuntu-24.04, actions v5, ulang sekali bila unduhan gagal, Release dulu baru artifact APK
+  tanpa zip, isi Release = pesan commit, ringkasan build, `log_fail_*`), `android-artifact.yml` baru (laporan Claude),
+  `config/detekt/detekt.yml`, `config/spotbugs/{spotbugs.gradle.kts,exclude.xml}`, `ArchitectureTest.kt` (13 aturan
+  per berkas sumber), plugin detekt 1.23.8 + lint whitelist + dependency tes (junit 4.13.2, archunit 1.4.2).
+  Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 57 (2 permintaan user sekaligus):**
   1. **Fix persistensi theme (root cause, konkret — bukan tebakan
      platform):** `themePref` di `MainActivity.onCreate` dulu murni
@@ -212,6 +230,18 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 59]** Adaptasi pipeline CI SONIX -> **SELESAI di ZIP, NOT VERIFIED di CI** ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP, pastikan run `Build APK` hijau dan Release `v1.<run>-build<run>` terbit dengan
+isi pesan commit; bila gagal kirim artifact `log_fail_*`. Bila build rusak karena plugin detekt/dependency tes:
+balik = hapus baris detekt di `build.gradle.kts` + `app/build.gradle.kts` (blok detekt + pin Kotlin + dependency
+tes). (2) Kirim artifact `Vidsize_laporan-untuk-claude_run<N>` (+ `Vidsize_laporan-mentah_run<N>`) run pertama
+`Android CI Artifact for Claude` -> triase temuan (SwallowedException/TooGenericExceptionCaught/SpreadOperator
+detekt, isi SpotBugs mentah, ID lint tak dikenal, aturan ArchUnit yang gagal) lalu saring HANYA yang terbukti noise.
+Tidak diverifikasi di sandbox (tak ada Gradle/Android SDK/jaringan Maven): sintaks YAML + `bash -n` semua blok `run`,
+simulasi langkah rakit laporan dgn data palsu, `xmllint` exclude.xml, parse Kotlin ArchitectureTest (hanya error
+"unresolved reference" karena jar ArchUnit tak ada), keseimbangan kurung `*.kts` = LULUS; build/tes/SpotBugs/detekt/lint
+sungguhan = NOT VERIFIED. Resume point Batch 58 di bawah (konfirmasi user soal Home dashboard) tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 58]** Task: "ubah total layout aplikasi jadi
 super generik kayak aplikasi populer sejenisnya di Play Store". Discovery
 sebelum Batch 58: app ini SEBELUMNYA tidak punya halaman Home sama sekali
@@ -288,6 +318,16 @@ sesi berikutnya:
    "Kompres GIF"): itu instruksi baru yang eksplisit, belum dieksekusi.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 59** — Permintaan user: "adaptasi dengan maksimal workflow `SONIX` ke `vidsize`". Murni CI/konfigurasi
+  analisis, TANPA perubahan source app (`app/src/main` tak disentuh). Pembenaran >5 berkas (8 berkas non-docs):
+  workflow + berkas konfigurasi alat analisis + skrip Gradle + tes arsitektur adalah satu kontrak build yang tak bisa
+  dipecah tanpa merusak konsistensi (workflow memanggil task Gradle yang bergantung pada berkas config). Berkas:
+  `build.yml` (diedit; PROTECTED — diubah atas permintaan eksplisit adaptasi, aturan inti dipertahankan),
+  `android-artifact.yml`, `config/detekt/detekt.yml`, `config/spotbugs/spotbugs.gradle.kts`,
+  `config/spotbugs/exclude.xml`, `ArchitectureTest.kt` (baru), `build.gradle.kts` + `app/build.gradle.kts` (diedit).
+  Sengaja TIDAK dibawa dari SONIX: skema versi commit-count, keystore dari secret base64, Gradle 8.14.3, gerbang
+  `testReleaseUnitTest` di build.yml (belum ada tes perilaku), `ci-report.yml` stub, filter noise SONIX (tanpa bukti
+  run Vidsize). Penyimpangan dari SONIX demi aturan pipeline: retensi laporan 7 hari + artifact hasil mentah.
 - **Batch 58** — Permintaan user: "ubah total layout aplikasi jadi super
   generik kayak aplikasi populer sejenisnya yang beredar di Play Store".
   Ditangani sebagai penambahan `HomeScreen` (dashboard grid 2 kolom, 5

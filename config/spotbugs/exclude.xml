@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Batch 59 — filter NOISE SpotBugs untuk Vidsize (dipakai spotbugsRelease lewat spotbugs.gradle.kts).
+  Diadaptasi dari config/spotbugs/exclude.xml SONIX, TAPI isinya SENGAJA MINIMAL:
+  filter SONIX (EI_EXPOSE_REP, BC_BAD_CAST_*, dst.) berdasar bukti laporan run SONIX + pembacaan kode di tiap titik
+  temuan SONIX. Vidsize belum punya satu pun laporan run -> menyaring kategori yang sama tanpa bukti = menyembunyikan
+  temuan yang belum terverifikasi. Aturan: tambah filter HANYA setelah laporan CI Vidsize ada + kode di titik temuan
+  dibaca dan terbukti artefak bytecode Kotlin/Compose (cantumkan run + alasan per baris di komentar ini, sempit:
+  per file/kelas). Hasil mentah tiap run tersimpan di artifact `Vidsize_laporan-mentah_run<N>` untuk audit.
+
+  Disaring sekarang (terbukti bukan kode proyek / bukan bug, tanpa perlu data run):
+  - NM_METHOD_NAMING_CONVENTION: fungsi @Composable WAJIB berawalan huruf besar (pedoman API Compose) — aturan
+    penamaan, bukan cacat; tak ada perbaikan yang valid.
+  - Kelas hasil generate: ComposableSingletons (Compose compiler), R, BuildConfig — bukan kode proyek.
+-->
+<FindBugsFilter>
+  <Match>
+    <Bug pattern="NM_METHOD_NAMING_CONVENTION"/>
+  </Match>
+  <Match>
+    <Class name="~.*ComposableSingletons.*"/>
+  </Match>
+  <Match>
+    <Class name="~.*\.R(\$.*)?"/>
+  </Match>
+  <Match>
+    <Class name="~.*\.BuildConfig"/>
+  </Match>
+</FindBugsFilter>

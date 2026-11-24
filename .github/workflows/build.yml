@@ -1,5 +1,18 @@
 name: Build APK
 
+# Batch 59 — diadaptasi dari `build.yml` SONIX. DIADOPSI: runner dipin `ubuntu-24.04`; actions checkout/setup-java/setup-gradle
+# @v5; build dgn `--no-daemon` + ulang SEKALI bila unduhan dependency gagal (pola jaringan SONIX Batch 618); versi dihitung SEKALI
+# di step awal (tak lagi disalin di dua tempat); Release dibuat SEBELUM artifact APK (kegagalan artifact tak bisa menggagalkan
+# Release); artifact APK tanpa zip (`upload-artifact@v7 archive: false`, cadangan zip @v6); isi Release = pesan commit
+# (SONIX Batch 156; UpdateCheckSheet menampilkan `body` sbg teks polos); ringkasan build; artifact `log_fail_*` memuat
+# `build-output.log` (+ percobaan pertama bila diulang).
+# SENGAJA TIDAK DIADOPSI (jalur rilis Vidsize = stabilitas > kemiripan): keystore tetap `release.keystore` yg ter-commit +
+# secret `RELEASE_KEYSTORE_PASSWORD` (bukan SIGNING_KEYSTORE_BASE64 — beda keystore = update APK lama gagal); versi/tag tetap
+# `1.<run>` / `v1.<run>-build<run>` (AppUpdater.kt memakai Regex("build(\d+)"); skema commit-count SONIX bisa menurunkan
+# versionCode); Stale Run Guard dipertahankan; Gradle tetap 8.7 (AGP 8.4.0), bukan 8.14.3; tanpa gerbang `testReleaseUnitTest`
+# (satu-satunya tes = ArchitectureTest, hanya generator laporan; tes + analisis jalan di `android-artifact.yml`, non-blocking).
+# Analisis statis (ArchUnit/SpotBugs/detekt/lint) TIDAK ada di sini: lihat `.github/workflows/android-artifact.yml`.
+#
 # COMPATIBILITY NOTE: this project's previous zip exports referenced this
 # workflow in README.md but never actually included .github/workflows/ nor
 # a working gradlew/gradlew.bat + gradle-wrapper.jar. That mismatch is the
@@ -22,19 +35,20 @@ on:
     branches: [ main ]
   workflow_dispatch: {}
 
-permissions:
-  contents: write
-
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # `ubuntu-latest` dimigrasi GitHub ke Ubuntu 26.04 (19 Okt - 19 Nov 2026). Dipin 24.04 = image yang terbukti di CI SONIX;
+    # pindah ke 26.04 = keputusan sendiri setelah diuji.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
     steps:
       - name: Checkout sources
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       # Stale Run Guard (Anti-Desync): protects against GitHub's "Re-run
       # jobs" on an *old* workflow run after main has since moved forward.
-      # actions/checkout@v4 above checks out the commit this specific run
+      # actions/checkout above checks out the commit this specific run
       # was originally queued for ($GITHUB_SHA) — re-running it does NOT
       # re-resolve that to main's current tip. Without this guard, a stale
       # re-run would happily build+publish a GitHub Release from outdated
@@ -57,106 +71,150 @@ jobs:
           echo "OK: commit matches origin/main's current tip — proceeding."
 
       - name: Set up JDK 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
       - name: Setup Gradle 8.7
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v5
         with:
           gradle-version: '8.7'
 
+      # AUTOMATED VERSIONING (Batch 22 — standing rule, see this repo's PROJECT_STATE.md "Automated versioning rule"):
+      # dihitung langsung dari $GITHUB_RUN_NUMBER, cocok dgn konstanta `appVersionMajor` di app/build.gradle.kts. Tidak ada
+      # bump manual per batch; satu-satunya konstanta manual = `appVersionMajor` (bump sengaja saja) dan bila diubah
+      # "1" di bawah WAJIB disamakan. Batch 59: dihitung SEKALI di sini (sebelumnya disalin di dua step).
+      # Tag/nama berkas tetap memakai -build<n> meski versionName sudah memuat nomor run: kompatibilitas penuh dgn
+      # `Regex("build(\\d+)")` di AppUpdater.kt (Batch 21).
+      - name: Determine version name
+        id: version
+        run: |
+          VERSION_NAME="1.${GITHUB_RUN_NUMBER}"
+          RELEASE_TAG="v${VERSION_NAME}-build${GITHUB_RUN_NUMBER}"
+          {
+            echo "name=$VERSION_NAME"
+            echo "tag=$RELEASE_TAG"
+            echo "release_name=v$VERSION_NAME"
+            echo "apk_name=Vidsize-${RELEASE_TAG}-release.apk"
+            echo "log_name=log_fail_${VERSION_NAME}_${GITHUB_RUN_NUMBER}"
+          } >> "$GITHUB_OUTPUT"
+          echo "Resolved version: $VERSION_NAME (tag $RELEASE_TAG, commit $(git rev-parse --short HEAD))"
+
+      # `tee` menyimpan seluruh keluaran Gradle ke berkas (dikemas step "Upload failure log artifact"). `set -o pipefail`
+      # eksplisit: tanpa itu status pipeline = status `tee`, bukan `gradle`. Ulang SEKALI hanya bila log memuat pola
+      # unduhan/jaringan (bukan galat kode); percobaan pertama disimpan ke build-output-attempt1.log.
       - name: Build release APK
-        id: build
         env:
           RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
           VERSION_CODE_OVERRIDE: ${{ github.run_number }}
-        # Piped through `tee` so the full Gradle stdout/stderr is also saved
-        # to a file, not just streamed to the Actions UI — that file is what
-        # "Upload failure logs" below packages up. GitHub Actions' default
-        # bash invocation runs with `pipefail`, so a failing `gradle` still
-        # fails this step (and the job) even through the pipe.
-        run: gradle assembleRelease --stacktrace --parallel --build-cache 2>&1 | tee build-output.log
-
-      - name: Prepare failure log name
-        if: failure()
-        id: failinfo
         run: |
-          # AUTOMATED VERSIONING (Batch 22): computed directly, matching
-          # app/build.gradle.kts's `appVersionMajor` constant exactly — no
-          # longer grepped from a hand-bumped literal in that file. If
-          # appVersionMajor is ever deliberately bumped there, update the
-          # "1" below to match (see the cross-reference comment at both
-          # sites).
-          VERSION_NAME="1.${GITHUB_RUN_NUMBER}"
-          echo "log_name=log_fail_${VERSION_NAME}_${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+          set -o pipefail
+          for attempt in 1 2; do
+            gradle assembleRelease --stacktrace --parallel --no-daemon --build-cache 2>&1 | tee build-output.log && break
+            if [ "$attempt" -lt 2 ] && grep -qE "Read timed out|Connect timed out|Could not GET|Could not download|Connection reset|Premature end of Content-Length|Remote host terminated" build-output.log; then
+              echo "::warning::Kegagalan jaringan saat mengunduh dependency (percobaan $attempt) - mengulang sekali"
+              cp build-output.log build-output-attempt1.log
+              sleep 20
+            else
+              exit 1
+            fi
+          done
 
-      # Failed-build counterpart to "Upload APK artifact" below: whenever any
-      # earlier step in this job fails (compile error, signing error, etc.),
-      # this uploads the captured Gradle output plus any Gradle/lint report
-      # files as a downloadable artifact named log_fail_<version>_<run
-      # number> — so diagnosing a failure doesn't require GitHub's separate
-      # "download log archive" UI export.
-      - name: Upload failure logs
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.failinfo.outputs.log_name }}
-          path: |
-            build-output.log
-            **/build/reports/**
-            app/build/outputs/logs/**
-          if-no-files-found: warn
-
-      - name: Locate APK
-        id: apk
+      - name: Locate and rename APK
         run: |
           APK_PATH=$(find app/build/outputs/apk/release -name "*.apk" | head -n 1)
           echo "Found APK at: $APK_PATH"
-          # AUTOMATED VERSIONING (Batch 22 — standing rule, see this repo's
-          # PROJECT_STATE.md "Automated versioning rule"): computed directly
-          # from $GITHUB_RUN_NUMBER, matching app/build.gradle.kts's
-          # `appVersionMajor` constant exactly instead of grepping a
-          # hand-bumped literal out of that file. Nothing here requires a
-          # manual per-batch bump ever again — the ONLY manual constant left
-          # in the whole scheme is `appVersionMajor` itself (deliberate
-          # breaking/milestone bumps only, never routine), and if it's ever
-          # changed the "1" below must be updated to match.
-          VERSION_NAME="1.${GITHUB_RUN_NUMBER}"
-          # Tag/filename still append -build<n> even though versionName
-          # already embeds the run number — kept for exact backward
-          # compatibility with AppUpdater.kt's `Regex("build(\\d+)")` tag
-          # parser (Batch 21), so that file didn't need touching this batch.
-          RELEASE_TAG="v${VERSION_NAME}-build${GITHUB_RUN_NUMBER}"
-          OUT_NAME="Vidsize-v${VERSION_NAME}-build${GITHUB_RUN_NUMBER}-release.apk"
-          echo "Versioned name: $OUT_NAME"
-          cp "$APK_PATH" "$OUT_NAME"
-          echo "apk_name=$OUT_NAME" >> "$GITHUB_OUTPUT"
-          echo "version_name=$VERSION_NAME" >> "$GITHUB_OUTPUT"
-          echo "release_tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          if [ -z "$APK_PATH" ]; then
+            echo "::error::APK release tidak ditemukan di app/build/outputs/apk/release"
+            exit 1
+          fi
+          mkdir -p renamed
+          cp "$APK_PATH" "renamed/${{ steps.version.outputs.apk_name }}"
 
-      - name: Upload APK artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ steps.apk.outputs.apk_name }}
-          path: ${{ steps.apk.outputs.apk_name }}
-          if-no-files-found: error
+      # Isi Release = tag + SHA pendek + pesan commit lengkap (dibaca AppUpdater.kt: `body.take(600)` sbg teks polos).
+      - name: Capture commit message for release notes
+        run: |
+          {
+            echo "${{ steps.version.outputs.tag }} ($(git rev-parse --short HEAD))"
+            echo ""
+            git log -1 --pretty=%B
+          } > release_notes.txt
 
       # GitHub Release Rule: the signed APK must be published as an actual
       # GitHub Release (visible in the repo's sidebar under "Releases"), not
       # just an Actions artifact — artifacts require being logged into
       # GitHub and navigating to a specific run, which isn't a good fit for
       # installing on a phone straight from the repo homepage. Tag comes
-      # from steps.apk.outputs.release_tag (versionName + run number, see
-      # the BUG FIX comment above), so every run gets its own release
-      # instead of colliding with and overwriting a previous one.
+      # from steps.version.outputs.tag (versionName + run number), so every
+      # run gets its own release instead of colliding with a previous one.
       - name: Publish GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
-          tag_name: ${{ steps.apk.outputs.release_tag }}
-          name: ${{ steps.apk.outputs.release_tag }}
-          files: ${{ steps.apk.outputs.apk_name }}
-          generate_release_notes: true
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: ${{ steps.version.outputs.release_name }}
+          body_path: release_notes.txt
+          files: renamed/${{ steps.version.outputs.apk_name }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Artifact APK SETELAH Release: kegagalan upload artifact tak bisa menggagalkan Release. `archive: false` = unduh
+      # langsung berupa .apk (bukan zip); bila gagal, cadangan zip di bawah.
+      - name: Upload APK artifact (tanpa zip)
+        id: apk_artifact
+        if: always() && hashFiles('renamed/*.apk') != ''
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          path: renamed/${{ steps.version.outputs.apk_name }}
+          archive: false
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Upload APK artifact (cadangan, zip)
+        if: always() && steps.apk_artifact.outcome == 'failure'
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.version.outputs.apk_name }}
+          path: renamed/${{ steps.version.outputs.apk_name }}
+          compression-level: 0
+          retention-days: 14
+          if-no-files-found: error
+
+      - name: Publish build summary
+        if: always()
+        run: |
+          {
+            echo "## 🎬 Vidsize — Build ${{ steps.version.outputs.tag || 'N/A' }}"
+            echo ""
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Versi** | \`${{ steps.version.outputs.tag || 'gagal ditentukan' }}\` |"
+            echo "| **Commit** | \`$(git rev-parse --short HEAD)\` |"
+            echo "| **Trigger** | ${{ github.event_name }} oleh @${{ github.actor }} |"
+            if [ -f release_notes.txt ]; then
+              echo "| **Pesan commit** | $(sed -n 3p release_notes.txt) |"
+            fi
+            if [ -f "renamed/${{ steps.version.outputs.apk_name }}" ]; then
+              echo "| **Release** | [Lihat di GitHub Releases](${{ github.server_url }}/${{ github.repository }}/releases/tag/${{ steps.version.outputs.tag }}) |"
+            else
+              echo "| **Release** | ⚠️ APK tidak sampai dibuat — cek log step \"Build release APK\" |"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Failed-build counterpart to the APK artifact above: whenever any earlier step in this job fails (compile error,
+      # signing error, etc.), this uploads the captured Gradle output plus any Gradle/lint report files as a downloadable
+      # artifact named log_fail_<version>_<run number> — so diagnosing a failure doesn't require GitHub's separate
+      # "download log archive" UI export.
+      - name: Upload failure log artifact
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.version.outputs.log_name }}
+          path: |
+            build-output.log
+            build-output-attempt1.log
+            **/build/reports/**
+            app/build/outputs/logs/**
+          if-no-files-found: ignore
+          retention-days: 14

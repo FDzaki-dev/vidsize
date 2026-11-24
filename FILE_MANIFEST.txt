@@ -1,19 +1,23 @@
 FILE_MANIFEST.txt — Video Resizer
-Generated: Batch 6, last updated Batch 57. Regenerate/update this file
+Generated: Batch 6, last updated Batch 59. Regenerate/update this file
 whenever files are added, removed, or renamed — it should always match
 `find . -type f` for real.
 Legend: [PROTECTED] = edit-parsial-only per user preferences; deleting or
 rewriting wholesale requires explicit user permission first.
 
 ROOT
-  build.gradle.kts                         [PROTECTED] root Gradle plugin versions (AGP 8.4.0, Kotlin 1.9.24)
+  build.gradle.kts                         [PROTECTED] root Gradle plugin versions (AGP 8.4.0, Kotlin 1.9.24); Batch 59: +detekt 1.23.8 (apply false)
   settings.gradle.kts                      [PROTECTED] module list, repositories
   gradle.properties                        [PROTECTED] daemon/JVM + build-speed flags (Batch 4)
   gradle/wrapper/gradle-wrapper.properties [PROTECTED] Gradle 8.7 — matches .github/workflows/build.yml
   release.keystore                         [PROTECTED] signing keystore — NEVER delete/regenerate/gitignore
   .gitignore                               [PROTECTED]
   .gitattributes                           [PROTECTED] LF normalization + binary-safe rules for keystore/apk/images (Batch 14)
-  .github/workflows/build.yml              [PROTECTED] CI: assembleRelease + publish GitHub Release (Batch 5: unique tag/APK per run; Batch 15: Stale Run Guard aborts stale 'Re-run jobs' before build/release; Batch 22: VERSION_NAME computed directly as "1.${GITHUB_RUN_NUMBER}", no longer grepped from build.gradle.kts)
+  .github/workflows/build.yml              [PROTECTED] CI: assembleRelease + publish GitHub Release (Batch 59: diadaptasi dari SONIX — ubuntu-24.04, actions v5, ulang sekali bila unduhan gagal, Release dulu baru artifact APK tanpa zip, isi Release = pesan commit, versi dihitung sekali di step 'Determine version name'; Batch 5: unique tag/APK per run; Batch 15: Stale Run Guard aborts stale 'Re-run jobs' before build/release; Batch 22: VERSION_NAME computed directly as "1.${GITHUB_RUN_NUMBER}", no longer grepped from build.gradle.kts)
+  .github/workflows/android-artifact.yml   (new, Batch 59) CI laporan NON-BLOCKING -> laporan-untuk-claude.txt (ArchUnit, tes unit, SpotBugs, detekt, lintDebug, peringatan kompilator Kotlin; PASS/FAIL/NOT VERIFIED) + artifact hasil mentah; retensi 7 hari
+  config/detekt/detekt.yml                 (new, Batch 59) aturan detekt fokus & non-blocking (complexity/style/naming/comments mati)
+  config/spotbugs/spotbugs.gradle.kts      (new, Batch 59) SpotBugs opt-in (-Pvidsize.spotbugs=true), laporan SARIF, task spotbugsRelease manual
+  config/spotbugs/exclude.xml              (new, Batch 59) filter noise minimal (kelas generate + NM_METHOD_NAMING_CONVENTION)
   README.md                                context: architecture notes, known quirks, operational status
   CHANGELOG.md                             context: full batch-by-batch history
   PROJECT_STATE.md                         context: current state snapshot (this batch's companion file)
@@ -21,8 +25,11 @@ ROOT
   FILE_MANIFEST.txt                        this file
 
 app/
-  build.gradle.kts                         [PROTECTED] app module: deps (media3 1.4.1 since Batch 9, material-icons-extended already present), signingConfig, minifyEnabled=false, lint.checkReleaseBuilds=false; Batch 22: versionName fully automated ("$appVersionMajor.$VERSION_CODE_OVERRIDE") — no more hand-bumped semanticVersionName literal, see PROJECT_STATE.md Standing rules
+  build.gradle.kts                         [PROTECTED] app module: Batch 59: +plugin detekt, lint non-blocking + whitelist checkOnly, blok detekt + pin Kotlin 2.0.21, apply SpotBugs opt-in, +testImplementation junit/archunit; deps (media3 1.4.1 since Batch 9, material-icons-extended already present), signingConfig, minifyEnabled=false, lint.checkReleaseBuilds=false; Batch 22: versionName fully automated ("$appVersionMajor.$VERSION_CODE_OVERRIDE") — no more hand-bumped semanticVersionName literal, see PROJECT_STATE.md Standing rules
   proguard-rules.pro                       R8 rules (inactive while isMinifyEnabled=false)
+
+app/src/test/java/com/example/videoresizer/
+  ArchitectureTest.kt                      (new, Batch 59) 13 aturan ArchUnit per berkas sumber Kotlin; aktif hanya dgn env VIDSIZE_ARCH_REPORT=1; menulis build/reports/archunit/archunit-report.txt
 
 app/src/main/
   AndroidManifest.xml                      [PROTECTED] android:name=".VideoResizerApp" (Batch 2), permissions, activity decl; Batch 21: +INTERNET, +REQUEST_INSTALL_PACKAGES for in-app updater

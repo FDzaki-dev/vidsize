@@ -1,5 +1,32 @@
 # Changelog
 
+## Batch 59: Adaptasi maksimal workflow SONIX ke Vidsize (CI + laporan evaluasi untuk Claude)
+
+User minta: "adaptasi dengan maksimal workflow `SONIX` ke `vidsize`". Batch ini hanya menyentuh CI dan konfigurasi alat
+analisis; `app/src/main` TIDAK diubah.
+
+- `.github/workflows/build.yml` — diadopsi dari SONIX: runner `ubuntu-24.04`; checkout/setup-java/setup-gradle `@v5`;
+  `--no-daemon`; ulang SEKALI bila unduhan dependency gagal; versi dihitung sekali di step "Determine version name";
+  GitHub Release (`softprops/action-gh-release@v3`) dibuat SEBELUM artifact APK; artifact APK tanpa zip
+  (`upload-artifact@v7 archive: false`, cadangan zip `@v6`); isi Release = tag + SHA + pesan commit (ditampilkan
+  `AppUpdater`/UpdateCheckSheet sebagai teks polos); nama Release `v1.<run>`; ringkasan build; `log_fail_*` kini memuat
+  `build-output-attempt1.log` bila ada. DIPERTAHANKAN: Stale Run Guard, versi `1.<run>` + tag `v1.<run>-build<run>`
+  (`Regex("build(\\d+)")` di `AppUpdater.kt`), `release.keystore` ter-commit + `RELEASE_KEYSTORE_PASSWORD`, Gradle 8.7.
+- `.github/workflows/android-artifact.yml` (baru) — laporan NON-BLOCKING `laporan-untuk-claude.txt`: ArchUnit, tes unit,
+  SpotBugs (SARIF), detekt, lintDebug, peringatan kompilator Kotlin; status `PASS`/`FAIL`/`NOT VERIFIED`; artifact
+  `Vidsize_laporan-untuk-claude_run<N>` + `Vidsize_laporan-mentah_run<N>` (audit), retensi 7 hari.
+- `config/detekt/detekt.yml`, `config/spotbugs/spotbugs.gradle.kts` (opt-in `-Pvidsize.spotbugs=true`),
+  `config/spotbugs/exclude.xml` (minimal: hanya kelas generate + `NM_METHOD_NAMING_CONVENTION`; filter SONIX tidak
+  dibawa karena butuh bukti run).
+- `app/src/test/java/com/example/videoresizer/ArchitectureTest.kt` (baru) — 13 aturan ArchUnit per berkas sumber Kotlin
+  (semua kelas ada di satu package); hanya arah dependensi yang SAAT INI terpenuhi (dicek dari kode sumber tanpa
+  komentar/string). Aktif hanya dgn env `VIDSIZE_ARCH_REPORT=1`.
+- `build.gradle.kts` (+ plugin detekt 1.23.8 `apply false`), `app/build.gradle.kts` (+ plugin detekt, `lint`
+  non-blocking + whitelist `checkOnly`, blok `detekt`, pin Kotlin 2.0.21 untuk konfigurasi detekt, apply SpotBugs
+  opt-in, dependency tes junit 4.13.2 + archunit 1.4.2). `checkReleaseBuilds = false` tidak diubah.
+- NOT VERIFIED: build/tes/SpotBugs/detekt/lint sungguhan (sandbox tanpa Gradle+Android SDK+jaringan Maven). Terverifikasi
+  statis: YAML, `bash -n`, simulasi perakitan laporan, XML, sintaks Kotlin test, keseimbangan kurung `*.kts`.
+
 ## Batch 58: Home dashboard generik (landing page baru, layout total)
 
 User minta: "ubah total layout aplikasi jadi super generik kayak aplikasi

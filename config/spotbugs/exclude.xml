@@ -17,6 +17,13 @@
     sumber proyek (find = kosong); itu fungsi `inline` Compose Foundation (LazyListScope.items dst.) yang tubuhnya
     disalin kompilator Kotlin ke kelas sintetis proyek, jadi tak ada yang bisa diperbaiki di kode proyek. Disaring
     HANYA lewat nama sumber `LazyDsl.kt`; temuan `MainActivity.kt`/`VideoPickerScreen.kt` (termasuk baris :0) TIDAK disaring.
+  - Batch 65 (bukti laporan run #6): NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE hanya pada MainActivity.kt (82 titik: 51 di
+    baris :0 + 31 baris), VideoPickerScreen.kt (10) dan ui/theme/Theme.kt (1). Setiap titik BERBARIS (kode dibaca, Batch 65) adalah situs
+    pemanggilan/komposisi Compose (`Column(`, `IconButton(`, `HomeToolCard(`, `remember(`, `LocalContext.current`, blok `if`/`when` berisi
+    composable, deklarasi `) {` fungsi composable) — tempat kompilator Compose menyisipkan argumen sintetis `$composer` (@Nullable) yang
+    langsung dideref. Kode Kotlin yang lolos kompilator tidak bisa menderef parameter bertipe `T?` tanpa cek, jadi pola ini tak bisa
+    menandai bug nyata di sumber Kotlin; baris :0 = metode sintetis tanpa nomor baris (pola sama, tidak diperiksa bytecode-nya).
+    Disaring SEMPIT: pola ini x berkas di atas. AppUpdater.kt (2 titik :0, BUKAN berkas Compose) SENGAJA tidak disaring.
 -->
 <FindBugsFilter>
   <Match>
@@ -33,5 +40,17 @@
   </Match>
   <Match>
     <Source name="LazyDsl.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+    <Source name="MainActivity.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+    <Source name="VideoPickerScreen.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+    <Source name="Theme.kt"/>
   </Match>
 </FindBugsFilter>

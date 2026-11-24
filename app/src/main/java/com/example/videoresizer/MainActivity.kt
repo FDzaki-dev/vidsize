@@ -165,7 +165,7 @@ class MainActivity : ComponentActivity() {
             androidx.compose.runtime.CompositionLocalProvider(LocalHapticFeedback provides strongHaptic) {
                 VideoResizerTheme(style = resolvedStyle, dynamicColor = false) {
                     Surface(color = MaterialTheme.colorScheme.background) {
-                        VideoResizerApp(themePref = themePref, onThemePrefChange = {
+                        VideoResizerApp(onThemePrefChange = {
                             themePref = it
                             themePrefsStore.edit().putString("theme_preference", it.name).apply()
                         })
@@ -284,7 +284,6 @@ private const val IOS_POP_MS = 300
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun VideoResizerApp(
-    themePref: ThemePreference,
     onThemePrefChange: (ThemePreference) -> Unit
 ) {
     var screen by remember { mutableStateOf(Screen.HOME) }

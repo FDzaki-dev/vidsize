@@ -169,7 +169,7 @@ private val pickerDateFormat = object : java.lang.ThreadLocal<SimpleDateFormat>(
     override fun initialValue(): SimpleDateFormat = SimpleDateFormat("d MMMM, yyyy", Locale("in", "ID"))
 }
 private fun formatPickerDate(epochSec: Long): String =
-    runCatching { pickerDateFormat.get().format(Date(epochSec * 1000)) }.getOrDefault("-")
+    runCatching { pickerDateFormat.get()?.format(Date(epochSec * 1000)) }.getOrNull() ?: "-"
 
 private fun sortedVideos(videos: List<DeviceVideo>, sort: PickerSort): List<DeviceVideo> = when (sort) {
     PickerSort.NEWEST -> videos.sortedByDescending { it.dateAddedSec }

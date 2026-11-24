@@ -1,5 +1,33 @@
 # Changelog
 
+## Batch 65: Verifikasi run #6 (build hijau) + 2 peringatan baru dari edit Batch 63/64 + filter NP Compose
+
+User mengunggah `Vidsize_laporan-untuk-claude_run6.zip` tanpa teks (hasil push Batch 64, commit ae786f2).
+
+Hasil run #6: BUILD HIJAU (perbaikan `java.lang.ThreadLocal` Batch 64 terbukti di CI); ArchUnit LULUS (12 aturan, 0 pelanggaran); 1 tes
+unit lulus (hanya generator laporan ArchUnit, BUKAN bukti perilaku); lintDebug "LULUS (0 isu)"; detekt 37 (sama); SpotBugs 157 —
+persis prediksi Batch 63 (226 - 1 STCAL - 68 `LazyDsl.kt`), jadi filter `<Source name="LazyDsl.kt"/>` TERBUKTI bekerja; peringatan
+kompilator 13 -> 3 (prediksi 1: dua peringatan BARU berasal dari edit saya sendiri, lihat bawah).
+
+Perubahan (2 berkas non-docs + 1 konfigurasi):
+- `MainActivity.kt` — `VideoResizerApp`: parameter `themePref` dihapus + argumen di situs panggilan `onCreate` ("Parameter 'themePref' is
+  never used", `MainActivity.kt:287`). Akibat berantai Batch 63 (parameter `ResizerScreen.themePref` dihapus -> parameter yang meneruskannya
+  ikut tak terpakai); seharusnya ikut ditangkap di Batch 63. `var themePref` di `onCreate` tetap (dipakai `resolvedStyle` + penulisan prefs).
+- `VideoPickerScreen.kt` — `formatPickerDate`: `pickerDateFormat.get()?.format(...)` + `.getOrNull() ?: "-"` ("Unsafe use of a nullable
+  receiver of type SimpleDateFormat?", `VideoPickerScreen.kt:172`; `java.lang.ThreadLocal<T>.get()` bertipe `T?` di Kotlin). Keluaran identik.
+- `config/spotbugs/exclude.xml` — + `NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE` untuk sumber `MainActivity.kt`, `VideoPickerScreen.kt`,
+  `Theme.kt` (93 dari 95 temuan pola ini). Bukti: 38 titik berbaris yang dibaca semuanya situs pemanggilan/komposisi Compose (`Column(`,
+  `IconButton(`, `HomeToolCard(`, `remember(`, `LocalContext.current`, blok `if`/`when` berisi composable, deklarasi `) {` composable), tempat
+  kompilator Compose menyisipkan argumen sintetis `$composer` (@Nullable). Kode Kotlin tidak bisa menderef `T?` tanpa cek, jadi pola ini tak
+  bisa menandai bug nyata di sumber. Baris :0 (MainActivity 51, VideoPickerScreen 5) = metode sintetis, pola sama tetapi bytecode-nya TIDAK
+  diperiksa. `AppUpdater.kt` (2 titik :0, bukan berkas Compose) SENGAJA tidak disaring.
+
+Dampak yang diharapkan di run #7 (BELUM terverifikasi): peringatan kompilator 3 -> 1 (sisa `setTransformationRequest` `VideoResizer.kt:508`);
+SpotBugs 157 -> 64 bila filter NP bekerja. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
+
+Verifikasi: `diff` terhadap Batch 64 (3 baris kode); `xmllint exclude.xml`; tak ada sisa `themePref` pada `VideoResizerApp`/`ResizerScreen`.
+NOT VERIFIED: kompilasi Kotlin (sandbox tanpa kotlinc/Gradle/SDK), build, tes, lint, SpotBugs, detekt, efek filter NP.
+
 ## Batch 64: Perbaikan build rusak run #5 — `ThreadLocal` dibayangi import Compose
 
 User mengunggah `Vidsize_laporan-untuk-claude_run5.zip` tanpa teks (hasil push Batch 63, commit 1bbc27f).

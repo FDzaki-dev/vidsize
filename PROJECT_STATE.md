@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 64**. This is the first-read file per the context
+Snapshot as of **Batch 65**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,8 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 65 (2 berkas non-docs + `exclude.xml`):** run #6 HIJAU; `VideoResizerApp.themePref` (tak terpakai) dihapus, `formatPickerDate` aman-null,
+  `exclude.xml` + pola NP_PARAMETER_* untuk 3 berkas Compose. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 64 (1 berkas non-docs):** memperbaiki build rusak run #5: `VideoPickerScreen.kt` `ThreadLocal` -> `java.lang.ThreadLocal`
   (`import androidx.compose.runtime.*` membayangi nama dengan kelas internal Compose). Versi/tag/keystore/signing/Stale Run Guard
   TIDAK berubah.
@@ -246,6 +248,19 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 65]** Verifikasi run #6 + 2 peringatan baru ditutup + filter NP Compose -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP; run #7 diharapkan: build hijau, peringatan kompilator 3 -> 1 (sisa `setTransformationRequest`
+`VideoResizer.kt:508`), SpotBugs 157 -> 64 (bila tetap 157, filter NP tak cocok -> baca SARIF, jangan perluas tanpa bukti). Run #6 sudah
+TERVERIFIKASI di CI: build hijau, ArchUnit 12 aturan 0 pelanggaran, tes 1 lulus (bukan bukti perilaku), lint 0 isu, detekt 37, SpotBugs 157,
+filter `LazyDsl.kt` bekerja. (2) Sisa kandidat: pengecualian ditelan tanpa jejak mentah di `PublicMovieExporter.kt`/`MainActivity.kt`/`CrashLogger.kt`
+(detekt `SwallowedException` + `TooGenericExceptionCaught`; aturan ArchUnit "mandiri" melarang `PublicMovieExporter.kt` memanggil `CrashLogger.kt` ->
+perlu keputusan arsitektur); `AppUpdater.download()` belum OkHttp+Okio (sudah streaming 8 KB; butuh dependency baru, tak bisa diverifikasi tanpa CI);
+`setTransformationRequest` deprecated (Media3 1.4.1 — cek API pengganti versi terpasang). (3) SpotBugs sisa yang belum dibaca: `BC_BAD_CAST_TO_ABSTRACT_COLLECTION`
+(9), `MS_EXPOSE_REP` (10), `RV_RETURN_VALUE_IGNORED` (7), `REC_CATCH_EXCEPTION` (6), `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` (24, baris :0). Yang sudah dibaca =
+false positive codegen: `NP_NULL_ON_SOME_PATH` `VideoResizer.kt`, `SA_LOCAL_SELF_ASSIGNMENT`, `OBL_UNSATISFIED_OBLIGATION` `AppUpdater.kt:158`. (4) PELAJARAN: setiap
+penghapusan parameter composable bisa membuat parameter pemanggilnya ikut tak terpakai (rantai) — telusuri ke atas sampai ke sumber nilai sebelum
+mengirim. Tidak diverifikasi di sandbox: kompilasi Kotlin, build/tes/lint/SpotBugs/detekt. Resume point Batch 64 & 63 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 64]** Build rusak run #5 (`ThreadLocal` dibayangi `androidx.compose.runtime.*`) -> **SELESAI di ZIP, NOT VERIFIED di
 CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #6 harus HIJAU (`compileReleaseKotlin`). Bila masih gagal, baca baris `e:` di
 laporan (hanya `VideoPickerScreen.kt:167-171` yang gagal di run #5; `MainActivity.kt` lolos analisis). (2) Semua target Batch 63 masih

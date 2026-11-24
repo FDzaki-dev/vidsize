@@ -55,9 +55,15 @@ object PublicMovieExporter {
         val itemUri = resolver.insert(collection, values) ?: return null
 
         return try {
-            resolver.openOutputStream(itemUri)?.use { out ->
+            val output = resolver.openOutputStream(itemUri)
+            if (output == null) {
+                // Batch 67: baris IS_PENDING=1 tidak boleh yatim (tak terlihat di galeri, tak pernah dibersihkan) bila stream tak terbuka.
+                resolver.delete(itemUri, null, null)
+                return null
+            }
+            output.use { out ->
                 FileInputStream(sourceFile).use { input -> input.copyTo(out) }
-            } ?: return null
+            }
 
             values.clear()
             values.put(MediaStore.Video.Media.IS_PENDING, 0)
@@ -123,9 +129,15 @@ object PublicMovieExporter {
         val itemUri = resolver.insert(collection, values) ?: return null
 
         return try {
-            resolver.openOutputStream(itemUri)?.use { out ->
+            val output = resolver.openOutputStream(itemUri)
+            if (output == null) {
+                // Batch 67: sama seperti jalur video — hapus baris IS_PENDING=1 yatim sebelum kembali null.
+                resolver.delete(itemUri, null, null)
+                return null
+            }
+            output.use { out ->
                 FileInputStream(sourceFile).use { input -> input.copyTo(out) }
-            } ?: return null
+            }
 
             values.clear()
             values.put(MediaStore.Images.Media.IS_PENDING, 0)

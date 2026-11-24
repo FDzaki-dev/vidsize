@@ -9,6 +9,13 @@
   per file/kelas). Daftar SpotBugs di laporan memuat SEMUA temuan non-filter (maks 120 titik), jadi filter bisa diaudit dari laporan.
 
   Disaring sekarang (terbukti bukan kode proyek / bukan bug, tanpa perlu data run):
+  - Batch 67 (bukti laporan run #8 + kode dibaca): NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE x2 `AppUpdater.kt:0` (:0 = metode
+    sintetis tanpa nomor baris). Bukti: (a) `AppUpdater.kt` TIDAK punya satu pun parameter bertipe nullable (grep `fun ...?` = kosong; semua
+    parameter `Context`/`UpdateInfo`/`File`/`(Float) -> Unit`), jadi temuan tak mungkin berasal dari parameter yang ditulis di sumber;
+    (b) berkas itu memuat PERSIS 2 lambda suspend `withContext(Dispatchers.IO)` (`check` baris 79, `download` baris 141-142) = 2 kelas
+    `SuspendLambda` sintetis, cocok 2/2 dengan jumlah temuan; (c) `AppUpdater.kt` satu-satunya berkas non-Compose yang punya lambda suspend,
+    dan satu-satunya berkas non-Compose yang punya temuan NP_PARAMETER (`VideoResizer.kt`, `GifExporter.kt`, `CrashLogger.kt` dst. tanpa
+    lambda suspend = 0 temuan). Disaring SEMPIT: pola ini x berkas `AppUpdater.kt`. Jalur audit: SpotBugs run #9 harus 33 -> 31.
   - Batch 66 (bukti laporan run #7 + kode dibaca di setiap titik; pola x berkas, SEMPIT):
     * MS_EXPOSE_REP x10 (`VideoResizer.kt` 49/62/72/84/110/130/146/165/188, `SocialPreset.kt` 58) = PERSIS 10 deklarasi
       `val ENTRIES: List<T> = values().toList()` di companion enum (pencocokan nomor baris 10/10). Tipe publiknya `List` baca-saja
@@ -43,7 +50,8 @@
     composable, deklarasi `) {` fungsi composable) — tempat kompilator Compose menyisipkan argumen sintetis `$composer` (@Nullable) yang
     langsung dideref. Kode Kotlin yang lolos kompilator tidak bisa menderef parameter bertipe `T?` tanpa cek, jadi pola ini tak bisa
     menandai bug nyata di sumber Kotlin; baris :0 = metode sintetis tanpa nomor baris (pola sama, tidak diperiksa bytecode-nya).
-    Disaring SEMPIT: pola ini x berkas di atas. AppUpdater.kt (2 titik :0, BUKAN berkas Compose) SENGAJA tidak disaring.
+    Disaring SEMPIT: pola ini x berkas di atas. AppUpdater.kt (2 titik :0, BUKAN berkas Compose) SENGAJA tidak disaring
+    saat itu (kemudian dibaca dan disaring di Batch 67, lihat entri Batch 67 di atas).
 -->
 <FindBugsFilter>
   <Match>
@@ -72,6 +80,10 @@
   <Match>
     <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
     <Source name="Theme.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+    <Source name="AppUpdater.kt"/>
   </Match>
   <Match>
     <Bug pattern="MS_EXPOSE_REP"/>

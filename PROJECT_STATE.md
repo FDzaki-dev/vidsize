@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 66**. This is the first-read file per the context
+Snapshot as of **Batch 67**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,9 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 67 (2 berkas kode + `exclude.xml` + `android-artifact.yml`):** run #8 HIJAU (SpotBugs 33, detekt 21, kompilator 1); `ExportForegroundService.kt` mencatat `startForeground`
+  yang gagal mentah ke logcat; `PublicMovieExporter.kt` menghapus baris MediaStore `IS_PENDING=1` yatim (video + GIF); `exclude.xml` menyaring NP_PARAMETER x `AppUpdater.kt`
+  (2 titik :0, terbukti sintetis); laporan CI memuat `[elemen kode]` per temuan SpotBugs + contoh SARIF mentah. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
 - **Batch 66 (3 berkas kode + `exclude.xml` + `android-artifact.yml`):** run #7 HIJAU (SpotBugs 64, detekt 37, kompilator 1); catch yang menelan pengecualian di
   `PublicMovieExporter.kt` (4), `CrashLogger.kt` (4), `MainActivity.kt` (8) kini mencatat stacktrace MENTAH ke logcat; `exclude.xml` menyaring 31 temuan
   SpotBugs terbukti noise; laporan CI memuat pesan mentah SpotBugs per titik. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
@@ -251,6 +254,19 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 67]** Triase run #8: log mentah `startForeground` + baris MediaStore yatim + filter NP `AppUpdater.kt` + elemen kode/contoh SARIF di laporan CI ->
+**SELESAI di ZIP, NOT VERIFIED di CI/HP** -> **LANGKAH BERIKUTNYA:** (1) push ZIP; run #9 diharapkan: build hijau, detekt 21 -> 20 (bila tetap 21, `ExportForegroundService.kt:69`
+masih `SwallowedException` -> baca laporan, jangan matikan aturan), SpotBugs 33 -> 31 (UUF 24 + RV 7; bila tetap 33, filter `<Source name="AppUpdater.kt"/>` tak cocok -> baca contoh SARIF,
+jangan perluas tanpa bukti), kompilator 1, ArchUnit 12/0. Run #8 sudah TERVERIFIKASI di CI: semua prediksi Batch 66 benar (detekt 37 -> 21, SpotBugs 64 -> 33, kompilator 1).
+(2) BACA bagian "Titik temuan" baru (`RULE @ berkas:baris [elemen kode] | pesan`) + "Contoh SARIF mentah": bila 24 UUF ternyata semua `...$stable` -> saring dgn
+`<Match><Bug pattern="UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD"/><Field name="$stable"/></Match>` (SEMPIT per nama field, JANGAN per berkas); bila ada nama field lain -> baca kode field itu
+dan putuskan hapus/saring per bukti. Bila `[elemen kode]` kosong, struktur SARIF ada di blok contoh mentah -> sesuaikan ekspresi `jq` di `android-artifact.yml` (bukan menebak). Setelah UUF
+terjawab, blok "Contoh SARIF mentah" boleh dihapus. (3) Sisa kandidat: `RV_RETURN_VALUE_IGNORED` x7 (`mkdirs()`/`delete()`) dibiarkan; detekt `TooGenericExceptionCaught` x20 (menyempitkan
+tipe butuh kompilator; `startForeground` HARUS tetap `Exception`); `setTransformationRequest` deprecated (cek API pengganti Media3 1.4.1 saat ada akses dokumentasi/CI);
+`AppUpdater.download()` belum OkHttp+Okio (aturan guard user: butuh dependency baru, verifikasi di CI). (4) KEPUTUSAN ARSITEKTUR menunggu user: catch yang kini hanya ke logcat belum
+tertulis ke `Documents/` (aturan ArchUnit "mandiri" melarang `PublicMovieExporter.kt`/`ExportForegroundService.kt` memanggil `CrashLogger.kt`; bila log tangkapan harus ke Documents,
+aturan itu perlu diubah). Tidak diverifikasi di sandbox: kompilasi Kotlin (tak ada kotlinc; Maven diblokir proxy), build/tes/lint/SpotBugs/detekt. Resume point Batch 66 & di bawah tetap berlaku.
+
 🟡 **[RESUME POINT — Batch 66]** Triase run #7: log mentah untuk catch yang menelan pengecualian + 31 filter SpotBugs terbukti + pesan SARIF di laporan CI -> **SELESAI di ZIP, NOT VERIFIED di CI/HP** ->
 **LANGKAH BERIKUTNYA:** (1) push ZIP; run #8 diharapkan: build hijau, detekt 37 -> 21 (bila tetap 37, detekt TIDAK menganggap `e` di `Log.*` sebagai terpakai -> baca laporan,
 jangan matikan aturan), SpotBugs 64 -> 33 (UUF 24 + RV 7 + NP_PARAM 2), kompilator 1, ArchUnit 12/0. Run #7 sudah TERVERIFIKASI di CI: prediksi Batch 65 (157 -> 64, kompilator 3 -> 1) benar.
@@ -429,6 +445,11 @@ sesi berikutnya:
    "Kompres GIF"): itu instruksi baru yang eksplisit, belum dieksekusi.
 
 ## Batch history (newest first — full detail in CHANGELOG.md)
+- **Batch 67** — Tanpa teks user (dua upload: `Vidsize_v66.zip` + laporan CI run #8). Run #8 membenarkan semua prediksi Batch 66 (detekt 37 -> 21, SpotBugs 64 -> 33, kompilator 1).
+  `ExportForegroundService.kt`: catch `startForeground` kini `Log.e` mentah (tag `VidsizeExportService`). `PublicMovieExporter.kt`: `openOutputStream(...)?.use{} ?: return null` meninggalkan
+  baris `IS_PENDING=1` yatim (video + GIF) -> kini dihapus sebelum `return null`. `exclude.xml`: NP_PARAMETER x `AppUpdater.kt` disaring (0 parameter nullable di sumber; 2 lambda suspend =
+  2 temuan; satu-satunya berkas non-Compose dgn keduanya). `android-artifact.yml`: laporan SpotBugs +`[elemen kode]` (logicalLocations) + contoh SARIF mentah per aturan (24 UUF belum bernama).
+  Tidak disentuh: UUF x24 (tunggu nama), RV x7, detekt TooGeneric x20, `setTransformationRequest`, `AppUpdater.download()` OkHttp. 2 berkas kode non-docs + 2 konfigurasi/workflow (4 total).
 - **Batch 62** — Tanpa teks user (upload laporan CI run #3). Ditemukan penghitung lint `grep -c '<issue '` selalu 0 karena XML
   lint multibaris -> "LULUS (0 isu)" palsu di run #2/#3; diganti pola ERE + penguraian detail dari XML (diuji pada XML contoh).
   Sekalian: `CrashLogger.kt` guard `longVersionCode` API 28 (lint `NewApi` run #1), `Haptics.kt` tidak lagi menelan

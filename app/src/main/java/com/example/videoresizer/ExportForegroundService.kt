@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
@@ -64,9 +65,11 @@ class ExportForegroundService : Service() {
         // left to do, so it stops itself; VideoResizer.resize() and its
         // Transformer keep running exactly as before, just without the
         // foreground-priority safety net for this one export.
+        // Batch 67: pengecualian mentah dicatat ke logcat (dulu ditelan tanpa jejak) sebelum stopSelf().
         try {
             startForeground(NOTIFICATION_ID, buildNotification(this, progress = 0))
         } catch (e: Exception) {
+            Log.e(TAG, "onCreate startForeground", e)
             stopSelf()
         }
     }
@@ -101,6 +104,7 @@ class ExportForegroundService : Service() {
     companion object {
         private const val CHANNEL_ID = "export_progress"
         private const val NOTIFICATION_ID = 4201
+        private const val TAG = "VidsizeExportService"
 
         /** Starts the service; safe to call even if it's already running. */
         fun start(context: Context) {

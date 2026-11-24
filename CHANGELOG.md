@@ -1,5 +1,47 @@
 # Changelog
 
+## Batch 67: Triase run #8 — sisa catch menelan pengecualian, baris MediaStore yatim, filter NP `AppUpdater.kt`, nama elemen kode di laporan SpotBugs
+
+User mengunggah `Vidsize_v66.zip` + `Vidsize_laporan-untuk-claude_run8.zip` tanpa teks (hasil push Batch 66, commit ce6850f).
+
+Hasil run #8 (dibaca dari laporan): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); 1 tes unit lulus (hanya generator laporan ArchUnit,
+BUKAN bukti perilaku); lintDebug "LULUS (0 isu)"; detekt 37 -> 21; SpotBugs 64 -> 33 (UUF 24 + RV 7 + NP 2); peringatan kompilator 1 (`setTransformationRequest`
+`VideoResizer.kt:508`). Semua prediksi Batch 66 TERBUKTI di CI: detekt 37 -> 21 (16 `SwallowedException` hilang = detekt menganggap `e` pada `Log.*` terpakai),
+SpotBugs 64 -> 33 PERSIS komposisi yang diprediksi, kompilator 1, ArchUnit 12/0. Sisa detekt 21 = 20 `TooGenericExceptionCaught` + 1 `SwallowedException`
+(`ExportForegroundService.kt:69`).
+
+Perubahan (2 berkas kode + 1 konfigurasi + 1 workflow):
+- `ExportForegroundService.kt` — `catch (e: Exception)` di `onCreate` (menelan `startForeground`) kini `Log.e(TAG, "onCreate startForeground", e)` SEBELUM `stopSelf()`
+  (tag `VidsizeExportService`, konstanta `TAG` baru di `companion object`, `import android.util.Log`). Dulu kegagalan promosi foreground (mis.
+  `ForegroundServiceStartNotAllowedException` di API 31+) lenyap tanpa jejak. Perilaku TIDAK berubah (tetap `stopSelf()`; ekspor tetap jalan tanpa jaring pengaman
+  foreground). Manifest sudah benar (`foregroundServiceType="dataSync"` + izin `FOREGROUND_SERVICE_DATA_SYNC`), jadi kegagalan di API 34 bukan karena tipe hilang.
+- `PublicMovieExporter.kt` — bug nyata kecil: `resolver.openOutputStream(itemUri)?.use { ... } ?: return null` (jalur video `publishViaMediaStore` DAN jalur GIF
+  `publishImageViaMediaStore`) mengembalikan `null` bila stream tak terbuka TANPA menghapus baris MediaStore `IS_PENDING=1` yang baru di-insert -> baris yatim (tak terlihat
+  di galeri, tak pernah dibersihkan). Kini `val output = openOutputStream(...)`; bila `null` -> `resolver.delete(itemUri, null, null)` lalu `return null` (pola sama dgn
+  `catch`). Nilai kembalian ke pemanggil sama (`null`); jalur sukses tidak berubah.
+- `config/spotbugs/exclude.xml` — `NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE` x `AppUpdater.kt` disaring (2 titik :0). Bukti (juga di komentar berkas):
+  `AppUpdater.kt` tak punya satu pun parameter bertipe nullable (grep kosong); berkas itu memuat PERSIS 2 lambda suspend `withContext(Dispatchers.IO)` (`check`, `download`) = 2
+  kelas `SuspendLambda` sintetis = cocok 2/2; ia satu-satunya berkas non-Compose dengan lambda suspend DAN satu-satunya berkas non-Compose dengan temuan NP_PARAMETER.
+  Jalur audit: SpotBugs run #9 harus 33 -> 31.
+- `.github/workflows/android-artifact.yml` — dua tambahan di bagian SpotBugs laporan: (1) baris "Titik temuan" memuat `[elemen kode]` dari `locations[0].logicalLocations`
+  SARIF (`fullyQualifiedName` atau `name`) bila ada, dan temuan dengan elemen berbeda tidak lagi digabung `xN`; (2) blok baru "Contoh SARIF mentah" = 1 temuan mentah per aturan
+  (maks 6 aturan, tanpa sidik jari, dipotong 600 karakter). Alasan: pesan SARIF SpotBugs hanya deskripsi pendek, jadi 24 temuan `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` (baris :0)
+  tetap tak bisa dinilai nama field-nya; struktur SARIF asli belum pernah terlihat. Kedua ekspresi `jq` diuji pada SARIF tiruan (dengan/tanpa `logicalLocations`, tanpa `locations`,
+  tanpa pesan, pesan multibaris); YAML + `bash -n` semua blok `run` LULUS.
+
+Dibaca tapi TIDAK diubah:
+- `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` x24 — masih tanpa nama field di laporan; hipotesis `$stable` Compose cocok persis 6/6 berkas sederhana (`AppUpdater` 6 kelas, `CrashLogger`,
+  `FilmstripExtractor`, `PublicMovieExporter`, `VideoResizerApp` 1, `VideoHistoryStore` 2) tetapi TIDAK menjelaskan `ExportForegroundService`/`Haptics`/`VideoPickerScreen` (0 temuan)
+  dan selisih jumlah di `GifEncoder`/`GifExporter`/`MainActivity`/`VideoResizer`. Tidak disaring; tunggu `[elemen kode]` + contoh SARIF run #9.
+- `RV_RETURN_VALUE_IGNORED_BAD_PRACTICE` x7 (`mkdirs()`/`delete()`) — dibiarkan (kegagalan baru terlihat di operasi berikutnya yang kini tercatat mentah).
+- detekt `TooGenericExceptionCaught` x20 — menyempitkan tipe tanpa kompilator berisiko merusak build (pelajaran Batch 63/64); khusus `startForeground` justru HARUS tetap `Exception`
+  (bisa `ForegroundServiceStartNotAllowedException`, `SecurityException`, dst.).
+- `setTransformationRequest` deprecated (`VideoResizer.kt:508`) — API pengganti Media3 1.4.1 tak bisa diverifikasi di sandbox (Maven diblokir proxy, tak ada kotlinc) -> tidak diubah.
+- `AppUpdater.download()` belum OkHttp+Okio — tetap streaming 8 KB tanpa memuat penuh ke memori; migrasi butuh dependency baru, tak bisa diverifikasi tanpa CI.
+
+Tidak diverifikasi di sandbox: kompilasi Kotlin (tak ada kotlinc/SDK; Maven diblokir), build/tes/lint/SpotBugs/detekt sungguhan = NOT VERIFIED. Terverifikasi: YAML + `bash -n`,
+`xmllint` exclude.xml, keseimbangan kurung 2 berkas Kotlin, `jq` pada SARIF tiruan. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
+
 ## Batch 66: Triase run #7 — log mentah untuk pengecualian yang ditelan + filter SpotBugs terbukti noise + pesan SARIF di laporan CI
 
 User mengunggah `Vidsize_v65.zip` + `Vidsize_laporan-untuk-claude_run7.zip` tanpa teks (hasil push Batch 65, commit a9af4dc).

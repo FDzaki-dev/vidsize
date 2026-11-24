@@ -531,6 +531,9 @@ the GitHub Actions route above is much faster in practice.
 
 ## Project & CI notes (baca ini dulu sebelum ubah setup build/git)
 
+- **Laporan SpotBugs memuat elemen kode (Batch 67)**: baris "Titik temuan" di `laporan-untuk-claude.txt` kini `RULE @ berkas:baris [elemen kode] | pesan` (elemen dari
+  `logicalLocations` SARIF bila ada) + blok "Contoh SARIF mentah" (1 temuan per aturan). Dipakai untuk menamai field `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` (baris :0) sebelum
+  menyaringnya. Pola `?.use { ... } ?: return null` pada baris MediaStore `IS_PENDING=1` dilarang (meninggalkan baris yatim): buka stream dulu, hapus baris bila `null`.
 - **Log pengecualian tertangkap & laporan SpotBugs (Batch 66)**: `catch` yang mengembalikan fallback (`null`/`false`) TIDAK boleh menelan pengecualian
   tanpa jejak — catat mentah dengan `Log.e(TAG, "<nama fungsi>", e)` (stacktrace apa adanya, tanpa kalimat penjelasan). Sejauh ini hanya ke logcat
   (`PublicMovieExporter.kt`, `CrashLogger.kt`, `MainActivity.kt`); belum ke `Documents/`. Laporan CI `laporan-untuk-claude.txt` kini memuat pesan mentah

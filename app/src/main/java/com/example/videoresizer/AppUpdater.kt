@@ -39,7 +39,9 @@ import java.net.URL
 object AppUpdater {
 
     private const val OWNER = "FDzaki-dev"
-    private const val REPO = "Video-resizer"
+    // Batch 61: repo di-rename Video-resizer -> vidsize (api.github.com/.../Video-resizer masih 301 ke repo ini,
+    // tetapi redirect hilang bila nama lama dipakai repo lain) -> pakai nama sekarang langsung.
+    private const val REPO = "vidsize"
     private const val API_URL = "https://api.github.com/repos/$OWNER/$REPO/releases/latest"
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 20_000

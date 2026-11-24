@@ -2,6 +2,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+
+    <!-- Haptics.kt (Batch 61): getaran Vibrator langsung untuk umpan balik sentuh yang terasa nyata. Izin normal. -->
+    <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />

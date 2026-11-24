@@ -158,12 +158,18 @@ class MainActivity : ComponentActivity() {
                 ThemePreference.MIDNIGHT_BLUE_GLASS -> com.example.videoresizer.ui.theme.AppThemeStyle.MIDNIGHT_BLUE_GLASS
             }
 
-            VideoResizerTheme(style = resolvedStyle, dynamicColor = false) {
-                Surface(color = MaterialTheme.colorScheme.background) {
-                    VideoResizerApp(themePref = themePref, onThemePrefChange = {
-                        themePref = it
-                        themePrefsStore.edit().putString("theme_preference", it.name).apply()
-                    })
+            // Batch 61: haptic bawaan Compose (TextHandleMove) terlalu tipis di HP; ganti SEKALI di akar supaya
+            // semua titik panggil `LocalHapticFeedback.current` di bawahnya memakai getaran Vibrator (lihat Haptics.kt).
+            val baseHaptic = LocalHapticFeedback.current
+            val strongHaptic = remember(baseHaptic) { VibratorHapticFeedback(context, baseHaptic) }
+            androidx.compose.runtime.CompositionLocalProvider(LocalHapticFeedback provides strongHaptic) {
+                VideoResizerTheme(style = resolvedStyle, dynamicColor = false) {
+                    Surface(color = MaterialTheme.colorScheme.background) {
+                        VideoResizerApp(themePref = themePref, onThemePrefChange = {
+                            themePref = it
+                            themePrefsStore.edit().putString("theme_preference", it.name).apply()
+                        })
+                    }
                 }
             }
         }

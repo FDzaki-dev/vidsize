@@ -178,7 +178,7 @@ class ArchitectureTest {
         const val MAIN_FILE = "MainActivity.kt"
 
         /** Berkas layar UI (Compose); `ui.theme` ditangani lewat package. */
-        val UI_FILES = setOf(MAIN_FILE, "VideoPickerScreen.kt")
+        val UI_FILES = setOf(MAIN_FILE, "VideoPickerScreen.kt", "Haptics.kt")
 
         /** Semua berkas non-UI: mesin ekspor, penyimpanan, updater, servis, crash logger. */
         val ENGINE_FILES = setOf(

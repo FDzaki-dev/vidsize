@@ -531,6 +531,11 @@ the GitHub Actions route above is much faster in practice.
 
 ## Project & CI notes (baca ini dulu sebelum ubah setup build/git)
 
+- **Haptic (Batch 61)**: `LocalHapticFeedback` di-override SEKALI di akar `MainActivity.setContent` oleh
+  `VibratorHapticFeedback` (`Haptics.kt`, getaran `Vibrator`; `LongPress` = `EFFECT_HEAVY_CLICK`, tipe lain = `EFFECT_CLICK`).
+  Titik panggil baru cukup memakai `LocalHapticFeedback.current` seperti biasa; jangan memanggil `View.performHapticFeedback`
+  langsung. Butuh izin `VIBRATE` (normal). Tidak tunduk pada setelan sistem "umpan balik sentuh" (disengaja). Rasa getaran di HP
+  belum diverifikasi.
 - **Pipeline CI (Batch 59, adaptasi SONIX)**: dua workflow terpisah. `build.yml` = build + GitHub Release + artifact
   APK (jalur rilis; skema versi/tag/keystore tidak berubah). `android-artifact.yml` = laporan evaluasi NON-BLOCKING
   (ArchUnit, tes unit, SpotBugs, detekt, lintDebug, peringatan kompilator Kotlin) -> artifact

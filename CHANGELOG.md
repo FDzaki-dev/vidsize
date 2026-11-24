@@ -1,5 +1,50 @@
 # Changelog
 
+## Batch 61: Haptic kuat terpusat + REPO updater + triase laporan CI run #2
+
+User mengunggah `Vidsize_v60.zip` + `Vidsize_laporan-untuk-claude_run2.zip` tanpa teks; langkah berikutnya diambil dari
+[RESUME POINT — Batch 60]. Pengingat user (semua proyek): haptic selalu lemah, harus terasa nyata di HP.
+
+Verifikasi Batch 60 di CI (run #2, commit d67bb9e): tepat SATU artifact; ArchUnit 12 aturan 0 pelanggaran (false positive
+run #1 hilang); lintDebug 0 isu; 1 tes unit lulus (hanya generator laporan ArchUnit, BUKAN bukti perilaku); SpotBugs 226;
+detekt 37; 13 peringatan kompilator Kotlin.
+
+Perubahan (5 berkas non-docs):
+- `app/src/main/java/com/example/videoresizer/Haptics.kt` (BARU) — `VibratorHapticFeedback` (implementasi `HapticFeedback`
+  Compose) memakai `Vibrator`: `LongPress` -> `EFFECT_HEAVY_CLICK`, tipe lain (termasuk `TextHandleMove`) ->
+  `EFFECT_CLICK` (API 29+; API 26-28 `createOneShot` 30/45 ms); tanpa vibrator/API < 26/`SecurityException` jatuh ke haptic
+  bawaan Compose. Akar masalah: SEMUA 90 titik panggil di `MainActivity.kt` memakai `TextHandleMove` (tick View tertipis)
+  atau `LongPress`; `VideoPickerScreen.kt` 0 titik panggil.
+- `MainActivity.kt` — SATU situs: `CompositionLocalProvider(LocalHapticFeedback provides strongHaptic)` membungkus
+  `VideoResizerTheme` di `setContent`; 90 titik panggil lama otomatis memakai haptic baru tanpa diubah.
+- `AndroidManifest.xml` — `+VIBRATE` (izin normal).
+- `AppUpdater.kt` — `REPO` `"Video-resizer"` -> `"vidsize"`. Bukti: `api.github.com/repos/FDzaki-dev/Video-resizer/...` = HTTP
+  301 ke repositori yang sama dan `github.com/FDzaki-dev/Video-resizer` = 301 ke `.../vidsize`; redirect hilang bila nama
+  lama dipakai repo lain.
+- `ArchitectureTest.kt` — `Haptics.kt` didaftarkan di `UI_FILES` (bergantung ke Compose; bukan mesin).
+
+Trade-off disengaja: `Vibrator.vibrate(effect)` polos TIDAK tunduk pada setelan sistem "umpan balik sentuh" (View haptic
+tunduk) — dipilih karena keluhan user haptic tak terasa. Versi/tag/keystore/signing/Stale Run Guard TIDAK berubah.
+
+Triase temuan run #2 — SENGAJA tidak diubah (dibaca di titik kode):
+- SpotBugs `NP_NULL_ON_SOME_PATH` VideoResizer 421/472/548/576: `lateinit transformer` diisi sebelum `start()` dan sebelum
+  `post(pollProgress)` -> false positive codegen `Ref.ObjectRef`. `SA_LOCAL_SELF_ASSIGNMENT` MainActivity:4941: ekspresi
+  hasil blok `try` (`foundAudio`) -> artefak codegen. `OBL_UNSATISFIED_OBLIGATION` AppUpdater:156: `FileOutputStream`
+  sudah di `use {}`. `RV_RETURN_VALUE_IGNORED` (`mkdirs`/`delete`): tak berdampak.
+- `STCAL` VideoPickerScreen:167: `SimpleDateFormat` bersama, tetapi satu-satunya pemanggil (`:270`) ada di komposisi
+  (thread utama) -> laten, belum bug.
+- detekt `TooGenericExceptionCaught`/`SwallowedException`: CrashLogger sengaja fail-safe (tak boleh melempar). Di
+  PublicMovieExporter/MainActivity pengecualian ditelan TANPA jejak mentah -> kandidat batch berikutnya (logger
+  pengecualian tertangani), bukan dimatikan di filter.
+- lint `NewApi` CrashLogger:84 (`longVersionCode` API 28, minSdk 24): run #1 menandai, run #2 melaporkan 0 isu; penyebab
+  tak terbukti tanpa `lint-results`. Kode belum diubah (di luar prioritas API 31+).
+- 9 peringatan deprecated `Icons.Filled.*` -> AutoMirrored: kosmetik, impor tak bisa diverifikasi di sandbox.
+- Aturan streaming OkHttp: unduhan APK updater SUDAH streaming 8 KB via `HttpURLConnection` (tak pernah memuat penuh ke
+  memori) tetapi belum OkHttp+Okio; migrasi menambah dependency baru yang tak bisa diverifikasi di sandbox -> ditunda.
+
+Verifikasi: `Haptics.kt` dikompilasi `kotlinc` 1.9.24 terhadap stub API tanpa error/warning dari berkas itu; sisanya
+diperiksa statis. NOT VERIFIED: build/tes/lint/SpotBugs/detekt sungguhan dan rasa getaran di HP (perlu tes tangan user).
+
 ## Batch 60: Laporan CI cukup SATU artifact + perbaikan false positive hasil run #1
 
 User: "kenapa ada 2 output?? seharusnya cukup 1 aja!!". `app/src/main` TIDAK diubah.

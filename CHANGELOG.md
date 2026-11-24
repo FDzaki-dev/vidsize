@@ -1,5 +1,29 @@
 # Changelog
 
+## Batch 69: Verifikasi run #10 (build hijau) + unduhan APK `AppUpdater.download()` ke OkHttp + Okio (aturan guard streaming)
+
+User mengunggah `Vidsize_laporan-untuk-claude_run10.zip` tanpa teks (hasil push Batch 68, commit c65a386).
+
+Hasil run #10 (dibaca dari laporan): semua exit Gradle 0; ArchUnit LULUS (12 aturan, 0 pelanggaran); 1 tes unit lulus (hanya generator laporan ArchUnit, BUKAN bukti perilaku);
+lintDebug LULUS (0 isu); detekt 20; SpotBugs 31 -> 7 (hanya `RV_RETURN_VALUE_IGNORED_BAD_PRACTICE` x7); peringatan kompilator 1 -> 0. Semua prediksi Batch 68 TERBUKTI di CI:
+filter `$stable` cocok 24/24, `Transformer.Builder.setVideoMimeType` terkompilasi (peringatan deprecated hilang), blok contoh SARIF hilang dari laporan.
+
+Perubahan (2 berkas kode/konfigurasi):
+- `AppUpdater.kt` — `download()` kini OkHttp + Okio: `OkHttpClient` tunggal (`by lazy`; connect 15 dtk, read 20 dtk, redirect/SSL-redirect aktif = setara `applyCommonConfig`),
+  `Request` dengan header `Accept: application/octet-stream` (+ `Authorization` bila `AUTH_TOKEN` terisi, saat ini kosong), `response.use { ... }`, `ResponseBody.source()` dibaca per
+  8 KB ke `outFile.sink().buffer()` dengan `emitCompleteSegments()` tiap potongan (tanpa itu buffer Okio menumpuk seluruh APK di memori), `flush()` lalu `use` menutup. Tetap di
+  `Dispatchers.IO`. Perilaku dipertahankan: pesan galat `Unduh APK gagal (HTTP <kode>)`, `onProgress` 0f..1f atau -1f bila tanpa Content-Length, `catch (e: Exception)` menghapus
+  `update.apk` lalu melempar ulang. Tidak ada pembatalan koroutin baru (sama seperti sebelumnya). `check()` TIDAK diubah (masih HttpURLConnection + `org.json`; respons JSON kecil).
+  Import `FileOutputStream` dibuang; KDoc kelas + `download()` diperbarui.
+- `app/build.gradle.kts` — `implementation("com.squareup.okhttp3:okhttp:4.12.0")` + `implementation("com.squareup.okio:okio:3.6.0")` (okio eksplisit, versi sama dgn transitif OkHttp 4.12.0).
+  OkHttp 4.12.0 = rilis 4.x terakhir (minSdk 21+, Kotlin 1.9.24 aman); `isMinifyEnabled = false` -> tanpa risiko R8. API yang dipakai DIVERIFIKASI di sumber GitHub tag
+  `parent-3.6.0` (Okio: `BufferedSink.buffer` properti, `emitCompleteSegments()`, `File.sink()`, `Sink.buffer()`) dan `parent-4.12.0` (OkHttp: `Response.body: ResponseBody?`,
+  `isSuccessful`, `code`, `ResponseBody.source()/contentLength()`, `connectTimeout/readTimeout/followRedirects/followSslRedirects`).
+
+Sengaja TIDAK disentuh: `check()` (HttpURLConnection), RV x7, detekt `TooGenericExceptionCaught` x20 (`catch (e: Exception)` di `download()` sudah termasuk hitungan lama).
+NOT VERIFIED: kompilasi Kotlin + resolusi dependency (tak ada kotlinc/Maven di sandbox), build/lintDebug/detekt/SpotBugs, dan alur unduh-pasang update di HP (butuh rilis lebih baru
+dari yang terpasang). Risiko temuan baru SpotBugs di `AppUpdater.kt` pada run #11: baca `[elemen kode]`, jangan menyaring tanpa bukti.
+
 ## Batch 68: Triase run #9 — filter `$stable` (UUF x24), peringatan kompilator `setTransformationRequest`, blok contoh SARIF dihapus
 
 User mengunggah `Vidsize_v67.zip` + `Vidsize_laporan-untuk-claude_run9.zip` tanpa teks (hasil push Batch 67, commit 90b3ebb).

@@ -11,18 +11,23 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 import java.io.IOException
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.TimeUnit
+import okhttp3.OkHttpClient
+import okhttp3.Request
+import okio.buffer
+import okio.sink
 
 /**
  * In-app updater: checks GitHub's Releases API for a newer build than the
  * one currently installed, downloads the signed APK asset straight to disk
  * (streaming, never buffered fully into RAM), and hands off to the system
- * package installer via FileProvider. No new Gradle dependency — uses
- * HttpURLConnection + org.json (both already on the Android platform)
- * instead of pulling in OkHttp/Retrofit for one endpoint + one download.
+ * package installer via FileProvider. [check] tetap memakai HttpURLConnection +
+ * org.json (platform Android; respons JSON kecil). [download] memakai OkHttp
+ * `ResponseBody.source()` yang dialirkan lewat Okio `sink().buffer()` (aturan
+ * guard streaming; dependency OkHttp + Okio sejak Batch 69).
  *
  * Repo identity is hardcoded to this project's actual GitHub repo (matches
  * .github/workflows/build.yml, which is what publishes the releases this
@@ -45,6 +50,17 @@ object AppUpdater {
     private const val API_URL = "https://api.github.com/repos/$OWNER/$REPO/releases/latest"
     private const val CONNECT_TIMEOUT_MS = 15_000
     private const val READ_TIMEOUT_MS = 20_000
+    private const val STREAM_CHUNK_BYTES = 8L * 1024L
+
+    /** Klien OkHttp tunggal untuk unduhan APK; timeout & redirect (GitHub 302 -> CDN) setara [applyCommonConfig]. */
+    private val downloadClient: OkHttpClient by lazy {
+        OkHttpClient.Builder()
+            .connectTimeout(CONNECT_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+            .readTimeout(READ_TIMEOUT_MS.toLong(), TimeUnit.MILLISECONDS)
+            .followRedirects(true)
+            .followSslRedirects(true)
+            .build()
+    }
 
     /** Optional PAT for private repos / higher rate limits. Blank = unauthenticated (fine for a public repo). */
     private const val AUTH_TOKEN = ""
@@ -132,9 +148,11 @@ object AppUpdater {
     }
 
     /**
-     * Streams the APK chunk-by-chunk straight to a cache file (never
-     * input.readBytes() into memory) so a ~50-100MB APK can't OOM a
-     * low-end device. [onProgress] receives 0f..1f (or -1f if the server
+     * Streams the APK chunk-by-chunk straight to a cache file: OkHttp
+     * `ResponseBody.source()` -> Okio `sink().buffer()` di [Dispatchers.IO],
+     * `emitCompleteSegments()` tiap potongan sehingga buffer tak menumpuk
+     * (tidak pernah `bytes()`/`readBytes()` ke memori) — APK ~50-100MB aman di
+     * perangkat low-end. [onProgress] receives 0f..1f (or -1f if the server
      * didn't send Content-Length, so a caller can fall back to an
      * indeterminate indicator).
      */
@@ -142,37 +160,34 @@ object AppUpdater {
         withContext(Dispatchers.IO) {
             val outDir = File(context.cacheDir, "updates").apply { mkdirs() }
             val outFile = File(outDir, "update.apk")
-            var conn: HttpURLConnection? = null
             try {
-                conn = (URL(info.apkUrl).openConnection() as HttpURLConnection).apply {
-                    applyCommonConfig()
-                    requestMethod = "GET"
-                    setRequestProperty("Accept", "application/octet-stream")
-                }
-                val code = conn.responseCode
-                if (code !in 200..299) throw IOException("Unduh APK gagal (HTTP $code)")
+                val requestBuilder = Request.Builder()
+                    .url(info.apkUrl)
+                    .header("Accept", "application/octet-stream")
+                if (AUTH_TOKEN.isNotBlank()) requestBuilder.header("Authorization", "Bearer $AUTH_TOKEN")
 
-                val totalBytes = conn.contentLengthLong
-                var downloaded = 0L
-                conn.inputStream.use { input ->
-                    FileOutputStream(outFile).use { output ->
-                        val buffer = ByteArray(8 * 1024)
+                downloadClient.newCall(requestBuilder.build()).execute().use { response ->
+                    if (!response.isSuccessful) throw IOException("Unduh APK gagal (HTTP ${response.code})")
+                    val body = response.body ?: throw IOException("Unduh APK gagal (respons kosong)")
+
+                    val totalBytes = body.contentLength()
+                    var downloaded = 0L
+                    val source = body.source()
+                    outFile.sink().buffer().use { sink ->
                         while (true) {
-                            val read = input.read(buffer)
-                            if (read == -1) break
-                            output.write(buffer, 0, read)
+                            val read = source.read(sink.buffer, STREAM_CHUNK_BYTES)
+                            if (read == -1L) break
+                            sink.emitCompleteSegments()
                             downloaded += read
                             onProgress(if (totalBytes > 0) downloaded.toFloat() / totalBytes.toFloat() else -1f)
                         }
-                        output.flush()
+                        sink.flush()
                     }
                 }
                 outFile
             } catch (e: Exception) {
                 outFile.delete()
                 throw e
-            } finally {
-                conn?.disconnect()
             }
         }
 

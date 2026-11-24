@@ -531,6 +531,9 @@ the GitHub Actions route above is much faster in practice.
 
 ## Project & CI notes (baca ini dulu sebelum ubah setup build/git)
 
+- **OkHttp + Okio hanya untuk unduhan APK (Batch 69)**: `AppUpdater.download()` memakai OkHttp `ResponseBody.source()` -> Okio `sink().buffer()` dgn `emitCompleteSegments()` per potongan
+  (aturan guard streaming; JANGAN `bytes()`/`readBytes()` dan JANGAN lupa `emitCompleteSegments()` — tanpa itu buffer Okio menampung seluruh APK). `check()` tetap HttpURLConnection + `org.json`.
+  Dependency: `okhttp:4.12.0` + `okio:3.6.0` (`app/build.gradle.kts`); rilis tanpa R8 (`isMinifyEnabled = false`).
 - **Filter `$stable` & Media3 1.4.1 (Batch 68)**: `exclude.xml` menyaring `UUF_UNUSED_PUBLIC_OR_PROTECTED_FIELD` HANYA untuk nama field `$stable` (konstanta sintetis kompilator Compose;
   24/24 titik run #9) — jangan ganti ke filter per berkas/kelas. `Transformer.Builder.setTransformationRequest` deprecated: gunakan `Transformer.Builder.setVideoMimeType(...)`
   (ada di Media3 1.4.1). Blok "Contoh SARIF mentah" di laporan CI sudah dihapus; `[elemen kode]` per titik tetap ada.

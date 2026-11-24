@@ -197,6 +197,13 @@ dependencies {
     // too rather than relying on the transitive dependency.
     implementation("com.google.guava:guava:33.2.1-android")
 
+    // OkHttp + Okio (Batch 69) — HANYA untuk AppUpdater.download(): aturan guard streaming mewajibkan
+    // ResponseBody.source() -> Okio sink().buffer() (tanpa bytes()/load utuh ke memori). OkHttp 4.12.0 = rilis 4.x
+    // terakhir (kompatibel Kotlin 1.9.24, minSdk 21+); Okio dideklarasikan eksplisit dgn versi yang sama dgn
+    // transitif OkHttp 4.12.0 agar `okio.sink`/`okio.buffer` pasti ada di classpath kompilasi. isMinifyEnabled = false.
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.squareup.okio:okio:3.6.0")
+
     debugImplementation("androidx.compose.ui:ui-tooling")
 
     // Batch 59 — ArchUnit (aturan arsitektur) utk app/src/test/.../ArchitectureTest.kt, dijalankan HANYA oleh

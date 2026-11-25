@@ -1,5 +1,38 @@
 # Changelog
 
+## Batch 81: Audit hierarki tampilan — Update/Tema ke Beranda, unduhan update tak lagi ke-reset, catatan rilis tetap tampil, ikon adaptif baru
+
+User: "audit hierarki tampilan yang amburadul dan membingungkan" + contoh: tab update hanya terjangkau di dalam salah satu alat; ikon app mirip placeholder; unduhan update ke-reset karena salah gestur kembali; snapshot (catatan rilis) update hanya tampil sekali lalu hilang saat bar unduhan mulai.
+
+### TEMUAN (akar masalah, dari source v80)
+1. **Update/Tema terkubur.** "Cek update" + 6 pilihan tema hanya ada di menu titik-tiga `ResizerScreen` (state updater juga di sana). Beranda (hub) tanpa pengaturan apa pun. Tombol update tidak memberi umpan balik bila sudah versi terbaru (diam).
+2. **Unduhan ke-reset.** Setelah unduhan selesai dialog langsung dibuang (`updateResult = null`) dan `downloadedApk` hanya ditulis, tak pernah dibaca; `download()` selalu menimpa dari 0. Pemasang dibatalkan (gestur kembali) / layar izin "sumber tak dikenal" ditutup -> harus Resizer -> menu -> Cek update -> unduh ulang penuh. APK ditulis langsung ke `update.apk` (bisa separuh bila proses mati). Pembatalan korutin tak menghentikan loop baca (tak ada `ensureActive`).
+3. **Catatan rilis hilang.** Dialog: `if (progress == null) catatan else bilah` -> catatan diganti bilah begitu unduhan mulai; teks tanpa scroll.
+4. **Ikon.** Manifest memakai `@drawable/ic_launcher` (vektor datar: kotak ungu + segitiga, BUKAN adaptif -> dibungkus plat putih oleh launcher & splash Android 12), sementara ikon adaptif `mipmap-anydpi-v26` (amber) tak dirujuk siapa pun; ditambah logo "Movie" ketiga di top bar Resizer. Tak ada lapisan monokrom.
+5. **Back dari Resizer keluar dari app** (tak ada `BackHandler` untuk `Screen.MAIN`), padahal Studio/Batch/GIF/Kompres kembali ke Beranda.
+6. **Jalan pintas silang** Resizer -> Studio/Batch/GIF/Kompres: tombol kembali dari alat itu mendarat di Beranda, bukan Resizer asal.
+7. **Beranda memudar menembus ke Resizer**: Beranda `visible = (screen == HOME)` sehingga saat transisi ke/dari Kompres/GIF/Batch/Studio layar Resizer di bawahnya sempat tampak.
+8. **Latar Beranda rata**, semua alat bergradien (tema Glass).
+9. **Penamaan tak konsisten**: kartu "Resize / Edit Video" vs judul "Vidsize"; "Batch Export" vs "Ekspor Batch"; "Riwayat" vs "Studio".
+
+### PERUBAHAN (8 berkas; pembenaran: kontrak state update pindah dari `ResizerScreen` ke akar `VideoResizerApp` + API `AppUpdater` bertambah + aset ikon satu paket)
+- `AppUpdater.kt` — `cachedApk()` (APK `update.apk` sah = bisa diurai sistem, paket sama, versionCode = remote) + `download()` memakainya (tanpa unduh ulang), tulis ke `update.apk.part` -> rename atomik, `ensureActive()` per potongan (pembatalan nyata; pembatalan tak dicatat sbg kegagalan), progres hanya saat persen bulat berubah, cek panjang bila Content-Length ada; `clearCache()` dipanggil saat sudah versi terbaru.
+- `MainActivity.kt` — state `UpdateUi` (Idle/Checking/Available/Downloading/Ready/Failed) + logika cek/unduh/pasang di `VideoResizerApp` (dibaca lewat `State` hanya di Beranda/dialog agar persen unduhan tak merekomposisi akar); `UpdateDialog` baru: catatan rilis (scroll, maks 200dp) TETAP tampil di semua status, gestur kembali/ketuk luar = sembunyikan (unduhan jalan terus), "Batalkan unduhan" eksplisit, status "Siap dipasang" -> "Pasang sekarang" tanpa unduh ulang; Toast "sudah versi terbaru"; Beranda: ikon Update (lencana/ring progres) + menu Tema (centang pilihan aktif) + latar gradien tema; `BackHandler` Resizer -> Beranda (dipasang sebelum `ResizerScreen` agar konfirmasi proses & pemilih video tetap menang); Beranda tampil di bawah semua alat selain Resizer; Resizer: judul "Resize / Edit Video", menu titik-tiga/pintasan Studio/state updater dihapus; "Batch Export" -> "Ekspor Batch", judul Studio -> "Riwayat".
+- `AndroidManifest.xml` — `icon`/`roundIcon` -> `@mipmap/ic_launcher`.
+- `res/mipmap-anydpi-v26/ic_launcher.xml` (+`<monochrome>`), `res/drawable/ic_launcher_foreground.xml` (bingkai bidik 4 siku + tombol putar, di zona aman), `res/drawable/ic_launcher_background.xml` (gradien navy-indigo), `res/values/colors.xml` (`ic_launcher_background` #14171B -> #0A0F24); `res/drawable/ic_launcher.xml` (vektor datar lama) DIHAPUS.
+- Docs: `PROJECT_STATE.md`, `CHANGELOG.md`, `README.md`, `FILE_MANIFEST.txt`.
+
+### VERIFIED (statis, sandbox)
+- XML (5 berkas) well-formed. Pratinjau ikon dirender (lingkaran & squircle) — terbaca jelas, di dalam zona aman.
+- `kotlinc 2.0.21 -language-version 1.9` atas `MainActivity.kt` lama vs baru: seluruh galat adalah "unresolved reference" (Compose/Android tak ada di sandbox); tak ada galat sintaks. Selisih galat jenis lain (variable expected x10, when-exhaustive x1) berasal dari tipe `State` yang tak ter-resolve, bukan dari logika (semua cabang `UpdateUi` tercakup).
+
+### NOT VERIFIED
+Build Gradle/AGP (Maven/Google diblokir sandbox), kompilasi Compose sungguhan, ArchUnit/SpotBugs/detekt/lint, tes unit; perilaku di HP: alur unduh -> pasang -> batal pemasang -> "Pasang sekarang" tanpa unduh ulang, izin "sumber tak dikenal", back Resizer -> Beranda, tampilan ikon (launcher, splash, ikon bertema), transisi Beranda tanpa tembus. Tidak ada tes unit baru (logika bergantung Android).
+
+### DAMPAK / CATATAN
+- Pintasan Studio/Kompres/Batch/GIF di dalam Resizer dihapus (semua tetap dari Beranda).
+- Kontrak ArchUnit: `AppUpdater` tetap mandiri (hanya `CrashLogger`); tanpa dependensi/izin baru.
+
 ## Batch 80: minSdk 24 -> 31 (Android 12+)
 
 User: "naikkan minSdk. minimal android >12". Ditafsirkan Android 12 ke atas = API 31+ (aturan proyek "Fokus dan prioritas pada Android 12 ke atas (API 31+)"); bila yang dimaksud Android 13 (API 33), cukup ubah satu angka di `app/build.gradle.kts`.

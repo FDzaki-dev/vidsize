@@ -511,9 +511,9 @@ the GitHub Actions route above is much faster in practice.
   project's Media3 version is ever bumped. If a build error appears around the watermark
   specifically, `createStaticBitmapOverlay`'s parameter order/types are the next thing
   to check — Android Studio's error will name the exact expected signature.
-- No app icon PNGs are bundled; `ic_launcher` is a simple vector drawable so the
-  project builds without needing image assets. Swap in your own launcher icons
-  whenever you're ready.
+- **Batch 81:** ikon app = adaptive icon vektor (`mipmap-anydpi-v26/ic_launcher.xml` + `drawable/ic_launcher_background.xml`
+  + `drawable/ic_launcher_foreground.xml`, foreground ikut jadi lapisan monokrom ikon bertema); tak ada PNG. Manifest merujuk
+  `@mipmap/ic_launcher` (dulu `@drawable/ic_launcher`, vektor datar lain yang BUKAN ikon adaptif).
 - **Confidence note on batch export (v1.7)**: `ActivityResultContracts.PickMultipleVisualMedia(maxItems)`
   and its `List<Uri>` callback were checked against the official Android developer docs
   and current real-world usage examples — high confidence. The batch queue itself reuses
@@ -604,7 +604,7 @@ the GitHub Actions route above is much faster in practice.
   ke-5, **"Midnight Blue Glass"** — gaya glassmorphism iOS dengan gradasi
   midnight-blue di belakang tiap layar — dan menjadikannya default baru
   aplikasi (tema Dark/Light/Midnight Neon/Warm Paper tetap ada, bisa dipilih
-  lewat menu tema di top bar). Semua di `ui/theme/` (`Color.kt`, `Type.kt`,
+  lewat menu tema di top bar Beranda — sejak Batch 81; dulu di menu titik-tiga Resizer). Semua di `ui/theme/` (`Color.kt`, `Type.kt`,
   `Theme.kt`) plus penyesuaian ringan di `MainActivity.kt` (background
   per-layar, border+shape 4 Card, 2 gradient CTA jadi theme-aware). Tidak
   ada blur asli (`RenderEffect`/API 31+) — efek kaca dicapai lewat

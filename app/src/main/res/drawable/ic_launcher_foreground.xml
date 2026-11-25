@@ -1,13 +1,66 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Batch 81: tanda "Vidsize" = bingkai bidik/resize (4 siku) mengelilingi tombol putar. Siku kiri-atas & kanan-bawah
+  penuh, dua lainnya redup -> kesan diagonal "ubah ukuran". Seluruh tanda berada di zona aman adaptif (lingkaran 66dp
+  di tengah kanvas 108dp). Hanya alpha yang bermakna untuk lapisan monokrom (ikon bertema Android 13+), jadi berkas
+  ini juga dipakai sebagai <monochrome> di mipmap-anydpi-v26/ic_launcher.xml.
+-->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
     android:viewportWidth="108"
     android:viewportHeight="108">
+    <!-- Siku kiri-atas -->
     <path
-        android:fillColor="#E8A33D"
-        android:pathData="M34,30 L34,78 L78,54 Z" />
+        android:pathData="M31,43 V36 A5,5 0 0 1 36,31 H43"
+        android:strokeColor="#EAF1FF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Siku kanan-bawah -->
     <path
-        android:fillColor="#E8A33D"
-        android:pathData="M24,84 L84,84 L84,90 L24,90 Z" />
+        android:pathData="M77,65 V72 A5,5 0 0 1 72,77 H65"
+        android:strokeColor="#EAF1FF"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Siku kanan-atas (redup) -->
+    <path
+        android:pathData="M65,31 H72 A5,5 0 0 1 77,36 V43"
+        android:strokeColor="#EAF1FF"
+        android:strokeAlpha="0.45"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Siku kiri-bawah (redup) -->
+    <path
+        android:pathData="M43,77 H36 A5,5 0 0 1 31,72 V65"
+        android:strokeColor="#EAF1FF"
+        android:strokeAlpha="0.45"
+        android:strokeWidth="4.5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round" />
+    <!-- Tombol putar: segitiga bersudut membulat, gradien cyan -> biru -->
+    <path
+        android:pathData="M48,42 L48,66 L68,54 Z"
+        android:strokeColor="#6FB4FF"
+        android:strokeWidth="3"
+        android:strokeLineJoin="round">
+        <aapt:attr name="android:fillColor">
+            <gradient
+                android:type="linear"
+                android:startX="48"
+                android:startY="42"
+                android:endX="68"
+                android:endY="66">
+                <item
+                    android:offset="0"
+                    android:color="#8FE3FF" />
+                <item
+                    android:offset="1"
+                    android:color="#5B9DFF" />
+            </gradient>
+        </aapt:attr>
+    </path>
 </vector>

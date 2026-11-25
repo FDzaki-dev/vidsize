@@ -110,6 +110,32 @@ import java.util.UUID
 private enum class ThemePreference { SYSTEM, LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS }
 private enum class Screen { HOME, MAIN, STUDIO, BATCH, GIF, COMPRESSOR }
 
+/**
+ * Batch 81: status update TINGKAT-APLIKASI. Hidup di [VideoResizerApp] (akar), bukan di salah satu layar alat, supaya
+ * bisa dibuka dari Beranda dan tetap utuh saat pindah layar. [Ready] = APK utuh sudah ada di cache (lihat
+ * [AppUpdater.cachedApk]) sehingga memasang ulang TIDAK mengunduh ulang.
+ */
+private sealed class UpdateUi {
+    object Idle : UpdateUi()
+    object Checking : UpdateUi()
+    data class Available(val info: AppUpdater.UpdateInfo) : UpdateUi()
+
+    /** [progress] 0f..1f; -1f = ukuran total tak diketahui (indikator tak-tentu). */
+    data class Downloading(val info: AppUpdater.UpdateInfo, val progress: Float) : UpdateUi()
+    data class Ready(val info: AppUpdater.UpdateInfo, val apk: File) : UpdateUi()
+    data class Failed(val message: String, val info: AppUpdater.UpdateInfo?) : UpdateUi()
+}
+
+/** Pilihan tema di menu Beranda (urutan tampil); label = teks menu. */
+private val THEME_CHOICES = listOf(
+    ThemePreference.SYSTEM to "Ikuti sistem",
+    ThemePreference.LIGHT to "Terang",
+    ThemePreference.DARK to "Gelap",
+    ThemePreference.MIDNIGHT_NEON to "Midnight Neon",
+    ThemePreference.WARM_PAPER to "Warm Paper",
+    ThemePreference.MIDNIGHT_BLUE_GLASS to "Midnight Blue Glass"
+)
+
 // Kategorisasi panel setting ResizerScreen jadi tab (diminta user: "kategorikan
 // jadi beberapa tab menu agar terlihat clean dan minimalis"). Murni state UI
 // lokal ResizerScreen — tidak mengubah ResizeRequest/VideoResizer.kt sama
@@ -180,7 +206,7 @@ class MainActivity : ComponentActivity() {
                             .imePadding(),
                         color = MaterialTheme.colorScheme.background
                     ) {
-                        VideoResizerApp(onThemePrefChange = {
+                        VideoResizerApp(themePref = themePref, onThemePrefChange = {
                             themePref = it
                             themePrefsStore.edit().putString("theme_preference", it.name).apply()
                         })
@@ -300,12 +326,83 @@ private const val LOG_TAG = "VidsizeMain"
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun VideoResizerApp(
+    themePref: ThemePreference,
     onThemePrefChange: (ThemePreference) -> Unit
 ) {
     var screen by remember { mutableStateOf(Screen.HOME) }
     var prefill by remember { mutableStateOf<PrefillSettings?>(null) }
     var gifPrefill by remember { mutableStateOf<GifPrefill?>(null) }
     var studioMessage by remember { mutableStateOf<String?>(null) }
+
+    // Batch 81: hierarki navigasi 2 tingkat — Beranda (hub) -> alat. Gestur/tombol kembali dari Resizer dulu TIDAK
+    // ditangani (keluar dari app, padahal Studio/Batch/GIF/Kompres kembali ke Beranda). Handler ini sengaja dipasang
+    // SEBELUM `ResizerScreen` dikomposisi: handler yang dikomposisi belakangan menang, jadi konfirmasi "Batalkan
+    // proses?" milik Resizer (isProcessing) dan pemilih video tetap didahulukan.
+    androidx.activity.compose.BackHandler(enabled = screen == Screen.MAIN) { screen = Screen.HOME }
+
+    // Batch 81: status update dipindah dari ResizerScreen ke akar (dulu "Cek update" hanya ada di menu titik-tiga
+    // Resizer, dan dialognya hilang begitu pengguna keluar dari layar itu). `State` dibaca hanya di HomeScreen/
+    // UpdateDialog supaya persen unduhan tak merekomposisi seluruh akar (termasuk ResizerScreen yang berat).
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val scope = rememberCoroutineScope()
+    val haptic = LocalHapticFeedback.current
+    val updateUi = remember { mutableStateOf<UpdateUi>(UpdateUi.Idle) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
+    var downloadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+
+    fun installApk(info: AppUpdater.UpdateInfo, apk: File) {
+        CrashLogger.nonFatal<Unit>(
+            onFailure = { e ->
+                CrashLogger.logCaught(context, "VideoResizerApp.installApk", e)
+                updateUi.value = UpdateUi.Failed(e.message ?: "Gagal membuka pemasang", info)
+            }
+        ) {
+            if (AppUpdater.canInstall(context)) AppUpdater.install(context, apk) else AppUpdater.requestInstallPermission(context)
+        }
+    }
+
+    fun startDownload(info: AppUpdater.UpdateInfo) {
+        if (downloadJob?.isActive == true) return
+        updateUi.value = UpdateUi.Downloading(info, -1f)
+        downloadJob = scope.launch {
+            CrashLogger.nonFatal<Unit>(
+                onFailure = { e ->
+                    if (e is kotlinx.coroutines.CancellationException) {
+                        updateUi.value = UpdateUi.Available(info)
+                        throw e
+                    }
+                    updateUi.value = UpdateUi.Failed(e.message ?: "Unduh gagal", info)
+                }
+            ) {
+                val apk = AppUpdater.download(context, info) { p -> updateUi.value = UpdateUi.Downloading(info, p) }
+                updateUi.value = UpdateUi.Ready(info, apk)
+                installApk(info, apk)
+            }
+        }
+    }
+
+    fun checkForUpdate() {
+        showUpdateDialog = false
+        updateUi.value = UpdateUi.Checking
+        scope.launch {
+            when (val result = AppUpdater.check(context)) {
+                is AppUpdater.CheckResult.Available -> {
+                    val cached = AppUpdater.cachedApk(context, result.info)
+                    updateUi.value = if (cached != null) UpdateUi.Ready(result.info, cached) else UpdateUi.Available(result.info)
+                    showUpdateDialog = true
+                }
+                is AppUpdater.CheckResult.UpToDate -> {
+                    AppUpdater.clearCache(context)
+                    updateUi.value = UpdateUi.Idle
+                    android.widget.Toast.makeText(context, "Vidsize sudah versi terbaru.", android.widget.Toast.LENGTH_SHORT).show()
+                }
+                is AppUpdater.CheckResult.Error -> {
+                    updateUi.value = UpdateUi.Failed(result.message, null)
+                    showUpdateDialog = true
+                }
+            }
+        }
+    }
 
     // BUG FIX: this used to be a `when (screen)` that fully unmounted
     // ResizerScreen whenever Studio or Batch was open. Every `remember`-held
@@ -324,12 +421,7 @@ private fun VideoResizerApp(
     // its state or gets its coroutines torn down.
     Box(modifier = Modifier.fillMaxSize()) {
         ResizerScreen(
-            onThemePrefChange = onThemePrefChange,
             onOpenHome = { screen = Screen.HOME },
-            onOpenStudio = { screen = Screen.STUDIO },
-            onOpenBatch = { screen = Screen.BATCH },
-            onOpenGif = { screen = Screen.GIF },
-            onOpenCompressor = { screen = Screen.COMPRESSOR },
             isForeground = screen == Screen.MAIN,
             prefill = prefill,
             onPrefillConsumed = { prefill = null },
@@ -340,12 +432,25 @@ private fun VideoResizerApp(
         // overlay when screen == HOME (same "stays mounted underneath,
         // overlay on top" pattern as every other screen here) — the new
         // default landing page in front of ResizerScreen.
+        // Batch 81: dulu `visible = screen == Screen.HOME` -> saat Beranda memudar ke Kompres/GIF/Batch/Riwayat, layar
+        // Resizer (komposisi di bawahnya) sempat tampak menembus; sama sebaliknya saat kembali. Kini Beranda terus
+        // tampil di bawah overlay alat mana pun dan hanya menghilang saat Resizer yang dibuka.
         AnimatedVisibility(
-            visible = screen == Screen.HOME,
+            visible = screen != Screen.MAIN,
             enter = fadeIn(tween(IOS_PUSH_MS, easing = IosPushEasing)),
             exit = fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
         ) {
             HomeScreen(
+                themePref = themePref,
+                onThemePrefChange = onThemePrefChange,
+                update = updateUi,
+                onUpdateClick = {
+                    when (updateUi.value) {
+                        is UpdateUi.Idle -> checkForUpdate()
+                        is UpdateUi.Checking -> Unit
+                        is UpdateUi.Available, is UpdateUi.Downloading, is UpdateUi.Ready, is UpdateUi.Failed -> showUpdateDialog = true
+                    }
+                },
                 onOpenResizer = { screen = Screen.MAIN },
                 onOpenCompressor = { screen = Screen.COMPRESSOR },
                 onOpenGif = { screen = Screen.GIF },
@@ -461,6 +566,28 @@ private fun VideoResizerApp(
             )
         }
     }
+    if (showUpdateDialog) {
+        UpdateDialog(
+            stateHolder = updateUi,
+            onHide = { showUpdateDialog = false },
+            onDownload = { info ->
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                startDownload(info)
+            },
+            onInstall = { info, apk ->
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                installApk(info, apk)
+            },
+            onCancelDownload = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                downloadJob?.cancel()
+            },
+            onRetryCheck = {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                checkForUpdate()
+            }
+        )
+    }
 }
 
 // Batch 58: generic tool-grid dashboard — the standard "title bar + 2-column
@@ -472,24 +599,81 @@ private fun VideoResizerApp(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreen(
+    themePref: ThemePreference,
+    onThemePrefChange: (ThemePreference) -> Unit,
+    update: State<UpdateUi>,
+    onUpdateClick: () -> Unit,
     onOpenResizer: () -> Unit,
     onOpenCompressor: () -> Unit,
     onOpenGif: () -> Unit,
     onOpenBatch: () -> Unit,
     onOpenStudio: () -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+    var showThemeMenu by remember { mutableStateOf(false) }
+    // Batch 81: Beranda kini memakai latar yang sama dgn semua layar alat (gradien Midnight Blue Glass bila tema itu
+    // aktif); dulu rata `colorScheme.background` sehingga berpindah Beranda <-> alat mengganti tampilan latar.
+    val isGlass = com.example.videoresizer.ui.theme.LocalIsGlassTheme.current
+    val screenBackground = if (isGlass) {
+        com.example.videoresizer.ui.theme.MidnightBlueGlassGradient
+    } else {
+        androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.background)
+    }
     Scaffold(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().background(screenBackground),
         topBar = {
             TopAppBar(
                 title = { Text("Vidsize", fontWeight = FontWeight.SemiBold) },
+                // Batch 81: pengaturan tingkat-aplikasi (Update + Tema) pindah ke SINI dari menu titik-tiga layar
+                // Resizer — dulu hanya terjangkau setelah masuk salah satu alat.
+                actions = {
+                    IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onUpdateClick() }) {
+                        when (val u = update.value) {
+                            is UpdateUi.Checking -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            is UpdateUi.Downloading -> if (u.progress >= 0f) {
+                                CircularProgressIndicator(progress = { u.progress }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            } else {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            }
+                            is UpdateUi.Available, is UpdateUi.Ready -> BadgedBox(badge = { Badge() }) {
+                                Icon(Icons.Filled.SystemUpdate, contentDescription = "Update tersedia")
+                            }
+                            is UpdateUi.Failed -> BadgedBox(badge = { Badge(containerColor = MaterialTheme.colorScheme.error) }) {
+                                Icon(Icons.Filled.SystemUpdate, contentDescription = "Update bermasalah")
+                            }
+                            is UpdateUi.Idle -> Icon(Icons.Filled.SystemUpdate, contentDescription = "Cek update")
+                        }
+                    }
+                    Box {
+                        IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showThemeMenu = true }) {
+                            Icon(Icons.Filled.Palette, contentDescription = "Tema")
+                        }
+                        DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
+                            THEME_CHOICES.forEach { (choice, label) ->
+                                DropdownMenuItem(
+                                    text = { Text(label) },
+                                    trailingIcon = if (choice == themePref) {
+                                        { Icon(Icons.Filled.CheckCircle, contentDescription = "Dipilih", tint = MaterialTheme.colorScheme.primary) }
+                                    } else {
+                                        null
+                                    },
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        showThemeMenu = false
+                                        onThemePrefChange(choice)
+                                    }
+                                )
+                            }
+                        }
+                    }
+                },
                 colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
+                    containerColor = Color.Transparent,
                     titleContentColor = MaterialTheme.colorScheme.onBackground
                 )
             )
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color.Transparent
     ) { padding ->
         Column(
             modifier = Modifier
@@ -537,7 +721,7 @@ private fun HomeScreen(
                 item {
                     HomeToolCard(
                         icon = Icons.Filled.Layers,
-                        label = "Batch Export",
+                        label = "Ekspor Batch",
                         desc = "Proses banyak video sekaligus",
                         onClick = onOpenBatch
                     )
@@ -553,6 +737,105 @@ private fun HomeScreen(
             }
         }
     }
+}
+
+/**
+ * Batch 81: dialog update tingkat-aplikasi. Catatan rilis TETAP tampil di semua status (dulu diganti bilah unduhan
+ * begitu unduhan mulai). Menutup dialog/gestur kembali hanya MENYEMBUNYIKAN — unduhan jalan terus dan status tetap di
+ * ikon Beranda; pembatalan unduhan hanya lewat tombol "Batalkan unduhan". Status [UpdateUi.Ready] tinggal memasang
+ * (APK dipakai dari cache), jadi pemasang yang dibatalkan/layar izin tak lagi memaksa unduh dari 0%.
+ */
+@Composable
+private fun UpdateDialog(
+    stateHolder: State<UpdateUi>,
+    onHide: () -> Unit,
+    onDownload: (AppUpdater.UpdateInfo) -> Unit,
+    onInstall: (AppUpdater.UpdateInfo, File) -> Unit,
+    onCancelDownload: () -> Unit,
+    onRetryCheck: () -> Unit
+) {
+    val state = stateHolder.value
+    if (state is UpdateUi.Idle || state is UpdateUi.Checking) return
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val info: AppUpdater.UpdateInfo? = when (state) {
+        is UpdateUi.Available -> state.info
+        is UpdateUi.Downloading -> state.info
+        is UpdateUi.Ready -> state.info
+        is UpdateUi.Failed -> state.info
+        else -> null
+    }
+    AlertDialog(
+        onDismissRequest = onHide,
+        title = { Text(if (info != null) "Update tersedia: ${info.tagName}" else "Cek update gagal") },
+        text = {
+            Column {
+                if (info != null && info.releaseNotes.isNotBlank()) {
+                    Column(modifier = Modifier.heightIn(max = 200.dp).verticalScroll(rememberScrollState())) {
+                        Text(info.releaseNotes)
+                    }
+                    Spacer(modifier = Modifier.height(12.dp))
+                }
+                when (state) {
+                    is UpdateUi.Downloading -> {
+                        if (state.progress < 0f) {
+                            Text("Mengunduh…")
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        } else {
+                            Text("Mengunduh… ${(state.progress * 100).toInt()}%")
+                            Spacer(modifier = Modifier.height(8.dp))
+                            LinearProgressIndicator(progress = { state.progress }, modifier = Modifier.fillMaxWidth())
+                        }
+                    }
+                    is UpdateUi.Ready -> {
+                        Text("Unduhan selesai. APK siap dipasang.")
+                        if (!AppUpdater.canInstall(context)) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Text(
+                                "Bila diminta, izinkan Vidsize memasang aplikasi, lalu kembali ke sini dan ketuk Pasang sekarang.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    is UpdateUi.Failed -> Text(state.message, color = MaterialTheme.colorScheme.error)
+                    else -> Unit
+                }
+            }
+        },
+        confirmButton = {
+            when (state) {
+                is UpdateUi.Available -> TextButton(onClick = { onDownload(state.info) }) { Text("Unduh & Pasang") }
+                is UpdateUi.Downloading -> TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onHide()
+                }) { Text("Sembunyikan") }
+                is UpdateUi.Ready -> TextButton(onClick = { onInstall(state.info, state.apk) }) { Text("Pasang sekarang") }
+                is UpdateUi.Failed -> {
+                    val retryInfo = state.info
+                    TextButton(onClick = { if (retryInfo != null) onDownload(retryInfo) else onRetryCheck() }) { Text("Coba lagi") }
+                }
+                else -> Unit
+            }
+        },
+        dismissButton = {
+            when (state) {
+                is UpdateUi.Downloading -> TextButton(onClick = onCancelDownload) {
+                    Text("Batalkan unduhan", color = MaterialTheme.colorScheme.error)
+                }
+                is UpdateUi.Available, is UpdateUi.Ready -> TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onHide()
+                }) { Text("Nanti") }
+                is UpdateUi.Failed -> TextButton(onClick = {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    onHide()
+                }) { Text("Tutup") }
+                else -> Unit
+            }
+        }
+    )
 }
 
 @Composable
@@ -612,12 +895,7 @@ private fun HomeToolCard(
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable
 private fun ResizerScreen(
-    onThemePrefChange: (ThemePreference) -> Unit,
     onOpenHome: () -> Unit,
-    onOpenStudio: () -> Unit,
-    onOpenBatch: () -> Unit,
-    onOpenGif: () -> Unit,
-    onOpenCompressor: () -> Unit,
     isForeground: Boolean,
     prefill: PrefillSettings?,
     onPrefillConsumed: () -> Unit,
@@ -628,16 +906,8 @@ private fun ResizerScreen(
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
 
-    // In-app updater (AppUpdater.kt / Batch 21). checkingUpdate drives the
-    // top-bar icon's own tiny progress ring; updateResult drives the dialog
-    // (null = nothing to show, dismissed by user or auto-cleared on
-    // UpToDate). downloadProgress is null while idle, -1f for indeterminate
-    // (server sent no Content-Length), 0f..1f while downloading.
-    var checkingUpdate by remember { mutableStateOf(false) }
-    var updateResult by remember { mutableStateOf<AppUpdater.CheckResult?>(null) }
-    var downloadProgress by remember { mutableStateOf<Float?>(null) }
-    var downloadedApk by remember { mutableStateOf<File?>(null) }
-
+    // Batch 81: state + dialog updater (dulu di sini, Batch 21) dipindah ke `VideoResizerApp`/`UpdateDialog` agar bisa
+    // diakses dari Beranda; layar ini kini hanya mengurus alat Resize.
     var selectedUri by rememberSaveable { mutableStateOf<Uri?>(null) }
     // PERF: mutableStateOf<Long/Int>() boxes every value on write. These are
     // read constantly (every OptionSection, the trim math, the resize
@@ -704,7 +974,6 @@ private fun ResizerScreen(
             null
         }
     }
-    var showMoreMenu by remember { mutableStateOf(false) }
     var showCustomResDialog by remember { mutableStateOf(false) }
     var customWidth by rememberSaveable { mutableStateOf<Int?>(null) }
     var customHeight by rememberSaveable { mutableStateOf<Int?>(null) }
@@ -1132,128 +1401,17 @@ private fun ResizerScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali ke beranda")
                     }
                 },
+                // Batch 81: judul = nama alat (sama dgn kartu Beranda; dulu "Vidsize" + logo Movie buatan sendiri yang
+                // berbeda dari ikon app). Menu titik-tiga (alat lain, Cek update, 6 tema) dan pintasan
+                // Studio dihapus: semua itu kini di Beranda, supaya hierarkinya Beranda -> alat tanpa jalan pintas silang
+                // yang membuat tombol kembali mendarat di tempat tak terduga.
                 title = {
-                    // BUG FIX (Batch 23): with 6 action icons now in this
-                    // bar (update/compress/batch/gif/studio/theme, since
-                    // Batch 21's update button), the title slot's available
-                    // width shrank enough that this Text — which had no
-                    // maxLines/overflow — wrapped the old "Video Resizer"
-                    // name onto a second line and got clipped by TopAppBar's
-                    // fixed height, rendering as garbled fragments
-                    // ("eo"/"Res"). Renamed to "Vidsize" in Batch 48
-                    // (cosmetic rebrand) — shorter, so this wrap risk is
-                    // now moot in practice, but the guard stays since a
-                    // narrow-enough screen could still in theory clip it.
-                    // weight(1f, fill=false) lets the title shrink to
-                    // whatever width remains instead of forcing the Row
-                    // wider than it has room for; maxLines=1 + Ellipsis
-                    // guarantees a single clean line (truncated with "…" on
-                    // very narrow screens) instead of a wrap-then-clip.
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(8.dp))
-                                .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(Icons.Filled.Movie, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                        }
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Text(
-                            "Vidsize",
-                            fontWeight = FontWeight.SemiBold,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis,
-                            modifier = Modifier.weight(1f, fill = false)
-                        )
-                    }
-                },
-                actions = {
-                    // BATCH 25: user asked to fold every feature except
-                    // Studio into "More" (Compress/Batch/GIF were separate
-                    // icons since before Batch 21; keeping them there was
-                    // the whole reason the bar got crowded in the first
-                    // place). Studio stays standalone per explicit request.
-                    // Bar is now just [Studio, More] — 2 icons, title has
-                    // maximum room, and every other feature lives in one
-                    // dropdown instead of being split across bar+menu.
-                    IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onOpenStudio() }) {
-                        Icon(Icons.Filled.PhotoLibrary, contentDescription = "Studio")
-                    }
-                    Box {
-                        IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showMoreMenu = true }) {
-                            if (checkingUpdate) {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                Icon(Icons.Filled.MoreVert, contentDescription = "Menu lainnya")
-                            }
-                        }
-                        DropdownMenu(expanded = showMoreMenu, onDismissRequest = { showMoreMenu = false }) {
-                            DropdownMenuItem(
-                                text = { Text("Kompres video") },
-                                leadingIcon = { Icon(Icons.Filled.Compress, contentDescription = null) },
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showMoreMenu = false; onOpenCompressor() }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Ekspor Batch") },
-                                leadingIcon = { Icon(Icons.Filled.Layers, contentDescription = null) },
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showMoreMenu = false; onOpenBatch() }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Video ke GIF") },
-                                leadingIcon = { Icon(Icons.Filled.Gif, contentDescription = null) },
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showMoreMenu = false; onOpenGif() }
-                            )
-                            androidx.compose.material3.HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text(if (checkingUpdate) "Mengecek update…" else "Cek update") },
-                                leadingIcon = { Icon(Icons.Filled.SystemUpdate, contentDescription = null) },
-                                enabled = !checkingUpdate,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    showMoreMenu = false
-                                    checkingUpdate = true
-                                    scope.launch {
-                                        updateResult = AppUpdater.check(context)
-                                        checkingUpdate = false
-                                    }
-                                }
-                            )
-                            androidx.compose.material3.HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Tema: Gelap") },
-                                leadingIcon = { Icon(Icons.Filled.DarkMode, contentDescription = null) },
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onThemePrefChange(ThemePreference.DARK); showMoreMenu = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Tema: Terang") },
-                                leadingIcon = { Icon(Icons.Filled.LightMode, contentDescription = null) },
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onThemePrefChange(ThemePreference.LIGHT); showMoreMenu = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Tema: Ikuti sistem") },
-                                leadingIcon = { Icon(Icons.Filled.DarkMode, contentDescription = null) },
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onThemePrefChange(ThemePreference.SYSTEM); showMoreMenu = false }
-                            )
-                            androidx.compose.material3.HorizontalDivider()
-                            DropdownMenuItem(
-                                text = { Text("Tema: Midnight Neon") },
-                                leadingIcon = { Icon(Icons.Filled.Palette, contentDescription = null) },
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onThemePrefChange(ThemePreference.MIDNIGHT_NEON); showMoreMenu = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Tema: Warm Paper") },
-                                leadingIcon = { Icon(Icons.Filled.Palette, contentDescription = null) },
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onThemePrefChange(ThemePreference.WARM_PAPER); showMoreMenu = false }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Tema: Midnight Blue Glass") },
-                                leadingIcon = { Icon(Icons.Filled.Palette, contentDescription = null) },
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onThemePrefChange(ThemePreference.MIDNIGHT_BLUE_GLASS); showMoreMenu = false }
-                            )
-                        }
-                    }
+                    Text(
+                        "Resize / Edit Video",
+                        fontWeight = FontWeight.SemiBold,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = Color.Transparent,
@@ -1936,76 +2094,6 @@ private fun ResizerScreen(
             },
             onCancel = { showVideoPicker = false }
         )
-    }
-    // In-app updater dialog (AppUpdater.kt / Batch 21) — drawn at this same
-    // top level as VideoPickerScreen's overlay above, so it floats over
-    // everything regardless of which screen/sub-state is active underneath.
-    when (val result = updateResult) {
-        is AppUpdater.CheckResult.UpToDate -> {
-            LaunchedEffect(Unit) { updateResult = null }
-        }
-        is AppUpdater.CheckResult.Error -> {
-            AlertDialog(
-                onDismissRequest = { updateResult = null },
-                title = { Text("Cek update gagal") },
-                text = { Text(result.message) },
-                confirmButton = { TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); updateResult = null }) { Text("OK") } }
-            )
-        }
-        is AppUpdater.CheckResult.Available -> {
-            val info = result.info
-            val progress = downloadProgress
-            AlertDialog(
-                onDismissRequest = { if (progress == null) { updateResult = null } },
-                title = { Text("Update tersedia: ${info.tagName}") },
-                text = {
-                    Column {
-                        if (progress == null) {
-                            if (info.releaseNotes.isNotBlank()) Text(info.releaseNotes)
-                        } else if (progress < 0f) {
-                            Text("Mengunduh…")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
-                        } else {
-                            Text("Mengunduh… ${(progress * 100).toInt()}%")
-                            Spacer(modifier = Modifier.height(8.dp))
-                            LinearProgressIndicator(progress = { progress }, modifier = Modifier.fillMaxWidth())
-                        }
-                    }
-                },
-                confirmButton = {
-                    TextButton(
-                        enabled = progress == null,
-                        onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            downloadProgress = -1f
-                            scope.launch {
-                                CrashLogger.nonFatal<Unit>(
-                                    onFailure = { e ->
-                                        downloadProgress = null
-                                        updateResult = AppUpdater.CheckResult.Error(e.message ?: "Unduh gagal")
-                                    }
-                                ) {
-                                    val apk = AppUpdater.download(context, info) { p -> downloadProgress = p }
-                                    downloadedApk = apk
-                                    downloadProgress = null
-                                    updateResult = null
-                                    if (AppUpdater.canInstall(context)) {
-                                        AppUpdater.install(context, apk)
-                                    } else {
-                                        AppUpdater.requestInstallPermission(context)
-                                    }
-                                }
-                            }
-                        }
-                    ) { Text("Unduh & Pasang") }
-                },
-                dismissButton = {
-                    TextButton(enabled = progress == null, onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); updateResult = null }) { Text("Nanti") }
-                }
-            )
-        }
-        null -> Unit
     }
     }
 }
@@ -2767,7 +2855,7 @@ private fun BatchScreen(onBack: () -> Unit) {
             }
 
             Text(
-                "Hasil setiap video otomatis tersimpan ke Galeri > Movies > VideoResizer dan muncul di Studio, sama seperti export satu-per-satu.",
+                "Hasil setiap video otomatis tersimpan ke Galeri > Movies > VideoResizer dan muncul di Riwayat, sama seperti export satu-per-satu.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -3912,7 +4000,7 @@ private fun StudioScreen(
             TopAppBar(
                 title = {
                     Text(
-                        if (selectionMode) "${selectedIds.size} dipilih" else "Studio",
+                        if (selectionMode) "${selectedIds.size} dipilih" else "Riwayat",
                         fontWeight = FontWeight.SemiBold
                     )
                 },

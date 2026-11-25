@@ -16,6 +16,8 @@ import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -23,6 +25,8 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,8 +40,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
@@ -77,6 +79,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
@@ -91,6 +94,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.media3.common.MediaItem
@@ -126,15 +130,15 @@ private sealed class UpdateUi {
     data class Failed(val message: String, val info: AppUpdater.UpdateInfo?) : UpdateUi()
 }
 
-/** Pilihan tema di menu Beranda (urutan tampil); label = teks menu. */
-private val THEME_CHOICES = listOf(
-    ThemePreference.SYSTEM to "Ikuti sistem",
-    ThemePreference.LIGHT to "Terang",
-    ThemePreference.DARK to "Gelap",
-    ThemePreference.MIDNIGHT_NEON to "Midnight Neon",
-    ThemePreference.WARM_PAPER to "Warm Paper",
-    ThemePreference.MIDNIGHT_BLUE_GLASS to "Midnight Blue Glass"
-)
+/** Label menu tema Beranda. Fungsi (bukan `val` daftar) supaya tak ada field statis yang bisa "bocor" (SpotBugs MS_EXPOSE_REP, run #22). */
+private fun themeLabel(pref: ThemePreference): String = when (pref) {
+    ThemePreference.SYSTEM -> "Ikuti sistem"
+    ThemePreference.LIGHT -> "Terang"
+    ThemePreference.DARK -> "Gelap"
+    ThemePreference.MIDNIGHT_NEON -> "Midnight Neon"
+    ThemePreference.WARM_PAPER -> "Warm Paper"
+    ThemePreference.MIDNIGHT_BLUE_GLASS -> "Midnight Blue Glass"
+}
 
 // Kategorisasi panel setting ResizerScreen jadi tab (diminta user: "kategorikan
 // jadi beberapa tab menu agar terlihat clean dan minimalis"). Murni state UI
@@ -596,7 +600,56 @@ private fun VideoResizerApp(
 // existing screens (see VideoResizerApp above); none of Resizer/Compressor/
 // Batch/GIF/Studio's own internals change. Deliberately theme-agnostic (no
 // glass gradient) so it reads as a plain, familiar dashboard in every theme.
+/**
+ * Batch 82: latar layar penuh yang SAMA untuk semua layar — gradien Midnight Blue Glass bila tema itu aktif, selain itu
+ * warna latar tema. Dulu GIF & Kompres memakai warna rata sementara Beranda/Resizer/Batch/Riwayat bergradien.
+ */
+@Composable
+private fun glassAwareBackground(): Brush {
+    val isGlass = com.example.videoresizer.ui.theme.LocalIsGlassTheme.current
+    return if (isGlass) {
+        com.example.videoresizer.ui.theme.MidnightBlueGlassGradient
+    } else {
+        androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.background)
+    }
+}
+
+/**
+ * Batch 82: satu top bar untuk semua alat (judul = nama alat di kartu Beranda, tombol kembali + haptic seragam).
+ * Dulu 4 TopAppBar inline dengan bobot/warna judul berbeda-beda.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ToolTopBar(title: String, onBack: () -> Unit, backDescription: String = "Kembali") {
+    val haptic = LocalHapticFeedback.current
+    TopAppBar(
+        title = {
+            Text(
+                title,
+                style = MaterialTheme.typography.titleLarge,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+        },
+        navigationIcon = {
+            IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onBack() }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = backDescription)
+            }
+        },
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.Transparent,
+            titleContentColor = MaterialTheme.colorScheme.onBackground,
+            navigationIconContentColor = MaterialTheme.colorScheme.onBackground
+        )
+    )
+}
+
+/**
+ * Batch 82: Beranda bergaya "app premium" — judul besar + aksi bulat di kanan, SATU kartu hero (alat utama, lebar
+ * penuh, gradien aksen app), lalu grid 2x2 alat lain dgn identitas warna sendiri (dulu 5 kartu sama rata -> baris
+ * terakhir pincang 1 kartu). Update + Tema tetap di header (Batch 81).
+ */
 @Composable
 private fun HomeScreen(
     themePref: ThemePreference,
@@ -611,131 +664,142 @@ private fun HomeScreen(
 ) {
     val haptic = LocalHapticFeedback.current
     var showThemeMenu by remember { mutableStateOf(false) }
-    // Batch 81: Beranda kini memakai latar yang sama dgn semua layar alat (gradien Midnight Blue Glass bila tema itu
-    // aktif); dulu rata `colorScheme.background` sehingga berpindah Beranda <-> alat mengganti tampilan latar.
-    val isGlass = com.example.videoresizer.ui.theme.LocalIsGlassTheme.current
-    val screenBackground = if (isGlass) {
-        com.example.videoresizer.ui.theme.MidnightBlueGlassGradient
-    } else {
-        androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.background)
-    }
     Scaffold(
-        modifier = Modifier.fillMaxSize().background(screenBackground),
-        topBar = {
-            TopAppBar(
-                title = { Text("Vidsize", fontWeight = FontWeight.SemiBold) },
-                // Batch 81: pengaturan tingkat-aplikasi (Update + Tema) pindah ke SINI dari menu titik-tiga layar
-                // Resizer — dulu hanya terjangkau setelah masuk salah satu alat.
-                actions = {
-                    IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onUpdateClick() }) {
-                        when (val u = update.value) {
-                            is UpdateUi.Checking -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            is UpdateUi.Downloading -> if (u.progress >= 0f) {
-                                CircularProgressIndicator(progress = { u.progress }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            } else {
-                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            }
-                            is UpdateUi.Available, is UpdateUi.Ready -> BadgedBox(badge = { Badge() }) {
-                                Icon(Icons.Filled.SystemUpdate, contentDescription = "Update tersedia")
-                            }
-                            is UpdateUi.Failed -> BadgedBox(badge = { Badge(containerColor = MaterialTheme.colorScheme.error) }) {
-                                Icon(Icons.Filled.SystemUpdate, contentDescription = "Update bermasalah")
-                            }
-                            is UpdateUi.Idle -> Icon(Icons.Filled.SystemUpdate, contentDescription = "Cek update")
-                        }
-                    }
-                    Box {
-                        IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showThemeMenu = true }) {
-                            Icon(Icons.Filled.Palette, contentDescription = "Tema")
-                        }
-                        DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
-                            THEME_CHOICES.forEach { (choice, label) ->
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    trailingIcon = if (choice == themePref) {
-                                        { Icon(Icons.Filled.CheckCircle, contentDescription = "Dipilih", tint = MaterialTheme.colorScheme.primary) }
-                                    } else {
-                                        null
-                                    },
-                                    onClick = {
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        showThemeMenu = false
-                                        onThemePrefChange(choice)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
-                )
-            )
-        },
+        modifier = Modifier.fillMaxSize().background(glassAwareBackground()),
         containerColor = Color.Transparent
     ) { padding ->
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
-                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState())
+                .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 24.dp),
+            verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                "Semua alat video dalam satu aplikasi",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Spacer(modifier = Modifier.height(16.dp))
-            LazyVerticalGrid(
-                columns = GridCells.Fixed(2),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp),
-                modifier = Modifier.fillMaxSize()
-            ) {
-                item {
-                    HomeToolCard(
-                        icon = Icons.Filled.Crop,
-                        label = "Resize / Edit Video",
-                        desc = "Ubah ukuran, rasio, watermark",
-                        onClick = onOpenResizer
+            Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        "Vidsize",
+                        style = MaterialTheme.typography.headlineMedium.copy(
+                            fontWeight = FontWeight.Bold,
+                            letterSpacing = (-0.5).sp
+                        ),
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Text(
+                        "Semua alat video dalam satu aplikasi",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
-                item {
-                    HomeToolCard(
-                        icon = Icons.Filled.Compress,
-                        label = "Kompres Video",
-                        desc = "Perkecil ukuran file",
-                        onClick = onOpenCompressor
-                    )
+                HomeActionButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onUpdateClick() }) {
+                    UpdateActionIcon(update.value)
                 }
-                item {
-                    HomeToolCard(
-                        icon = Icons.Filled.Gif,
-                        label = "Video ke GIF",
-                        desc = "Ekspor jadi GIF",
-                        onClick = onOpenGif
-                    )
-                }
-                item {
-                    HomeToolCard(
-                        icon = Icons.Filled.Layers,
-                        label = "Ekspor Batch",
-                        desc = "Proses banyak video sekaligus",
-                        onClick = onOpenBatch
-                    )
-                }
-                item {
-                    HomeToolCard(
-                        icon = Icons.Filled.PhotoLibrary,
-                        label = "Riwayat",
-                        desc = "Lihat hasil ekspor sebelumnya",
-                        onClick = onOpenStudio
-                    )
+                Spacer(modifier = Modifier.width(8.dp))
+                Box {
+                    HomeActionButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); showThemeMenu = true }) {
+                        Icon(Icons.Filled.Palette, contentDescription = "Tema")
+                    }
+                    DropdownMenu(expanded = showThemeMenu, onDismissRequest = { showThemeMenu = false }) {
+                        ThemePreference.entries.forEach { choice ->
+                            DropdownMenuItem(
+                                text = { Text(themeLabel(choice)) },
+                                trailingIcon = if (choice == themePref) {
+                                    { Icon(Icons.Filled.CheckCircle, contentDescription = "Dipilih", tint = MaterialTheme.colorScheme.primary) }
+                                } else {
+                                    null
+                                },
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                    showThemeMenu = false
+                                    onThemePrefChange(choice)
+                                }
+                            )
+                        }
+                    }
                 }
             }
+
+            Spacer(modifier = Modifier.height(4.dp))
+            HomeHeroCard(onClick = onOpenResizer)
+
+            Text(
+                "ALAT LAINNYA",
+                style = MaterialTheme.typography.labelSmall,
+                fontWeight = FontWeight.SemiBold,
+                letterSpacing = 1.2.sp,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(start = 4.dp, top = 6.dp)
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                HomeToolCard(
+                    icon = Icons.Filled.Compress,
+                    label = "Kompres Video",
+                    desc = "Perkecil ukuran file",
+                    accent = Color(0xFFFFB347),
+                    onClick = onOpenCompressor,
+                    modifier = Modifier.weight(1f)
+                )
+                HomeToolCard(
+                    icon = Icons.Filled.Gif,
+                    label = "Video ke GIF",
+                    desc = "Ekspor jadi GIF",
+                    accent = Color(0xFFFF6FA5),
+                    onClick = onOpenGif,
+                    modifier = Modifier.weight(1f)
+                )
+            }
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                HomeToolCard(
+                    icon = Icons.Filled.Layers,
+                    label = "Ekspor Batch",
+                    desc = "Proses banyak video sekaligus",
+                    accent = Color(0xFF3DD6C0),
+                    onClick = onOpenBatch,
+                    modifier = Modifier.weight(1f)
+                )
+                HomeToolCard(
+                    icon = Icons.Filled.PhotoLibrary,
+                    label = "Riwayat",
+                    desc = "Lihat hasil ekspor sebelumnya",
+                    accent = Color(0xFFA78BFA),
+                    onClick = onOpenStudio,
+                    modifier = Modifier.weight(1f)
+                )
+            }
         }
+    }
+}
+
+/** Tombol aksi bulat di header Beranda (Update/Tema). */
+@Composable
+private fun HomeActionButton(onClick: () -> Unit, content: @Composable () -> Unit) {
+    IconButton(
+        onClick = onClick,
+        modifier = Modifier
+            .size(44.dp)
+            .clip(CircleShape)
+            .background(MaterialTheme.colorScheme.surfaceVariant)
+    ) { content() }
+}
+
+/** Ikon aksi Update sesuai status: ring (cek/unduh), lencana (ada update/siap pasang/gagal), atau ikon biasa. */
+@Composable
+private fun UpdateActionIcon(u: UpdateUi) {
+    when (u) {
+        is UpdateUi.Checking -> CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        is UpdateUi.Downloading -> if (u.progress >= 0f) {
+            CircularProgressIndicator(progress = { u.progress }, modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        } else {
+            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+        }
+        is UpdateUi.Available, is UpdateUi.Ready -> BadgedBox(badge = { Badge() }) {
+            Icon(Icons.Filled.SystemUpdate, contentDescription = "Update tersedia")
+        }
+        is UpdateUi.Failed -> BadgedBox(badge = { Badge(containerColor = MaterialTheme.colorScheme.error) }) {
+            Icon(Icons.Filled.SystemUpdate, contentDescription = "Update bermasalah")
+        }
+        is UpdateUi.Idle -> Icon(Icons.Filled.SystemUpdate, contentDescription = "Cek update")
     }
 }
 
@@ -838,22 +902,105 @@ private fun UpdateDialog(
     )
 }
 
+/** Kartu hero Beranda: alat utama (Resize / Edit Video), lebar penuh, gradien aksen app (sama dgn tombol CTA). */
+@Composable
+private fun HomeHeroCard(onClick: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.98f else 1f, animationSpec = spring(), label = "heroScale")
+    Card(
+        onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onClick() },
+        interactionSource = interaction,
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { scaleX = scale; scaleY = scale },
+        shape = RoundedCornerShape(26.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)))
+        ) {
+            Icon(
+                Icons.Filled.Crop,
+                contentDescription = null,
+                tint = Color.White.copy(alpha = 0.12f),
+                modifier = Modifier
+                    .size(150.dp)
+                    .align(Alignment.TopEnd)
+                    .offset(x = 36.dp, y = (-20).dp)
+            )
+            Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .clip(RoundedCornerShape(15.dp))
+                        .background(Color.White.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(Icons.Filled.Crop, contentDescription = null, tint = Color.White)
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    "Resize / Edit Video",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+                Text(
+                    "Ukuran, rasio, trim, watermark, dan teks dalam satu alur",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color.White.copy(alpha = 0.86f)
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.22f))
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                ) {
+                    Text("Mulai", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        Icons.AutoMirrored.Filled.ArrowForward,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/** Kartu alat sekunder: permukaan kaca + garis tepi tipis, ubin ikon berwarna aksen alat, efek tekan (skala pegas). */
 @Composable
 private fun HomeToolCard(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
     desc: String,
-    onClick: () -> Unit
+    accent: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, animationSpec = spring(), label = "toolCardScale")
     Card(
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() },
-        modifier = Modifier
-            .fillMaxWidth()
-            .aspectRatio(1f),
-        shape = RoundedCornerShape(16.dp),
+        interactionSource = interaction,
+        modifier = modifier
+            .height(152.dp)
+            .graphicsLayer { scaleX = scale; scaleY = scale },
+        shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier
@@ -863,12 +1010,12 @@ private fun HomeToolCard(
         ) {
             Box(
                 modifier = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(MaterialTheme.colorScheme.primaryContainer),
+                    .size(44.dp)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(accent.copy(alpha = 0.18f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+                Icon(icon, contentDescription = null, tint = accent)
             }
             Column {
                 Text(
@@ -1133,6 +1280,13 @@ private fun ResizerScreen(
         }
     }
 
+    // Batch 82: hasil/pesan ekspor muncul di atas pengaturan -> gulir ke atas agar langsung terlihat (tombol Resize
+    // kini di dok tetap, jadi pengguna bisa sedang berada di bagian mana pun dari daftar pengaturan).
+    val resizerScrollState = rememberScrollState()
+    LaunchedEffect(resultMessage) {
+        if (resultMessage != null) resizerScrollState.animateScrollTo(0)
+    }
+
     var pendingRequest by remember { mutableStateOf<ResizeRequest?>(null) }
     var pendingThumbnailFile by remember { mutableStateOf<File?>(null) }
 
@@ -1392,32 +1546,153 @@ private fun ResizerScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize().background(screenBackground),
         topBar = {
-            TopAppBar(
-                navigationIcon = {
-                    // Batch 58: this screen is no longer the app's root —
-                    // HomeScreen is now in front of it — so it needs an
-                    // explicit way back to the dashboard.
-                    IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onOpenHome() }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali ke beranda")
+            ToolTopBar(title = "Resize / Edit Video", onBack = onOpenHome, backDescription = "Kembali ke beranda")
+        },
+        // Batch 82: aksi utama (Resize / progres) kini DOK TETAP di bawah — dulu ujung kolom gulir sehingga harus
+        // menggulir lewat semua pengaturan untuk mengekspor, dan progres hilang dari layar saat menggulir ke atas.
+        bottomBar = {
+            if (selectedUri != null && durationMs > 0) {
+                val startMs = (trimRange.start * durationMs).toLong()
+                val endMs = (trimRange.endInclusive * durationMs).toLong()
+                Surface(
+                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.96f),
+                    shadowElevation = 12.dp
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .navigationBarsPadding()
+                            .padding(horizontal = 20.dp, vertical = 12.dp)
+                    ) {
+                        if (isProcessing) {
+                            // UX FIX: real percentage instead of an indefinite
+                            // spinner, plus a way out. Elapsed/ETA below is derived
+                            // purely from the percentage feed (see startResize) —
+                            // it needs no extra Media3 progress API.
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                LinearProgressIndicator(
+                                    progress = { exportProgress / 100f },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                                )
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        "Memproses video… $exportProgress%",
+                                        color = MaterialTheme.colorScheme.onBackground,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    OutlinedButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); cancelResize() }) { Text("Batalkan") }
+                                }
+                                val eta = exportEtaSeconds
+                                Text(
+                                    if (eta != null) {
+                                        "Perkiraan sisa waktu: ~${eta}s • hardware encoder perangkat"
+                                    } else {
+                                        "Menghitung perkiraan waktu… • hardware encoder perangkat"
+                                    },
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        } else {
+                            val canResize = endMs > startMs
+                            val ctaBrush = if (canResize) {
+                                Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))
+                            } else {
+                                val dim = MaterialTheme.colorScheme.surfaceVariant
+                                Brush.horizontalGradient(listOf(dim, dim))
+                            }
+                            val ctaContentColor = if (canResize) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            Button(
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                                elevation = null,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(52.dp)
+                                    .background(brush = ctaBrush, shape = RoundedCornerShape(14.dp)),
+                                shape = RoundedCornerShape(14.dp),
+                                enabled = canResize,
+                                onClick = {
+                                    val uri = selectedUri ?: return@Button
+
+                                    // UX FIX: low-storage guard. Without this, a
+                                    // nearly-full device just lets the export run
+                                    // and fail late with a cryptic codec/IO error —
+                                    // a novice user has no idea "penyimpanan penuh"
+                                    // is the real cause. 250MB is a rough safety
+                                    // margin, not an exact requirement.
+                                    val freeMb = context.cacheDir.usableSpace / (1024 * 1024)
+                                    if (freeMb < 250) {
+                                        resultMessage = "Penyimpanan hampir penuh (tersisa ${freeMb}MB). Hapus beberapa file dulu sebelum memproses video."
+                                        return@Button
+                                    }
+
+                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    isProcessing = true
+                                    resultMessage = null
+                                    outputFile = null
+                                    galleryUri = null
+                                    resultThumbnailFile = null
+
+                                    val id = UUID.randomUUID().toString()
+                                    val thumbDir = ensureThumbDir(context.cacheDir)
+                                    val request = ResizeRequest(
+                                        sourceUri = uri,
+                                        outputFile = File(context.cacheDir, "resized_$id.mp4"),
+                                        aspectRatio = aspectRatio,
+                                        resolution = resolution,
+                                        sourceWidth = sourceWidth,
+                                        sourceHeight = sourceHeight,
+                                        trimStartMs = startMs,
+                                        trimEndMs = endMs,
+                                        muteAudio = muteAudio,
+                                        rotation = rotation,
+                                        resizeMode = resizeMode,
+                                        customWidth = customWidth,
+                                        customHeight = customHeight,
+                                        quality = quality,
+                                        customBitrateKbps = customBitrateKbps,
+                                        watermarkUri = watermarkUri,
+                                        watermarkPosition = watermarkPosition,
+                                        watermarkOpacityPercent = watermarkOpacityPercent.roundToInt(),
+                                        watermarkScalePercent = watermarkScalePercent.roundToInt(),
+                                        captionText = captionText,
+                                        captionPosition = captionPosition,
+                                        flip = flip,
+                                        frameRate = frameRate
+                                    )
+                                    // Before/after comparison: this same thumbnail file is
+                                    // already generated for Studio history once export
+                                    // succeeds — resultThumbnailFile is set from startResize's
+                                    // onDone callback below, not here, since the file on disk
+                                    // doesn't exist yet at click time.
+                                    val thumbnailFile = File(thumbDir, "thumb_$id.jpg")
+
+                                    val needsLegacyPermission = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
+                                    val alreadyGranted = androidx.core.content.ContextCompat.checkSelfPermission(
+                                        context, android.Manifest.permission.WRITE_EXTERNAL_STORAGE
+                                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+
+                                    if (needsLegacyPermission && !alreadyGranted) {
+                                        pendingRequest = request
+                                        pendingThumbnailFile = thumbnailFile
+                                        storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                                    } else {
+                                        startResize(request, thumbnailFile)
+                                    }
+                                }
+                            ) {
+                                Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = ctaContentColor)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Resize video", color = ctaContentColor)
+                            }
+                        }
                     }
-                },
-                // Batch 81: judul = nama alat (sama dgn kartu Beranda; dulu "Vidsize" + logo Movie buatan sendiri yang
-                // berbeda dari ikon app). Menu titik-tiga (alat lain, Cek update, 6 tema) dan pintasan
-                // Studio dihapus: semua itu kini di Beranda, supaya hierarkinya Beranda -> alat tanpa jalan pintas silang
-                // yang membuat tombol kembali mendarat di tempat tak terduga.
-                title = {
-                    Text(
-                        "Resize / Edit Video",
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground
-                )
-            )
+                }
+            }
         },
         containerColor = Color.Transparent
     ) { padding ->
@@ -1425,7 +1700,7 @@ private fun ResizerScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(resizerScrollState)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
@@ -1462,6 +1737,103 @@ private fun ResizerScreen(
             if (selectedUri != null && durationMs > 0) {
                 val startMs = (trimRange.start * durationMs).toLong()
                 val endMs = (trimRange.endInclusive * durationMs).toLong()
+
+                // Batch 82: kartu hasil/pesan dipindah ke ATAS pengaturan (dekat pratinjau) karena tombol Resize kini tetap
+                // di dok bawah; layar menggulir ke atas otomatis saat hasil/pesan muncul (lihat resizerScrollState).
+                resultMessage?.let { msg ->
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        shape = MaterialTheme.shapes.large
+                    ) {
+                        Column(Modifier.padding(16.dp)) {
+                            Text(msg, color = MaterialTheme.colorScheme.onSurface)
+
+                            // "Preview sebelum-sesudah (before/after) berdampingan":
+                            // a frame from the original source (reused from
+                            // `filmstrip`, already extracted for the trim scrubber —
+                            // no extra decode) next to a frame from the actual
+                            // exported result (reused from the thumbnail already
+                            // generated for Studio history). Each keeps its own real
+                            // aspect ratio rather than being forced square, so a
+                            // 16:9-to-9:16 resize is immediately, visually obvious —
+                            // that visual contrast is the entire point of a
+                            // before/after, not just two static images.
+                            if (outputFile != null && resultThumbnailBitmap != null && filmstrip.isNotEmpty() && sourceWidth > 0 && sourceHeight > 0) {
+                                Spacer(Modifier.height(14.dp))
+                                Text("Sebelum vs sesudah", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+                                Spacer(Modifier.height(8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    verticalAlignment = Alignment.Bottom
+                                ) {
+                                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        Image(
+                                            bitmap = filmstrip[filmstrip.size / 2].asImageBitmap(),
+                                            contentDescription = "Sebelum",
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .aspectRatio(sourceWidth.toFloat() / sourceHeight.toFloat())
+                                                .clip(RoundedCornerShape(10.dp))
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Text("Sebelum", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                    }
+                                    Icon(
+                                        Icons.AutoMirrored.Filled.ArrowForward,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(bottom = 20.dp)
+                                    )
+                                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
+                                        // Local val capture instead of !!: resultThumbnailBitmap
+                                        // is Compose mutable state, so it can't smart-cast across
+                                        // this nested composable scope even though the outer `if`
+                                        // above already confirmed it's non-null.
+                                        val resultBitmap = resultThumbnailBitmap
+                                        if (resultBitmap != null) {
+                                            Image(
+                                                bitmap = resultBitmap.asImageBitmap(),
+                                                contentDescription = "Sesudah",
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .aspectRatio(resultBitmap.width.toFloat() / resultBitmap.height.toFloat())
+                                                    .clip(RoundedCornerShape(10.dp))
+                                            )
+                                            Spacer(Modifier.height(4.dp))
+                                            Text("Sesudah", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                        }
+                                    }
+                                }
+                            }
+
+                            if (outputFile != null || galleryUri != null) {
+                                Spacer(Modifier.height(10.dp))
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    modifier = Modifier.horizontalScroll(rememberScrollState())
+                                ) {
+                                    // Gallery integration: opens straight in the
+                                    // user's default Gallery/video app when we
+                                    // successfully published to MediaStore.
+                                    galleryUri?.let { uri ->
+                                        TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); openInGallery(context, uri) }) {
+                                            Text("Buka di Galeri")
+                                        }
+                                    }
+                                    outputFile?.let { file ->
+                                        TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); shareVideo(context, file) }) {
+                                            Text("Bagikan")
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
 
                 SettingsTabBar(
                     tabs = ResizerSettingsTab.entries,
@@ -1862,227 +2234,6 @@ private fun ResizerScreen(
                     }
                 }
 
-                if (isProcessing) {
-                    // UX FIX: real percentage instead of an indefinite
-                    // spinner, plus a way out. Elapsed/ETA below is derived
-                    // purely from the percentage feed (see startResize) —
-                    // it needs no extra Media3 progress API.
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        LinearProgressIndicator(
-                            progress = { exportProgress / 100f },
-                            modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
-                        )
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Text(
-                                "Memproses video… $exportProgress%",
-                                color = MaterialTheme.colorScheme.onBackground,
-                                style = MaterialTheme.typography.bodyMedium
-                            )
-                            OutlinedButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); cancelResize() }) { Text("Batalkan") }
-                        }
-                        val eta = exportEtaSeconds
-                        Text(
-                            if (eta != null) {
-                                "Perkiraan sisa waktu: ~${eta}s • hardware encoder perangkat"
-                            } else {
-                                "Menghitung perkiraan waktu… • hardware encoder perangkat"
-                            },
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                } else {
-                    val canResize = endMs > startMs
-                    val ctaBrush = if (canResize) {
-                        Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))
-                    } else {
-                        val dim = MaterialTheme.colorScheme.surfaceVariant
-                        Brush.horizontalGradient(listOf(dim, dim))
-                    }
-                    val ctaContentColor = if (canResize) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
-                    Button(
-                        colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
-                        elevation = null,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
-                            .background(brush = ctaBrush, shape = RoundedCornerShape(14.dp)),
-                        shape = RoundedCornerShape(14.dp),
-                        enabled = canResize,
-                        onClick = {
-                            val uri = selectedUri ?: return@Button
-
-                            // UX FIX: low-storage guard. Without this, a
-                            // nearly-full device just lets the export run
-                            // and fail late with a cryptic codec/IO error —
-                            // a novice user has no idea "penyimpanan penuh"
-                            // is the real cause. 250MB is a rough safety
-                            // margin, not an exact requirement.
-                            val freeMb = context.cacheDir.usableSpace / (1024 * 1024)
-                            if (freeMb < 250) {
-                                resultMessage = "Penyimpanan hampir penuh (tersisa ${freeMb}MB). Hapus beberapa file dulu sebelum memproses video."
-                                return@Button
-                            }
-
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                            isProcessing = true
-                            resultMessage = null
-                            outputFile = null
-                            galleryUri = null
-                            resultThumbnailFile = null
-
-                            val id = UUID.randomUUID().toString()
-                            val thumbDir = ensureThumbDir(context.cacheDir)
-                            val request = ResizeRequest(
-                                sourceUri = uri,
-                                outputFile = File(context.cacheDir, "resized_$id.mp4"),
-                                aspectRatio = aspectRatio,
-                                resolution = resolution,
-                                sourceWidth = sourceWidth,
-                                sourceHeight = sourceHeight,
-                                trimStartMs = startMs,
-                                trimEndMs = endMs,
-                                muteAudio = muteAudio,
-                                rotation = rotation,
-                                resizeMode = resizeMode,
-                                customWidth = customWidth,
-                                customHeight = customHeight,
-                                quality = quality,
-                                customBitrateKbps = customBitrateKbps,
-                                watermarkUri = watermarkUri,
-                                watermarkPosition = watermarkPosition,
-                                watermarkOpacityPercent = watermarkOpacityPercent.roundToInt(),
-                                watermarkScalePercent = watermarkScalePercent.roundToInt(),
-                                captionText = captionText,
-                                captionPosition = captionPosition,
-                                flip = flip,
-                                frameRate = frameRate
-                            )
-                            // Before/after comparison: this same thumbnail file is
-                            // already generated for Studio history once export
-                            // succeeds — resultThumbnailFile is set from startResize's
-                            // onDone callback below, not here, since the file on disk
-                            // doesn't exist yet at click time.
-                            val thumbnailFile = File(thumbDir, "thumb_$id.jpg")
-
-                            val needsLegacyPermission = Build.VERSION.SDK_INT <= Build.VERSION_CODES.P
-                            val alreadyGranted = androidx.core.content.ContextCompat.checkSelfPermission(
-                                context, android.Manifest.permission.WRITE_EXTERNAL_STORAGE
-                            ) == android.content.pm.PackageManager.PERMISSION_GRANTED
-
-                            if (needsLegacyPermission && !alreadyGranted) {
-                                pendingRequest = request
-                                pendingThumbnailFile = thumbnailFile
-                                storagePermissionLauncher.launch(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
-                            } else {
-                                startResize(request, thumbnailFile)
-                            }
-                        }
-                    ) {
-                        Icon(Icons.Filled.PlayArrow, contentDescription = null, tint = ctaContentColor)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Resize video", color = ctaContentColor)
-                    }
-                }
-
-                resultMessage?.let { msg ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        shape = MaterialTheme.shapes.large
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(msg, color = MaterialTheme.colorScheme.onSurface)
-
-                            // "Preview sebelum-sesudah (before/after) berdampingan":
-                            // a frame from the original source (reused from
-                            // `filmstrip`, already extracted for the trim scrubber —
-                            // no extra decode) next to a frame from the actual
-                            // exported result (reused from the thumbnail already
-                            // generated for Studio history). Each keeps its own real
-                            // aspect ratio rather than being forced square, so a
-                            // 16:9-to-9:16 resize is immediately, visually obvious —
-                            // that visual contrast is the entire point of a
-                            // before/after, not just two static images.
-                            if (outputFile != null && resultThumbnailBitmap != null && filmstrip.isNotEmpty() && sourceWidth > 0 && sourceHeight > 0) {
-                                Spacer(Modifier.height(14.dp))
-                                Text("Sebelum vs sesudah", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
-                                Spacer(Modifier.height(8.dp))
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                    verticalAlignment = Alignment.Bottom
-                                ) {
-                                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Image(
-                                            bitmap = filmstrip[filmstrip.size / 2].asImageBitmap(),
-                                            contentDescription = "Sebelum",
-                                            contentScale = ContentScale.Crop,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .aspectRatio(sourceWidth.toFloat() / sourceHeight.toFloat())
-                                                .clip(RoundedCornerShape(10.dp))
-                                        )
-                                        Spacer(Modifier.height(4.dp))
-                                        Text("Sebelum", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    }
-                                    Icon(
-                                        Icons.AutoMirrored.Filled.ArrowForward,
-                                        contentDescription = null,
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(bottom = 20.dp)
-                                    )
-                                    Column(modifier = Modifier.weight(1f), horizontalAlignment = Alignment.CenterHorizontally) {
-                                        // Local val capture instead of !!: resultThumbnailBitmap
-                                        // is Compose mutable state, so it can't smart-cast across
-                                        // this nested composable scope even though the outer `if`
-                                        // above already confirmed it's non-null.
-                                        val resultBitmap = resultThumbnailBitmap
-                                        if (resultBitmap != null) {
-                                            Image(
-                                                bitmap = resultBitmap.asImageBitmap(),
-                                                contentDescription = "Sesudah",
-                                                contentScale = ContentScale.Crop,
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .aspectRatio(resultBitmap.width.toFloat() / resultBitmap.height.toFloat())
-                                                    .clip(RoundedCornerShape(10.dp))
-                                            )
-                                            Spacer(Modifier.height(4.dp))
-                                            Text("Sesudah", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                        }
-                                    }
-                                }
-                            }
-
-                            if (outputFile != null || galleryUri != null) {
-                                Spacer(Modifier.height(10.dp))
-                                Row(
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                    modifier = Modifier.horizontalScroll(rememberScrollState())
-                                ) {
-                                    // Gallery integration: opens straight in the
-                                    // user's default Gallery/video app when we
-                                    // successfully published to MediaStore.
-                                    galleryUri?.let { uri ->
-                                        TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); openInGallery(context, uri) }) {
-                                            Text("Buka di Galeri")
-                                        }
-                                    }
-                                    outputFile?.let { file ->
-                                        TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); shareVideo(context, file) }) {
-                                            Text("Bagikan")
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
             }
         }
     }
@@ -2486,18 +2637,7 @@ private fun BatchScreen(onBack: () -> Unit) {
     Scaffold(
         modifier = Modifier.fillMaxSize().background(screenBackground),
         topBar = {
-            TopAppBar(
-                title = { Text("Ekspor Batch", fontWeight = FontWeight.SemiBold) },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
+            ToolTopBar(title = "Ekspor Batch", onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() })
         },
         containerColor = Color.Transparent
     ) { padding ->
@@ -3427,27 +3567,41 @@ private fun TrimHandle(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VideoPickerCard(onPickClick: () -> Unit) {
+    // Batch 82: keadaan kosong dibuat sebagai "titik awal" yang jelas — ubin ikon gradien app, judul tegas, teks
+    // Indonesia (dulu "Tap to choose a video"), efek tekan. Dipakai bersama oleh Resize, GIF, dan Kompres.
     val haptic = LocalHapticFeedback.current
+    val interaction = remember { MutableInteractionSource() }
+    val pressed by interaction.collectIsPressedAsState()
+    val scale by animateFloatAsState(if (pressed) 0.985f else 1f, animationSpec = spring(), label = "pickerScale")
     Card(
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPickClick() },
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-        shape = MaterialTheme.shapes.large,
-        modifier = Modifier.fillMaxWidth()
+        interactionSource = interaction,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
+        shape = RoundedCornerShape(24.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .graphicsLayer { scaleX = scale; scaleY = scale }
     ) {
         Column(
-            modifier = Modifier.padding(24.dp).fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 36.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            Icon(
-                imageVector = Icons.Filled.Movie,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(40.dp)
-            )
-            Text("Tap to choose a video", fontWeight = FontWeight.Medium, color = MaterialTheme.colorScheme.onSurface)
-            Text("Dari Galeri langsung", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+            Box(
+                modifier = Modifier
+                    .size(72.dp)
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(Icons.Filled.Movie, contentDescription = null, tint = Color.White, modifier = Modifier.size(34.dp))
+            }
+            Spacer(modifier = Modifier.height(6.dp))
+            Text("Pilih video", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
+            Text("Ketuk untuk memilih dari Galeri", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
         }
     }
 }
@@ -4752,21 +4906,11 @@ private fun GifScreen(
     // VideoPickerScreen can render on top without unmounting this screen.
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
+        modifier = Modifier.fillMaxSize().background(glassAwareBackground()),
         topBar = {
-            TopAppBar(
-                title = { Text("Video ke GIF") },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
+            ToolTopBar(title = "Video ke GIF", onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() })
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color.Transparent
     ) { padding ->
         Column(
             modifier = Modifier
@@ -5217,21 +5361,11 @@ private fun CompressorScreen(onBack: () -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
+        modifier = Modifier.fillMaxSize().background(glassAwareBackground()),
         topBar = {
-            TopAppBar(
-                title = { Text("Kompres Video") },
-                navigationIcon = {
-                    IconButton(onClick = {
-                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                        if (isProcessing) showExitWhileProcessingConfirm = true else onBack()
-                    }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Kembali")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
-            )
+            ToolTopBar(title = "Kompres Video", onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() })
         },
-        containerColor = MaterialTheme.colorScheme.background
+        containerColor = Color.Transparent
     ) { padding ->
         Column(
             modifier = Modifier

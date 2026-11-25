@@ -1,5 +1,42 @@
 # Changelog
 
+## Batch 82: Hierarki UI bergaya app premium — hero Beranda, dok aksi tetap di Resizer, header & latar seragam, perbaikan SpotBugs
+
+User (setelah v81 + laporan run #22): "not enough. hierarchy nya belum berasa seperti vibes premium apps!!"
+
+### TEMUAN (akar "belum premium", dari source v81)
+1. **Beranda datar & pincang.** 5 kartu persegi sama rata (ikon kecil + dua baris teks) di grid 2 kolom -> baris terakhir 1 kartu; alat utama (Resize) tak dibedakan dari alat sekunder; top bar M3 standar menyembunyikan identitas app.
+2. **Aksi utama terkubur.** Tombol "Resize video" + progres ada di UJUNG kolom gulir Resizer: harus menggulir lewat semua tab pengaturan untuk mengekspor, dan progres hilang dari layar begitu menggulir ke atas.
+3. **Header tak seragam.** 4 `TopAppBar` inline dgn gaya judul berbeda (ada yang `SemiBold`, ada yang default), haptic/semantik "kembali" disalin-tempel.
+4. **Latar tak konsisten.** GIF & Kompres memakai warna rata; Beranda/Resizer/Batch/Riwayat bergradien (tema Glass) -> pindah layar terasa "berganti app".
+5. **Keadaan kosong lemah.** Kartu pilih-video: ikon 40dp polos + teks Inggris "Tap to choose a video".
+6. **SpotBugs run #22:** 1x `MS_EXPOSE_REP` pada `THEME_CHOICES` (daftar statis publik di `MainActivity.kt`).
+
+### PERUBAHAN (1 berkas kode + 4 docs; pembenaran tak perlu: kode <= 5 berkas, tanpa ubah kontrak data)
+- `MainActivity.kt`:
+  - **Beranda:** tanpa TopAppBar; header = judul besar "Vidsize" (Bold, letter-spacing rapat) + subjudul, aksi Update & Tema sebagai tombol bulat; **kartu hero** lebar penuh "Resize / Edit Video" (gradien aksen app, ikon dekoratif besar, chip "Mulai"); kicker "ALAT LAINNYA"; grid **2x2** (Kompres, GIF, Batch, Riwayat) — pakai `Row`+`weight(1f)` (tanpa lazy grid) sehingga tinggi & lebar seimbang; `HomeToolCard` baru: permukaan kaca + garis tepi tipis, ubin ikon dgn warna aksen per alat (amber/pink/teal/violet), efek tekan skala pegas + haptic. `UpdateActionIcon` = blok status update Batch 81 yang diekstrak (logika sama).
+  - **`ToolTopBar`** bersama (judul `titleLarge` SemiBold 1 baris, transparan, haptic) dipakai Resizer, Batch, GIF, Kompres. Guard "sedang proses -> konfirmasi keluar" Batch/GIF/Kompres dipertahankan persis.
+  - **`glassAwareBackground()`**: GIF & Kompres kini memakai latar yang sama dgn layar lain (gradien bila tema Glass; tema lain tetap warna latar = tampilan lama).
+  - **Resizer:** blok CTA (progres+ETA+Batalkan / tombol "Resize video" dgn seluruh logika `onClick` yang sama, termasuk guard ruang kosong & izin) dipindah ke `Scaffold.bottomBar` = **dok tetap** (Surface + bayangan, `navigationBarsPadding`), hanya tampil bila video termuat; kartu hasil/pesan dipindah ke ATAS pengaturan (dekat pratinjau) + `LaunchedEffect(resultMessage)` menggulir ke atas otomatis (`resizerScrollState` di-hoist; sebelumnya `rememberScrollState()` inline). `startMs/endMs` dihitung di dok dan di badan (estimasi ukuran memakainya).
+  - **`VideoPickerCard`:** ubin ikon bulat gradien app 72dp, "Pilih video" + "Ketuk untuk memilih dari Galeri", tepi tipis, efek tekan (dipakai bersama Resize/GIF/Kompres).
+  - **Perbaikan SpotBugs:** `THEME_CHOICES` (val daftar) -> `themeLabel(pref)` (fungsi `when` ekshaustif atas 6 nilai `ThemePreference`); menu tema iterasi `ThemePreference.entries`. Impor `GridCells`/`LazyVerticalGrid` (tak terpakai lagi) dihapus; impor `animateFloatAsState`, `spring`, `MutableInteractionSource`, `collectIsPressedAsState`, `graphicsLayer`, `sp` ditambah.
+- Docs: `CHANGELOG.md`, `PROJECT_STATE.md`, `README.md`, `FILE_MANIFEST.txt`.
+
+### VERIFIED (statis, sandbox)
+- Penerapan edit teks dgn assert keunikan tiap penanda (semua cocok tepat 1x; skrip atomik, file ditulis hanya bila semua lolos). Kurung `{}` & `()` seimbang.
+- `kotlinc 2.0.21` atas `MainActivity.kt` v81 vs v82: **0 galat sintaks/parse** di kedua versi; semua galat = "unresolved reference"/inferensi turunannya (Compose/Android tak ada di sandbox), pergeseran jumlah wajar dgn kode baru.
+- Semua variabel lokal blok CTA (`canResize`, `ctaBrush`, `ctaContentColor`, ...) dideklarasikan DI DALAM blok yang dipindah; `startMs/endMs` terpakai di kedua lingkup (tak ada peringatan variabel tak terpakai). Tak ada impor ganda.
+- Laporan run #22 dibaca: semua hijau selain 1x SpotBugs yang dikerjakan di atas.
+
+### NOT VERIFIED
+Build Gradle/AGP, kompilasi Compose sungguhan (`Card(onClick, interactionSource)`, `Modifier.offset`, `ThemePreference.entries` pada Kotlin 1.9), hilangnya temuan SpotBugs, ArchUnit/detekt/lint, tes unit. **Tampilan & perilaku di HP:** kesan visual hero/ubin (kontras teks putih di atas gradien pada tiap tema, terutama Light/Warm Paper), dok vs keyboard/IME & navigasi 3-tombol, ruang konten Resizer di layar kecil/landscape (dok memakan tinggi), auto-gulir saat hasil muncul, ukuran sentuh tombol bulat 44dp, transisi kartu.
+
+### DAMPAK / CATATAN
+- Tombol "Resize video" tak lagi di dalam daftar gulir; terlihat hanya setelah video dipilih (sama seperti sebelumnya: CTA memang hanya ada saat `selectedUri != null && durationMs > 0`).
+- Aksen warna alat ditetapkan tetap (bukan dari tema) agar identitas alat konsisten di semua 6 tema.
+- Studio (Riwayat) & `VideoPickerScreen` belum memakai `ToolTopBar` (header sendiri) — sengaja di luar lingkup batch ini.
+- Tanpa dependensi/izin baru; `AppUpdater`/CI/manifest tak disentuh.
+
 ## Batch 81: Audit hierarki tampilan — Update/Tema ke Beranda, unduhan update tak lagi ke-reset, catatan rilis tetap tampil, ikon adaptif baru
 
 User: "audit hierarki tampilan yang amburadul dan membingungkan" + contoh: tab update hanya terjangkau di dalam salah satu alat; ikon app mirip placeholder; unduhan update ke-reset karena salah gestur kembali; snapshot (catatan rilis) update hanya tampil sekali lalu hilang saat bar unduhan mulai.

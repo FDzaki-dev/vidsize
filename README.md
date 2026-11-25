@@ -511,6 +511,10 @@ the GitHub Actions route above is much faster in practice.
   project's Media3 version is ever bumped. If a build error appears around the watermark
   specifically, `createStaticBitmapOverlay`'s parameter order/types are the next thing
   to check — Android Studio's error will name the exact expected signature.
+- **Batch 82:** hierarki UI — Beranda = header (judul besar + aksi Update/Tema bulat) -> kartu hero Resize/Edit Video -> kicker
+  "ALAT LAINNYA" -> grid 2x2 (Kompres/GIF/Batch/Riwayat; aksen warna tetap per alat, bukan dari tema). Alat memakai `ToolTopBar`
+  bersama + `glassAwareBackground()`; Resizer: tombol "Resize video"/progres = dok tetap (`Scaffold.bottomBar`), kartu hasil
+  di atas pengaturan (layar menggulir ke atas saat hasil muncul). Label menu tema = fungsi `themeLabel()` (bukan daftar statis).
 - **Batch 81:** ikon app = adaptive icon vektor (`mipmap-anydpi-v26/ic_launcher.xml` + `drawable/ic_launcher_background.xml`
   + `drawable/ic_launcher_foreground.xml`, foreground ikut jadi lapisan monokrom ikon bertema); tak ada PNG. Manifest merujuk
   `@mipmap/ic_launcher` (dulu `@drawable/ic_launcher`, vektor datar lain yang BUKAN ikon adaptif).
@@ -604,7 +608,7 @@ the GitHub Actions route above is much faster in practice.
   ke-5, **"Midnight Blue Glass"** — gaya glassmorphism iOS dengan gradasi
   midnight-blue di belakang tiap layar — dan menjadikannya default baru
   aplikasi (tema Dark/Light/Midnight Neon/Warm Paper tetap ada, bisa dipilih
-  lewat menu tema di top bar Beranda — sejak Batch 81; dulu di menu titik-tiga Resizer). Semua di `ui/theme/` (`Color.kt`, `Type.kt`,
+  lewat tombol Tema di header Beranda — sejak Batch 81/82; dulu di menu titik-tiga Resizer). Semua di `ui/theme/` (`Color.kt`, `Type.kt`,
   `Theme.kt`) plus penyesuaian ringan di `MainActivity.kt` (background
   per-layar, border+shape 4 Card, 2 gradient CTA jadi theme-aware). Tidak
   ada blur asli (`RenderEffect`/API 31+) — efek kaca dicapai lewat

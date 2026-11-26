@@ -77,10 +77,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -126,6 +128,7 @@ import com.example.videoresizer.ui.theme.rememberThemeBackdrop
 import com.example.videoresizer.ui.theme.themeBackdrop
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -134,6 +137,8 @@ import java.util.UUID
 
 private enum class ThemePreference { SYSTEM, LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS }
 private enum class Screen { HOME, MAIN, STUDIO, BATCH, GIF, COMPRESSOR }
+
+private fun Screen.isTool(): Boolean = this == Screen.STUDIO || this == Screen.BATCH || this == Screen.GIF || this == Screen.COMPRESSOR
 
 /**
  * Batch 81: status update TINGKAT-APLIKASI. Hidup di [VideoResizerApp] (akar), bukan di salah satu layar alat, supaya
@@ -371,9 +376,10 @@ private data class GifPrefill(
  * These are shared by every full-screen overlay (Batch/GIF/Compressor/
  * Studio) so the whole app feels consistent, not just one screen.
  */
-private val IosPushEasing = CubicBezierEasing(0.42f, 0f, 0.58f, 1f)
-private const val IOS_PUSH_MS = 350
-private const val IOS_POP_MS = 300
+// Batch 87: kurva navigasi iOS sungguhan (cubic-bezier 0.32,0.72,0,1: cepat di awal, mendarat lembut) menggantikan ease-in-out generik.
+private val IosPushEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
+private const val IOS_PUSH_MS = 420
+private const val IOS_POP_MS = 360
 private const val LOG_TAG = "VidsizeMain"
 
 @androidx.annotation.OptIn(UnstableApi::class)
@@ -472,15 +478,34 @@ private fun VideoResizerApp(
     // Studio/Batch are drawn as opaque full-screen overlays on top of it
     // when active — same visual result, but nothing underneath ever loses
     // its state or gets its coroutines torn down.
+    // Batch 87: akar jank gulir/transisi di HP kelas menengah (Infinix) = HWUI TIDAK punya occlusion culling: Resizer (selalu
+    // terkomposisi demi state) + Beranda + alat di atasnya digambar SEMUA, tiap frame, padahal hanya yang paling atas terlihat.
+    // `settledScreen` tertinggal satu durasi transisi dari `screen`; layar di bawah overlay yang sudah menutup penuh tidak lagi
+    // DIGAMBAR (tetap terkomposisi -> state/coroutine aman). Selama transisi dua layar digambar. Beranda juga bergeser paralaks
+    // ke kiri + meredup (gaya push iOS) dan di-cache sebagai tekstur selama bergerak.
+    var settledScreen by remember { mutableStateOf(screen) }
+    LaunchedEffect(screen) {
+        delay(IOS_PUSH_MS + 80L)
+        settledScreen = screen
+    }
+    val resizerDrawn = screen == Screen.MAIN || settledScreen == Screen.MAIN
+    val homeDrawn = !(screen == settledScreen && screen.isTool())
+    val toolProgress = animateFloatAsState(
+        targetValue = if (screen.isTool()) 1f else 0f,
+        animationSpec = tween(if (screen.isTool()) IOS_PUSH_MS else IOS_POP_MS, easing = IosPushEasing),
+        label = "homeParallax"
+    )
     Box(modifier = Modifier.fillMaxSize()) {
-        ResizerScreen(
-            onOpenHome = { screen = Screen.HOME },
-            isForeground = screen == Screen.MAIN,
-            prefill = prefill,
-            onPrefillConsumed = { prefill = null },
-            studioMessage = studioMessage,
-            onStudioMessageShown = { studioMessage = null }
-        )
+        Box(modifier = Modifier.fillMaxSize().drawWithContent { if (resizerDrawn) drawContent() }) {
+            ResizerScreen(
+                onOpenHome = { screen = Screen.HOME },
+                isForeground = screen == Screen.MAIN,
+                prefill = prefill,
+                onPrefillConsumed = { prefill = null },
+                studioMessage = studioMessage,
+                onStudioMessageShown = { studioMessage = null }
+            )
+        }
         // Batch 58: generic tool-grid dashboard, drawn as the front-most
         // overlay when screen == HOME (same "stays mounted underneath,
         // overlay on top" pattern as every other screen here) — the new
@@ -493,23 +518,40 @@ private fun VideoResizerApp(
             enter = fadeIn(tween(IOS_PUSH_MS, easing = IosPushEasing)),
             exit = fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
         ) {
-            HomeScreen(
-                themePref = themePref,
-                onThemePrefChange = onThemePrefChange,
-                update = updateUi,
-                onUpdateClick = {
-                    when (updateUi.value) {
-                        is UpdateUi.Idle -> checkForUpdate()
-                        is UpdateUi.Checking -> Unit
-                        is UpdateUi.Available, is UpdateUi.Downloading, is UpdateUi.Ready, is UpdateUi.Failed -> showUpdateDialog = true
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .drawWithContent {
+                        if (homeDrawn) {
+                            drawContent()
+                            val p = toolProgress.value
+                            if (p > 0f) drawRect(Color.Black.copy(alpha = 0.14f * p))
+                        }
                     }
-                },
-                onOpenResizer = { screen = Screen.MAIN },
-                onOpenCompressor = { screen = Screen.COMPRESSOR },
-                onOpenGif = { screen = Screen.GIF },
-                onOpenBatch = { screen = Screen.BATCH },
-                onOpenStudio = { screen = Screen.STUDIO }
-            )
+                    .graphicsLayer {
+                        val p = toolProgress.value
+                        translationX = -size.width * 0.28f * p
+                        compositingStrategy = if (p > 0f && p < 1f) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+                    }
+            ) {
+                HomeScreen(
+                    themePref = themePref,
+                    onThemePrefChange = onThemePrefChange,
+                    update = updateUi,
+                    onUpdateClick = {
+                        when (updateUi.value) {
+                            is UpdateUi.Idle -> checkForUpdate()
+                            is UpdateUi.Checking -> Unit
+                            is UpdateUi.Available, is UpdateUi.Downloading, is UpdateUi.Ready, is UpdateUi.Failed -> showUpdateDialog = true
+                        }
+                    },
+                    onOpenResizer = { screen = Screen.MAIN },
+                    onOpenCompressor = { screen = Screen.COMPRESSOR },
+                    onOpenGif = { screen = Screen.GIF },
+                    onOpenBatch = { screen = Screen.BATCH },
+                    onOpenStudio = { screen = Screen.STUDIO }
+                )
+            }
         }
         AnimatedVisibility(
             visible = screen == Screen.BATCH,

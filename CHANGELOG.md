@@ -1,5 +1,25 @@
 # Changelog
 
+## Batch 87: Gulir/transisi lebih mulus di HP kelas menengah (Infinix) — layar tersembunyi tak lagi digambar + push iOS asli
+
+User (setelah v86; CI run #27 HIJAU PENUH: ArchUnit 12/0, SpotBugs 0, detekt 0, lint 0, 40 tes, kompilator 0): "not enough. device Infinix. gulir, pindah layar/transisi gak kayak iOS"
+
+### TEMUAN (dari source)
+1. `VideoResizerApp` menumpuk layar dalam satu `Box`: `ResizerScreen` SELALU terkomposisi (sengaja, demi state), Beranda tetap tampil di bawah overlay alat (Batch 81), alat di paling atas. HWUI tidak punya occlusion culling -> Resizer + Beranda + alat digambar SEMUA, tiap frame, padahal hanya satu yang terlihat (di Beranda: Resizer penuh digambar di belakangnya; di alat: 3 layar). Overdraw berlipat inilah yang membuat gulir/transisi tersendat di GPU kelas menengah.
+2. Kurva "iOS" lama = `cubic-bezier(0.42,0,0.58,1)` (ease-in-out generik), bukan kurva push iOS; layar di bawah tidak bergerak (tanpa paralaks).
+
+### PERUBAHAN (1 berkas kode `MainActivity.kt`)
+- `settledScreen` (tertinggal 1 durasi transisi dari `screen`) -> `resizerDrawn` / `homeDrawn`: layar di bawah overlay yang sudah menutup penuh TIDAK digambar (`drawWithContent`), tetap terkomposisi (state/coroutine ekspor aman). Selama transisi dua layar digambar. Saat start: Resizer tak digambar (cold start lebih ringan).
+- Beranda bergeser paralaks -28% lebar + meredup 14% saat alat dibuka/ditutup (push iOS), di-cache sebagai tekstur (`CompositingStrategy.Offscreen`) selama bergerak; progres dibaca di fase gambar (tanpa rekomposisi per frame).
+- Kurva `cubic-bezier(0.32,0.72,0,1)` (iOS), durasi push 420ms / pop 360ms.
+
+### VERIFIED
+CI run #27 (v86): semua gerbang hijau (termasuk SpotBugs 0). Statis v87: kurung seimbang; kotlinc 0 galat sintaks; detekt lokal 0.
+### NOT VERIFIED
+Kompilasi Gradle, lint, tes; **di HP Infinix:** kelancaran gulir/transisi, tak ada kedip saat layar di bawah kembali digambar (Resizer saat balik ke Resizer).
+### Bila masih kurang
+Kirim: tipe Infinix + layar mana yang terasa paling berat. Opsi lanjutan: cache latar `themeBackdrop` jadi bitmap, kurangi lapisan bayangan chip, fling ala iOS, batasi 90Hz.
+
 ## Batch 86: Kinerja render depth (stutter di 120Hz) + filter SpotBugs coroutine
 
 User (setelah v85; CI run #26 HIJAU: ArchUnit 12/0, detekt 0, lint 0, 40 tes, kompilator 0; SpotBugs 1 temuan): "sudah unlock 120hz. tapi aplikasinya sendiri ternyata nge frame/stuttering!!"

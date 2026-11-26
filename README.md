@@ -511,6 +511,7 @@ the GitHub Actions route above is much faster in practice.
   project's Media3 version is ever bumped. If a build error appears around the watermark
   specifically, `createStaticBitmapOverlay`'s parameter order/types are the next thing
   to check — Android Studio's error will name the exact expected signature.
+- **Batch 87:** gulir/transisi lebih mulus di HP kelas menengah — layar tersembunyi di bawah overlay tak digambar (tetap terkomposisi), paralaks+redup Beranda, kurva push iOS asli. NOT VERIFIED di HP.
 - **Batch 86:** kinerja render depth utk 120Hz — paint blur dibagi, kit cekung lazy, bayangan cincin utk kartu besar; filter SpotBugs noise korutin. NOT VERIFIED di HP.
 - **Batch 85:** refresh rate tak lagi terkunci 60Hz — `MainActivity.applyHighestRefreshRate()` meminta mode layar dgn refresh rate tertinggi pada resolusi sama (`preferredDisplayModeId`); depth lebih kuat — `DepthSize` ~+35%, `depthRowPadding()` (bayangan chip tak terpotong LazyRow), `DepthSwitch`/`DepthSlider`. NOT VERIFIED di CI/HP.
 - **Batch 84:** kedalaman lebih realistis — `Depth.kt`: bayangan berlapis (ambient + kontak), badan gradien 45 derajat + kilau radial, tepi bevel, lekuk dgn bibir; tuning di `DepthSpec`/`DepthSize`. `exclude.xml` menyaring NP_PARAMETER x `Depth.kt`/`Ornaments.kt` (artefak `$composer`).

@@ -511,6 +511,7 @@ the GitHub Actions route above is much faster in practice.
   project's Media3 version is ever bumped. If a build error appears around the watermark
   specifically, `createStaticBitmapOverlay`'s parameter order/types are the next thing
   to check — Android Studio's error will name the exact expected signature.
+- **Batch 90:** transisi alat tanpa jeda awal — cangkang ringan meluncur dulu (jam animasi dibatasi per frame), isi berat dikomposisi setelah tiba; filter SpotBugs DepthBakery. NOT VERIFIED di HP.
 - **Batch 89:** fix "bingkai" persegi di ubin (bake memakai `inset`), kartu besar ikut di-bake. NOT VERIFIED di HP.
 - **Batch 88:** bake bitmap utas latar utk elemen depth + latar tema (1 drawImage per elemen), governor refresh rate adaptif. NOT VERIFIED di HP.
 - **Batch 87:** gulir/transisi lebih mulus di HP kelas menengah — layar tersembunyi di bawah overlay tak digambar (tetap terkomposisi), paralaks+redup Beranda, kurva push iOS asli. NOT VERIFIED di HP.

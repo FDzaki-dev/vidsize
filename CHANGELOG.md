@@ -1,5 +1,26 @@
 # Changelog
 
+## Batch 90: transisi alat tanpa jeda awal (cangkang meluncur dulu, isi berat menyusul) + filter SpotBugs DepthBakery
+
+User (setelah v89; CI run #30 HIJAU: ArchUnit 12/0, detekt 0, lint 0, 40 tes, kompilator 0; SpotBugs 1 temuan): "bingkai udah balik normal. tapi transisi tiap menu itu masih jeda sepersekian detik!!"
+
+### TEMUAN
+`AnimatedVisibility` mengomposisi SELURUH layar alat (Batch/GIF/Kompres/Riwayat; ribuan node + kode dingin) di frame pertama transisi. Animasi AnimatedVisibility berbasis jam dinding: frame itu memakan ~100-250ms (= "jeda"), lalu frame berikutnya melompat ke ~70% progres. Fade pada slide juga membuat lapisan offscreen layar-penuh (alokasi + raster) di frame pertama. Layar alat berisi `BackHandler(enabled = true)` sehingga pra-komposisi tersembunyi TIDAK aman (akan mencegat tombol Kembali).
+SpotBugs run #30: `ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD` @ `DepthBakery.totalBytes` (pembukuan anggaran cache pada objek tunggal, hanya utas utama) -> disengaja.
+
+### PERUBAHAN (1 berkas kode `MainActivity.kt` + `config/spotbugs/exclude.xml`)
+- `PushScreen` menggantikan 4 `AnimatedVisibility` alat: cangkang ringan (latar tema ter-bake) langsung meluncur masuk (420ms/360ms, kurva iOS, tanpa fade/offscreen); isi layar dikomposisi SETELAH tiba (pola postponeEnterTransition). Saat keluar, isi tetap ada sampai habis meluncur. Cangkang menelan sentuhan + `BackHandler` sementara (Kembali tidak menutup app saat meluncur).
+- `animateShown`: jam animasi dibatasi 24ms/frame -> frame panjang membuat animasi berhenti sebentar lalu lanjut halus, TANPA melompat.
+- Paralaks Beranda kini membaca progres geser tiap alat (state dimiliki nav), tanpa `animateFloatAsState`/lapisan Offscreen.
+- `exclude.xml`: `ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD` pada `Depth.kt`.
+
+### VERIFIED
+CI run #30 (v89): semua hijau kecuali 1 SpotBugs (di atas); bingkai ubin terkonfirmasi hilang oleh user. Statis v90: kurung seimbang; kotlinc 0 galat sintaks; detekt lokal 0.
+### NOT VERIFIED
+Kompilasi Gradle, lint, tes; di HP: jeda transisi hilang; isi layar yang muncul setelah tiba terasa wajar (bukan "kosong").
+### Bila masih terasa
+Opsi: tampilkan judul/skeleton di cangkang, kompresi komposisi isi (lazy per bagian), atau profil dasar (baseline profile) utk kode dingin.
+
 ## Batch 89: perbaikan "bingkai" persegi di tiap ubin (bug bake v88) + kartu besar ikut di-bake
 
 User (setelah v88; screenshot Beranda tema Midnight & Glass): "masih sedikit stuttering dan sekarang malah ada bingkai aneh di setiap ubin!!"

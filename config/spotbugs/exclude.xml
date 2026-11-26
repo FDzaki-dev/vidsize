@@ -106,6 +106,11 @@
     <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
     <Source name="AppUpdater.kt"/>
   </Match>
+  <!-- Batch 90 (run #30): DepthBakery.totalBytes = pembukuan anggaran cache bake pada objek tunggal (hanya utas utama) -- sengaja, bukan bug. -->
+  <Match>
+    <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD"/>
+    <Source name="Depth.kt"/>
+  </Match>
   <!-- Batch 86 (run #26): SA_FIELD_SELF_ASSIGNMENT pada Depth.kt:631 = field L$0 mesin-status korutin hasil kompilator ($DepthSlider$3$1$1), bukan bug kode. -->
   <Match>
     <Bug pattern="SA_FIELD_SELF_ASSIGNMENT"/>

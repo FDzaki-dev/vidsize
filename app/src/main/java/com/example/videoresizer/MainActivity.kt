@@ -21,8 +21,6 @@ import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -82,7 +80,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -137,6 +134,71 @@ import java.util.UUID
 
 private enum class ThemePreference { SYSTEM, LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS }
 private enum class Screen { HOME, MAIN, STUDIO, BATCH, GIF, COMPRESSOR }
+
+private const val FRAME_STEP_CAP_NS = 24_000_000L
+
+/**
+ * Batch 90: animasi dengan jam yang DIBATASI per frame (maks 24ms). Frame panjang (komposisi/gambar berat) tidak lagi membuat animasi
+ * "melompat" ke ~70% setelah jeda (jam dinding AnimatedVisibility), melainkan berhenti sebentar lalu lanjut halus.
+ */
+private suspend fun animateShown(state: MutableFloatState, target: Float, durationMs: Int) {
+    val from = state.floatValue
+    val span = if (target > from) target - from else from - target
+    if (span < 0.001f) {
+        state.floatValue = target
+        return
+    }
+    val totalNs = (durationMs * 1_000_000L * span).toLong().coerceAtLeast(1L)
+    var elapsed = 0L
+    var last = withFrameNanos { it }
+    while (elapsed < totalNs) {
+        val now = withFrameNanos { it }
+        elapsed += minOf(now - last, FRAME_STEP_CAP_NS)
+        last = now
+        val t = (elapsed.toFloat() / totalNs).coerceIn(0f, 1f)
+        state.floatValue = from + (target - from) * IosPushEasing.transform(t)
+    }
+    state.floatValue = target
+}
+
+/**
+ * Batch 90: layar alat (push iOS) tanpa jeda awal. Akar "jeda sepersekian detik": `AnimatedVisibility` mengomposisi SELURUH layar alat
+ * (ribuan node, kode dingin) di frame pertama transisi -> animasi menunggu ~100-250ms lalu melompat. Kini cangkang ringan (latar tema
+ * ter-bake) langsung meluncur masuk mulus (tanpa fade/lapisan offscreen); isi berat dikomposisi SETELAH tiba (seperti postponeEnterTransition).
+ * Saat keluar, isi tetap ada sampai meluncur habis. Cangkang menelan sentuhan agar Beranda di bawahnya tak ikut terketuk.
+ */
+@Composable
+private fun PushScreen(visible: Boolean, shown: MutableFloatState, content: @Composable () -> Unit) {
+    var mounted by remember { mutableStateOf(false) }
+    var contentReady by remember { mutableStateOf(false) }
+    LaunchedEffect(visible) {
+        if (visible) {
+            mounted = true
+            animateShown(shown, 1f, IOS_PUSH_MS)
+            withFrameNanos { }
+            contentReady = true
+        } else if (mounted) {
+            animateShown(shown, 0f, IOS_POP_MS)
+            mounted = false
+            contentReady = false
+        }
+    }
+    androidx.activity.compose.BackHandler(enabled = mounted && !contentReady) { }
+    if (mounted) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer { translationX = size.width * (1f - shown.floatValue) }
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) awaitPointerEvent().changes.forEach { it.consume() }
+                    }
+                }
+        ) {
+            if (contentReady) content() else Box(modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()))
+        }
+    }
+}
 
 private fun Screen.isTool(): Boolean = this == Screen.STUDIO || this == Screen.BATCH || this == Screen.GIF || this == Screen.COMPRESSOR
 
@@ -538,11 +600,14 @@ private fun VideoResizerApp(
     }
     val resizerDrawn = screen == Screen.MAIN || settledScreen == Screen.MAIN
     val homeDrawn = !(screen == settledScreen && screen.isTool())
-    val toolProgress = animateFloatAsState(
-        targetValue = if (screen.isTool()) 1f else 0f,
-        animationSpec = tween(if (screen.isTool()) IOS_PUSH_MS else IOS_POP_MS, easing = IosPushEasing),
-        label = "homeParallax"
-    )
+    // Batch 90: progres geser tiap alat (0..1) dimiliki di sini agar Beranda bisa paralaks mengikutinya (dibaca di fase gambar).
+    val batchShown = remember { mutableFloatStateOf(0f) }
+    val gifShown = remember { mutableFloatStateOf(0f) }
+    val compressorShown = remember { mutableFloatStateOf(0f) }
+    val studioShown = remember { mutableFloatStateOf(0f) }
+    val toolProgress = {
+        maxOf(maxOf(batchShown.floatValue, gifShown.floatValue), maxOf(compressorShown.floatValue, studioShown.floatValue))
+    }
     Box(modifier = Modifier.fillMaxSize()) {
         Box(modifier = Modifier.fillMaxSize().drawWithContent { if (resizerDrawn) drawContent() }) {
             ResizerScreen(
@@ -572,14 +637,12 @@ private fun VideoResizerApp(
                     .drawWithContent {
                         if (homeDrawn) {
                             drawContent()
-                            val p = toolProgress.value
+                            val p = toolProgress()
                             if (p > 0f) drawRect(Color.Black.copy(alpha = 0.14f * p))
                         }
                     }
                     .graphicsLayer {
-                        val p = toolProgress.value
-                        translationX = -size.width * 0.28f * p
-                        compositingStrategy = if (p > 0f && p < 1f) CompositingStrategy.Offscreen else CompositingStrategy.Auto
+                        translationX = -size.width * 0.28f * toolProgress()
                     }
             ) {
                 HomeScreen(
@@ -601,64 +664,24 @@ private fun VideoResizerApp(
                 )
             }
         }
-        AnimatedVisibility(
-            visible = screen == Screen.BATCH,
-            enter = slideInHorizontally(
-                animationSpec = tween(IOS_PUSH_MS, easing = IosPushEasing),
-                initialOffsetX = { fullWidth -> fullWidth }
-            ) + fadeIn(tween(IOS_PUSH_MS, easing = IosPushEasing)),
-            exit = slideOutHorizontally(
-                animationSpec = tween(IOS_POP_MS, easing = IosPushEasing),
-                targetOffsetX = { fullWidth -> fullWidth }
-            ) + fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
-        ) {
+        PushScreen(visible = screen == Screen.BATCH, shown = batchShown) {
             BatchScreen(
                 onBack = { screen = Screen.HOME }
             )
         }
-        AnimatedVisibility(
-            visible = screen == Screen.GIF,
-            enter = slideInHorizontally(
-                animationSpec = tween(IOS_PUSH_MS, easing = IosPushEasing),
-                initialOffsetX = { fullWidth -> fullWidth }
-            ) + fadeIn(tween(IOS_PUSH_MS, easing = IosPushEasing)),
-            exit = slideOutHorizontally(
-                animationSpec = tween(IOS_POP_MS, easing = IosPushEasing),
-                targetOffsetX = { fullWidth -> fullWidth }
-            ) + fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
-        ) {
+        PushScreen(visible = screen == Screen.GIF, shown = gifShown) {
             GifScreen(
                 onBack = { screen = Screen.HOME },
                 prefill = gifPrefill,
                 onPrefillConsumed = { gifPrefill = null }
             )
         }
-        AnimatedVisibility(
-            visible = screen == Screen.COMPRESSOR,
-            enter = slideInHorizontally(
-                animationSpec = tween(IOS_PUSH_MS, easing = IosPushEasing),
-                initialOffsetX = { fullWidth -> fullWidth }
-            ) + fadeIn(tween(IOS_PUSH_MS, easing = IosPushEasing)),
-            exit = slideOutHorizontally(
-                animationSpec = tween(IOS_POP_MS, easing = IosPushEasing),
-                targetOffsetX = { fullWidth -> fullWidth }
-            ) + fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
-        ) {
+        PushScreen(visible = screen == Screen.COMPRESSOR, shown = compressorShown) {
             CompressorScreen(
                 onBack = { screen = Screen.HOME }
             )
         }
-        AnimatedVisibility(
-            visible = screen == Screen.STUDIO,
-            enter = slideInHorizontally(
-                animationSpec = tween(IOS_PUSH_MS, easing = IosPushEasing),
-                initialOffsetX = { fullWidth -> fullWidth }
-            ) + fadeIn(tween(IOS_PUSH_MS, easing = IosPushEasing)),
-            exit = slideOutHorizontally(
-                animationSpec = tween(IOS_POP_MS, easing = IosPushEasing),
-                targetOffsetX = { fullWidth -> fullWidth }
-            ) + fadeOut(tween(IOS_POP_MS, easing = IosPushEasing))
-        ) {
+        PushScreen(visible = screen == Screen.STUDIO, shown = studioShown) {
             StudioScreen(
                 onBack = { screen = Screen.HOME },
                 onEditAgain = { entry ->

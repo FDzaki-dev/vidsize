@@ -76,7 +76,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -102,7 +105,22 @@ import androidx.media3.common.util.UnstableApi
 import kotlin.math.roundToInt
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.example.videoresizer.ui.theme.DepthCard
+import com.example.videoresizer.ui.theme.DepthChip
+import com.example.videoresizer.ui.theme.DepthIconButton
+import com.example.videoresizer.ui.theme.DepthProgressBar
+import com.example.videoresizer.ui.theme.DepthSize
+import com.example.videoresizer.ui.theme.DepthWell
+import com.example.videoresizer.ui.theme.LocalDepthSpec
+import com.example.videoresizer.ui.theme.LocalThemeStyle
 import com.example.videoresizer.ui.theme.VideoResizerTheme
+import com.example.videoresizer.ui.theme.accentContent
+import com.example.videoresizer.ui.theme.accentGradient
+import com.example.videoresizer.ui.theme.depthInset
+import com.example.videoresizer.ui.theme.depthRaised
+import com.example.videoresizer.ui.theme.drawHeroArt
+import com.example.videoresizer.ui.theme.rememberThemeBackdrop
+import com.example.videoresizer.ui.theme.themeBackdrop
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -601,20 +619,6 @@ private fun VideoResizerApp(
 // Batch/GIF/Studio's own internals change. Deliberately theme-agnostic (no
 // glass gradient) so it reads as a plain, familiar dashboard in every theme.
 /**
- * Batch 82: latar layar penuh yang SAMA untuk semua layar — gradien Midnight Blue Glass bila tema itu aktif, selain itu
- * warna latar tema. Dulu GIF & Kompres memakai warna rata sementara Beranda/Resizer/Batch/Riwayat bergradien.
- */
-@Composable
-private fun glassAwareBackground(): Brush {
-    val isGlass = com.example.videoresizer.ui.theme.LocalIsGlassTheme.current
-    return if (isGlass) {
-        com.example.videoresizer.ui.theme.MidnightBlueGlassGradient
-    } else {
-        androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.background)
-    }
-}
-
-/**
  * Batch 82: satu top bar untuk semua alat (judul = nama alat di kartu Beranda, tombol kembali + haptic seragam).
  * Dulu 4 TopAppBar inline dengan bobot/warna judul berbeda-beda.
  */
@@ -633,7 +637,11 @@ private fun ToolTopBar(title: String, onBack: () -> Unit, backDescription: Strin
             )
         },
         navigationIcon = {
-            IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onBack() }) {
+            DepthIconButton(
+                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onBack() },
+                size = 42.dp,
+                modifier = Modifier.padding(start = 8.dp)
+            ) {
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = backDescription)
             }
         },
@@ -665,7 +673,7 @@ private fun HomeScreen(
     val haptic = LocalHapticFeedback.current
     var showThemeMenu by remember { mutableStateOf(false) }
     Scaffold(
-        modifier = Modifier.fillMaxSize().background(glassAwareBackground()),
+        modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         containerColor = Color.Transparent
     ) { padding ->
         Column(
@@ -774,13 +782,7 @@ private fun HomeScreen(
 /** Tombol aksi bulat di header Beranda (Update/Tema). */
 @Composable
 private fun HomeActionButton(onClick: () -> Unit, content: @Composable () -> Unit) {
-    IconButton(
-        onClick = onClick,
-        modifier = Modifier
-            .size(44.dp)
-            .clip(CircleShape)
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-    ) { content() }
+    DepthIconButton(onClick = onClick, content = content)
 }
 
 /** Ikon aksi Update sesuai status: ring (cek/unduh), lencana (ada update/siap pasang/gagal), atau ikon biasa. */
@@ -909,66 +911,60 @@ private fun HomeHeroCard(onClick: () -> Unit) {
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.98f else 1f, animationSpec = spring(), label = "heroScale")
-    Card(
+    val style = LocalThemeStyle.current
+    val onAccent = accentContent()
+    // Batch 83: hero = kartu TIMBUL (bayangan ganda) berisi gradien aksen + seni dekoratif khas tema (drawHeroArt);
+    // warna teks = onPrimary tema (gelap di aksen terang seperti cyan Neon) -> kontras terjamin di semua tema.
+    DepthCard(
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onClick() },
         interactionSource = interaction,
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale },
-        shape = RoundedCornerShape(26.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.Transparent),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        shape = RoundedCornerShape(26.dp)
     ) {
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)))
+                .background(accentGradient())
+                .drawBehind { drawHeroArt(style) }
         ) {
-            Icon(
-                Icons.Filled.Crop,
-                contentDescription = null,
-                tint = Color.White.copy(alpha = 0.12f),
-                modifier = Modifier
-                    .size(150.dp)
-                    .align(Alignment.TopEnd)
-                    .offset(x = 36.dp, y = (-20).dp)
-            )
             Column(modifier = Modifier.padding(22.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Box(
                     modifier = Modifier
                         .size(46.dp)
                         .clip(RoundedCornerShape(15.dp))
-                        .background(Color.White.copy(alpha = 0.2f)),
+                        .background(onAccent.copy(alpha = 0.18f)),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(Icons.Filled.Crop, contentDescription = null, tint = Color.White)
+                    Icon(Icons.Filled.Crop, contentDescription = null, tint = onAccent)
                 }
                 Spacer(modifier = Modifier.height(10.dp))
                 Text(
                     "Resize / Edit Video",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    color = onAccent
                 )
                 Text(
                     "Ukuran, rasio, trim, watermark, dan teks dalam satu alur",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color.White.copy(alpha = 0.86f)
+                    color = onAccent.copy(alpha = 0.88f)
                 )
                 Spacer(modifier = Modifier.height(10.dp))
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.22f))
+                        .background(onAccent.copy(alpha = 0.20f))
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                 ) {
-                    Text("Mulai", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = Color.White)
+                    Text("Mulai", style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = onAccent)
                     Spacer(modifier = Modifier.width(6.dp))
                     Icon(
                         Icons.AutoMirrored.Filled.ArrowForward,
                         contentDescription = null,
-                        tint = Color.White,
+                        tint = onAccent,
                         modifier = Modifier.size(16.dp)
                     )
                 }
@@ -990,17 +986,17 @@ private fun HomeToolCard(
     val haptic = LocalHapticFeedback.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
-    val scale by animateFloatAsState(if (pressed) 0.96f else 1f, animationSpec = spring(), label = "toolCardScale")
-    Card(
+    val scale by animateFloatAsState(if (pressed) 0.97f else 1f, animationSpec = spring(), label = "toolCardScale")
+    // Aksen alat dipekatkan di tema terang supaya ikon tetap terbaca di atas badan kartu yang terang.
+    val tint = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) lerp(accent, Color.Black, 0.30f) else accent
+    // Batch 83: kartu TIMBUL; ubin ikon = lekuk CEKUNG di dalam kartu (timbul > cekung = hierarki kedalaman).
+    DepthCard(
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() },
         interactionSource = interaction,
         modifier = modifier
             .height(152.dp)
             .graphicsLayer { scaleX = scale; scaleY = scale },
-        shape = RoundedCornerShape(22.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+        shape = RoundedCornerShape(22.dp)
     ) {
         Column(
             modifier = Modifier
@@ -1008,14 +1004,8 @@ private fun HomeToolCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            Box(
-                modifier = Modifier
-                    .size(44.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(accent.copy(alpha = 0.18f)),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(icon, contentDescription = null, tint = accent)
+            DepthWell(modifier = Modifier.size(46.dp), shape = RoundedCornerShape(15.dp)) {
+                Icon(icon, contentDescription = null, tint = tint)
             }
             Column {
                 Text(
@@ -1531,12 +1521,6 @@ private fun ResizerScreen(
         )
     }
 
-    val isGlass = com.example.videoresizer.ui.theme.LocalIsGlassTheme.current
-    val screenBackground = if (isGlass) {
-        com.example.videoresizer.ui.theme.MidnightBlueGlassGradient
-    } else {
-        androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.background)
-    }
     // Batch 13: wraps the existing Scaffold so VideoPickerScreen can be
     // drawn as an opaque full-screen overlay on top of it — same "stays
     // composed underneath, overlay drawn on top" pattern VideoResizerApp
@@ -1544,7 +1528,7 @@ private fun ResizerScreen(
     // own state gets torn down while the picker is open.
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
-        modifier = Modifier.fillMaxSize().background(screenBackground),
+        modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
             ToolTopBar(title = "Resize / Edit Video", onBack = onOpenHome, backDescription = "Kembali ke beranda")
         },
@@ -1554,25 +1538,24 @@ private fun ResizerScreen(
             if (selectedUri != null && durationMs > 0) {
                 val startMs = (trimRange.start * durationMs).toLong()
                 val endMs = (trimRange.endInclusive * durationMs).toLong()
-                Surface(
-                    color = MaterialTheme.colorScheme.background.copy(alpha = 0.96f),
-                    shadowElevation = 12.dp
+                // Batch 83: dok = panel TIMBUL mengambang (bukan Surface datar + bayangan Material).
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                        .depthRaised(LocalDepthSpec.current, RoundedCornerShape(26.dp), DepthSize.MEDIUM)
+                        .padding(horizontal = 16.dp, vertical = 14.dp)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .navigationBarsPadding()
-                            .padding(horizontal = 20.dp, vertical = 12.dp)
-                    ) {
                         if (isProcessing) {
                             // UX FIX: real percentage instead of an indefinite
                             // spinner, plus a way out. Elapsed/ETA below is derived
                             // purely from the percentage feed (see startResize) —
                             // it needs no extra Media3 progress API.
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                                LinearProgressIndicator(
+                                DepthProgressBar(
                                     progress = { exportProgress / 100f },
-                                    modifier = Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp))
+                                    modifier = Modifier.fillMaxWidth()
                                 )
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -1599,20 +1582,22 @@ private fun ResizerScreen(
                             }
                         } else {
                             val canResize = endMs > startMs
-                            val ctaBrush = if (canResize) {
-                                Brush.horizontalGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))
-                            } else {
-                                val dim = MaterialTheme.colorScheme.surfaceVariant
-                                Brush.horizontalGradient(listOf(dim, dim))
-                            }
-                            val ctaContentColor = if (canResize) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
+                            val ctaSpec = LocalDepthSpec.current
+                            val ctaShape = RoundedCornerShape(14.dp)
+                            // Batch 83: aktif = tombol TIMBUL bergradien aksen; nonaktif = LEKUK cekung (tak bisa ditekan).
+                            val ctaBrush = if (canResize) accentGradient() else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
+                            val ctaContentColor = if (canResize) accentContent() else MaterialTheme.colorScheme.onSurfaceVariant
                             Button(
-                                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent),
                                 elevation = null,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(52.dp)
-                                    .background(brush = ctaBrush, shape = RoundedCornerShape(14.dp)),
+                                    .then(
+                                        if (canResize) Modifier.depthRaised(ctaSpec, ctaShape, DepthSize.SMALL)
+                                        else Modifier.depthInset(ctaSpec, ctaShape)
+                                    )
+                                    .background(brush = ctaBrush, shape = ctaShape),
                                 shape = RoundedCornerShape(14.dp),
                                 enabled = canResize,
                                 onClick = {
@@ -1691,7 +1676,6 @@ private fun ResizerScreen(
                             }
                         }
                     }
-                }
             }
         },
         containerColor = Color.Transparent
@@ -1741,11 +1725,7 @@ private fun ResizerScreen(
                 // Batch 82: kartu hasil/pesan dipindah ke ATAS pengaturan (dekat pratinjau) karena tombol Resize kini tetap
                 // di dok bawah; layar menggulir ke atas otomatis saat hasil/pesan muncul (lihat resizerScrollState).
                 resultMessage?.let { msg ->
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        shape = MaterialTheme.shapes.large
-                    ) {
+                    DepthCard(shape = MaterialTheme.shapes.large) {
                         Column(Modifier.padding(16.dp)) {
                             Text(msg, color = MaterialTheme.colorScheme.onSurface)
 
@@ -1874,7 +1854,7 @@ private fun ResizerScreen(
                                 contentPadding = PaddingValues(end = 20.dp)
                             ) {
                                 items(SocialPreset.ENTRIES) { preset ->
-                                    FilterChip(
+                                    DepthChip(
                                         selected = selectedSocialPreset == preset,
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = preset
@@ -1885,13 +1865,7 @@ private fun ResizerScreen(
                                             quality = QualityOption.CUSTOM
                                             customBitrateKbps = preset.bitrateKbps
                                         },
-                                        label = { Text(preset.label) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                            selectedLabelColor = Color.White,
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        label = { Text(preset.label) }
                                     )
                                 }
                             }
@@ -1927,7 +1901,7 @@ private fun ResizerScreen(
                                         } else {
                                             option.label
                                         }
-                                        FilterChip(
+                                        DepthChip(
                                             selected = isSelected,
                                             onClick = {
                                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
@@ -1937,13 +1911,7 @@ private fun ResizerScreen(
                                                     resolution = option
                                                 }
                                             },
-                                            label = { Text(label) },
-                                            colors = FilterChipDefaults.filterChipColors(
-                                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                                selectedLabelColor = Color.White,
-                                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
+                                            label = { Text(label) }
                                         )
                                     }
                                 }
@@ -1989,7 +1957,7 @@ private fun ResizerScreen(
                                     } else {
                                         option.label
                                     }
-                                    FilterChip(
+                                    DepthChip(
                                         selected = isSelected,
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
@@ -1999,13 +1967,7 @@ private fun ResizerScreen(
                                                 quality = option
                                             }
                                         },
-                                        label = { Text(label) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                            selectedLabelColor = Color.White,
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        label = { Text(label) }
                                     )
                                 }
                                 // Not one of QualityOption.ENTRIES — this is a second
@@ -2014,17 +1976,13 @@ private fun ResizerScreen(
                                 // driven by a target file size instead of a bitrate
                                 // number. See TargetSizeDialog / requiredBitrateKbpsForTargetSize.
                                 item {
-                                    FilterChip(
+                                    DepthChip(
                                         selected = false,
                                         onClick = {
                                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
                                             showTargetSizeDialog = true
                                         },
-                                        label = { Text("Ukuran target (MB)") },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
+                                        label = { Text("Ukuran target (MB)") }
                                     )
                                 }
                             }
@@ -2105,16 +2063,10 @@ private fun ResizerScreen(
                                             Text("Posisi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                                             LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                                 items(WatermarkPosition.ENTRIES) { pos ->
-                                                    FilterChip(
+                                                    DepthChip(
                                                         selected = pos == watermarkPosition,
                                                         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkPosition = pos },
-                                                        label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) },
-                                                        colors = FilterChipDefaults.filterChipColors(
-                                                            selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                                            selectedLabelColor = Color.White,
-                                                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                            labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                                        )
+                                                        label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) }
                                                     )
                                                 }
                                             }
@@ -2165,16 +2117,10 @@ private fun ResizerScreen(
                                 if (captionText.isNotBlank()) {
                                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                         items(WatermarkPosition.ENTRIES) { pos ->
-                                            FilterChip(
+                                            DepthChip(
                                                 selected = pos == captionPosition,
                                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); captionPosition = pos },
-                                                label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) },
-                                                colors = FilterChipDefaults.filterChipColors(
-                                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                                    selectedLabelColor = Color.White,
-                                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
+                                                label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) }
                                             )
                                         }
                                     }
@@ -2628,14 +2574,8 @@ private fun BatchScreen(onBack: () -> Unit) {
         )
     }
 
-    val isGlass = com.example.videoresizer.ui.theme.LocalIsGlassTheme.current
-    val screenBackground = if (isGlass) {
-        com.example.videoresizer.ui.theme.MidnightBlueGlassGradient
-    } else {
-        androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.background)
-    }
     Scaffold(
-        modifier = Modifier.fillMaxSize().background(screenBackground),
+        modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
             ToolTopBar(title = "Ekspor Batch", onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() })
         },
@@ -2725,9 +2665,10 @@ private fun BatchScreen(onBack: () -> Unit) {
                             }
                         }
                         if (idx == currentIndex && item.status is BatchStatus.Processing) {
-                            LinearProgressIndicator(
+                            DepthProgressBar(
                                 progress = { item.status.percent / 100f },
-                                modifier = Modifier.fillMaxWidth()
+                                modifier = Modifier.fillMaxWidth(),
+                                height = 10.dp
                             )
                         }
                     }
@@ -2761,7 +2702,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                 )
                 LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(SocialPreset.ENTRIES) { preset ->
-                        FilterChip(
+                        DepthChip(
                             selected = selectedSocialPreset == preset,
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = preset
@@ -2773,13 +2714,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                                 customBitrateKbps = preset.bitrateKbps
                                 targetSizeMb = null
                             },
-                            label = { Text(preset.label) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                selectedLabelColor = Color.White,
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
+                            label = { Text(preset.label) }
                         )
                     }
                 }
@@ -2812,7 +2747,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                         val label = if (option == ResolutionOption.CUSTOM && customWidth != null && customHeight != null) {
                             "${customWidth}×${customHeight}"
                         } else option.label
-                        FilterChip(
+                        DepthChip(
                             selected = isSelected,
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
@@ -2854,7 +2789,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                         val label = if (option == QualityOption.CUSTOM && customBitrateKbps != null) {
                             "${customBitrateKbps} kbps"
                         } else option.label
-                        FilterChip(
+                        DepthChip(
                             selected = isSelected,
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
@@ -2869,7 +2804,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                     // chip — see targetSizeMb's doc comment above for how
                     // batch resolves this per item instead of once.
                     item {
-                        FilterChip(
+                        DepthChip(
                             selected = targetSizeMb != null,
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
@@ -2935,7 +2870,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                 if (watermarkUri != null) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(WatermarkPosition.ENTRIES) { pos ->
-                            FilterChip(
+                            DepthChip(
                                 selected = pos == watermarkPosition,
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkPosition = pos },
                                 label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) }
@@ -2957,7 +2892,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                 if (captionText.isNotBlank()) {
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(WatermarkPosition.ENTRIES) { pos ->
-                            FilterChip(
+                            DepthChip(
                                 selected = pos == captionPosition,
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); captionPosition = pos },
                                 label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) }
@@ -3109,9 +3044,7 @@ private fun VideoEditorPreview(
         }
     }
 
-    Card(
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+    DepthCard(
         shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth()
     ) {
@@ -3567,17 +3500,16 @@ private fun TrimHandle(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun VideoPickerCard(onPickClick: () -> Unit) {
-    // Batch 82: keadaan kosong dibuat sebagai "titik awal" yang jelas — ubin ikon gradien app, judul tegas, teks
-    // Indonesia (dulu "Tap to choose a video"), efek tekan. Dipakai bersama oleh Resize, GIF, dan Kompres.
+    // Batch 82: keadaan kosong = titik awal yang jelas (teks Indonesia, efek tekan). Batch 83: kartu TIMBUL + ubin ikon
+    // bulat timbul bergradien aksen. Dipakai bersama oleh Resize, GIF, dan Kompres.
     val haptic = LocalHapticFeedback.current
     val interaction = remember { MutableInteractionSource() }
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.985f else 1f, animationSpec = spring(), label = "pickerScale")
-    Card(
+    val spec = LocalDepthSpec.current
+    DepthCard(
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPickClick() },
         interactionSource = interaction,
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)),
         shape = RoundedCornerShape(24.dp),
         modifier = Modifier
             .fillMaxWidth()
@@ -3593,11 +3525,12 @@ private fun VideoPickerCard(onPickClick: () -> Unit) {
             Box(
                 modifier = Modifier
                     .size(72.dp)
+                    .depthRaised(spec, CircleShape, DepthSize.SMALL)
                     .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary))),
+                    .background(accentGradient()),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(Icons.Filled.Movie, contentDescription = null, tint = Color.White, modifier = Modifier.size(34.dp))
+                Icon(Icons.Filled.Movie, contentDescription = null, tint = accentContent(), modifier = Modifier.size(34.dp))
             }
             Spacer(modifier = Modifier.height(6.dp))
             Text("Pilih video", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
@@ -3963,12 +3896,16 @@ private fun SettingsTabBar(
     onSelect: (ResizerSettingsTab) -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val spec = LocalDepthSpec.current
+    val trackShape = RoundedCornerShape(16.dp)
+    val tabShape = RoundedCornerShape(12.dp)
+    // Batch 83: jalur tab = LEKUK cekung; tab aktif = tombol TIMBUL di dalam lekuk (teks aksen).
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(14.dp))
-            .background(MaterialTheme.colorScheme.surfaceVariant)
-            .padding(4.dp),
+            .depthInset(spec, trackShape)
+            .clip(trackShape)
+            .padding(5.dp),
         horizontalArrangement = Arrangement.spacedBy(4.dp)
     ) {
         tabs.forEach { tab ->
@@ -3976,18 +3913,8 @@ private fun SettingsTabBar(
             Box(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(RoundedCornerShape(10.dp))
-                    .then(
-                        if (isSelected) {
-                            Modifier.background(
-                                brush = Brush.horizontalGradient(
-                                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.secondary)
-                                )
-                            )
-                        } else {
-                            Modifier
-                        }
-                    )
+                    .then(if (isSelected) Modifier.depthRaised(spec, tabShape, DepthSize.SMALL) else Modifier)
+                    .clip(tabShape)
                     // Batch 74 (Prioritas 7): `selectable` + Role.Tab memberi TalkBack status terpilih/tidak ("tab, terpilih");
                     // perilaku sentuh/ripple/haptic sama persis dengan `clickable` sebelumnya.
                     .selectable(
@@ -4005,7 +3932,7 @@ private fun SettingsTabBar(
                     tab.label,
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
-                    color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -4029,16 +3956,10 @@ private fun <T> OptionSection(
         LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             items(options) { option ->
                 val isSelected = option == selected
-                FilterChip(
+                DepthChip(
                     selected = isSelected,
                     onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onSelect(option) },
-                    label = { Text(labelOf(option)) },
-                    colors = FilterChipDefaults.filterChipColors(
-                        selectedContainerColor = MaterialTheme.colorScheme.primary,
-                        selectedLabelColor = Color.White,
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    label = { Text(labelOf(option)) }
                 )
             }
         }
@@ -4142,14 +4063,8 @@ private fun StudioScreen(
         if (selectionMode) exitSelection() else onBack()
     }
 
-    val isGlass = com.example.videoresizer.ui.theme.LocalIsGlassTheme.current
-    val screenBackground = if (isGlass) {
-        com.example.videoresizer.ui.theme.MidnightBlueGlassGradient
-    } else {
-        androidx.compose.ui.graphics.SolidColor(MaterialTheme.colorScheme.background)
-    }
     Scaffold(
-        modifier = Modifier.fillMaxSize().background(screenBackground),
+        modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
             TopAppBar(
                 title = {
@@ -4302,14 +4217,9 @@ private fun StudioEntryCard(
         }
     }
 
-    Card(
-        colors = CardDefaults.cardColors(
-            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surface
-        ),
-        border = BorderStroke(
-            if (isSelected) 2.dp else 1.dp,
-            if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-        ),
+    DepthCard(
+        // Batch 83: entri terpilih = CEKUNG (tertekan), tak terpilih = TIMBUL.
+        inset = isSelected,
         shape = MaterialTheme.shapes.large,
         modifier = Modifier
             .fillMaxWidth()
@@ -4906,7 +4816,7 @@ private fun GifScreen(
     // VideoPickerScreen can render on top without unmounting this screen.
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
-        modifier = Modifier.fillMaxSize().background(glassAwareBackground()),
+        modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
             ToolTopBar(title = "Video ke GIF", onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() })
         },
@@ -4949,16 +4859,10 @@ private fun GifScreen(
                     Text("Frame rate GIF", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(listOf(5, 10, 15)) { f ->
-                            FilterChip(
+                            DepthChip(
                                 selected = fps == f,
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); fps = f },
-                                label = { Text("$f fps") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                label = { Text("$f fps") }
                             )
                         }
                     }
@@ -4968,16 +4872,10 @@ private fun GifScreen(
                     Text("Lebar GIF", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(listOf(240, 360, 480)) { w ->
-                            FilterChip(
+                            DepthChip(
                                 selected = targetWidth == w,
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); targetWidth = w },
-                                label = { Text("${w}px") },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                label = { Text("${w}px") }
                             )
                         }
                     }
@@ -4995,9 +4893,9 @@ private fun GifScreen(
 
                 if (isProcessing) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LinearProgressIndicator(
+                        DepthProgressBar(
                             progress = { progress / 100f },
-                            modifier = Modifier.fillMaxWidth().height(6.dp)
+                            modifier = Modifier.fillMaxWidth()
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -5361,7 +5259,7 @@ private fun CompressorScreen(onBack: () -> Unit) {
 
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
-        modifier = Modifier.fillMaxSize().background(glassAwareBackground()),
+        modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
             ToolTopBar(title = "Kompres Video", onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() })
         },
@@ -5398,16 +5296,10 @@ private fun CompressorScreen(onBack: () -> Unit) {
                     Text("Tingkat kompresi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
                     LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                         items(CompressionLevel.ENTRIES) { opt ->
-                            FilterChip(
+                            DepthChip(
                                 selected = level == opt,
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); level = opt },
-                                label = { Text(opt.label) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = Color.White,
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                label = { Text(opt.label) }
                             )
                         }
                     }
@@ -5447,9 +5339,9 @@ private fun CompressorScreen(onBack: () -> Unit) {
 
                 if (isProcessing) {
                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        LinearProgressIndicator(
+                        DepthProgressBar(
                             progress = { progress / 100f },
-                            modifier = Modifier.fillMaxWidth().height(6.dp)
+                            modifier = Modifier.fillMaxWidth()
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),

@@ -1,5 +1,37 @@
 # Changelog
 
+## Batch 83: Neumorfisme sungguhan (timbul + cekung) di SEMUA tema, Glass buram & terbaca, ornamen khas tema diperbanyak
+
+User (setelah v82; CI run #23 hijau penuh — Batch 82 + fix SpotBugs terverifikasi CI): "1. glass theme masih banyak yang tembus pandang, readability minus banget. 2. semua tema diberi depth style ala Neumorphism, real cekung timbul, bukan permainan shadow murahan yang nyatu dengan background. 3. ornamen khas tiap tema dibanyakin biar gak sepi."
+
+### TEMUAN (akar masalah, dari source v82)
+1. **Glass tembus pandang:** `GlassSurface = 0x33FFFFFF` (20% putih) & `GlassSurfaceVariant = 0x22FFFFFF` (13%) -> isi kartu/chip/tab menembus ke gradien; teks muted `B9C2E0` di atasnya kontras rendah.
+2. **Tidak ada kedalaman nyata di tema mana pun:** kartu = `surfaceVariant` datar + garis tepi 1dp; tombol/tab = datar. Dasar tema terlalu ekstrem (Neon `#06070C`, Dark `#0E0E12`, Light `#FAFAFC`) -> bayangan hitam / sorot putih tak terlihat ("nyatu dengan latar").
+3. **Ornamen minim:** hanya gradien Glass; tema lain = warna rata.
+4. **Kontras teks di atas aksen:** CTA/hero memakai teks putih tetap di atas gradien primary->secondary (putih di atas cyan Neon / teal terang ~1.4-2:1).
+
+### PERUBAHAN (5 berkas kode: `Depth.kt` BARU, `Ornaments.kt` BARU, `Color.kt`, `Theme.kt`, `MainActivity.kt`; tanpa dependensi/izin baru, ArchUnit: berkas baru di `ui.theme` yang mandiri)
+- **`ui/theme/Depth.kt` — sistem kedalaman neumorfik** (digambar dgn `drawWithCache` + `BlurMaskFilter`, minSdk 31 aman):
+  - **Timbul (`depthRaised`)**: badan gradien cembung (terang kiri-atas -> gelap kanan-bawah) + DUA bayangan buram berlawanan (gelap kanan-bawah, sorot terang kiri-atas). `pressed` (0..1, dibaca saat menggambar) melebur ke cekung = tombol benar-benar "masuk".
+  - **Cekung (`depthInset`)**: gradien terbalik + bayangan DALAM (gelap tepi kiri-atas, terang tepi kanan-bawah) dipotong ke bentuk.
+  - Spesifikasi per tema (`DepthSpec`), dikalibrasi lewat simulasi gambar (sandbox) supaya sorot & bayangan SELALU terlihat; **tidak bergantung warna dinamis wallpaper**.
+  - Komponen: `DepthCard` (statis/klik; `inset=true` utk terpilih), `DepthChip` (pengganti `FilterChip`: tak terpilih = timbul, terpilih = cekung + teks aksen), `DepthIconButton`, `DepthProgressBar` (bak cekung + isi gradien), `DepthWell`, `accentGradient()/accentContent()` (teks di atas aksen = `onPrimary` tema, bukan putih tetap).
+- **`ui/theme/Ornaments.kt` — ornamen khas tema** (Canvas murni, deterministik `Random` berbenih, statis tanpa animasi):
+  - Latar layar penuh (`themeBackdrop`): **Glass** aurora 3 orb + 18 gelembung kaca + kilau diagonal; **Neon** matahari synthwave bercelah + grid perspektif + garis pindai + braket sudut + bintang; **Paper** serat kertas + garis buku tulis + garis margin + lubang kertas + 2 selotip washi + cap pos; **Dark** rasi bintang berhubung garis + orb aksen + bintang; **Light** blob pastel + kisi titik + cincin konsentris.
+  - Motif tiap kartu timbul (`drawCardOrnament`, otomatis lewat `DepthCard`): kilau+gelembung (Glass), braket sudut+garis neon+scanline (Neon), jahitan putus-putus (Paper), titik bintang (Dark), cincin pastel (Light).
+  - Seni kartu hero (`drawHeroArt`) per tema.
+- **`Color.kt`/`Theme.kt`:** dasar tema dinaikkan/diturunkan agar kedalaman terlihat (Dark `#2A2E3A`, Light `#E3E7EE`, Neon `#16203A`, Paper `#EBDFCB`); **Glass permukaan kini OPAK** (`#253376`/`#1A2559`, teks muted `#C9D2F0`; kontras teks utama >= 9:1, muted >= 6:1 — dihitung WCAG); aksen Dark `#A892FF`, Glass `#7FB0FF`, Paper `#A63F22` (primary-di-atas-badan >= 4.4:1); nada kontainer Material (dialog/menu) opak per tema (`withContainers`). Warna dinamis wallpaper (Terang/Gelap, Android 12+) kini hanya untuk AKSEN; netral tetap dari palet (agar kontras bayangan terjamin) — **perubahan perilaku disengaja**. Disediakan `LocalThemeStyle` & `LocalDepthSpec`.
+- **`MainActivity.kt`:** 7 `Card` -> `DepthCard`, 16 `FilterChip` -> `DepthChip`, 4 bar progres determinan -> `DepthProgressBar`; `SettingsTabBar` = jalur cekung + tab aktif timbul; tombol Update/Tema/kembali = `DepthIconButton` timbul; ubin ikon alat = lekuk cekung; dok Resizer = panel timbul mengambang; CTA aktif timbul (gradien aksen, teks `onPrimary`) / nonaktif cekung; entri Riwayat terpilih = cekung; semua layar memakai `themeBackdrop` (menggantikan `glassAwareBackground`/`screenBackground`).
+
+### VERIFIED
+- CI run #23 (v82): ArchUnit 12/0, SpotBugs 0, detekt 0, lint 0, 40 tes, peringatan kompilator 0 — **Batch 82 + fix `THEME_CHOICES` terkonfirmasi**.
+- Statis (sandbox): kurung `{}`/`()` seimbang di 5 berkas; `kotlinc 2.0.21` 0 galat parse (sisa = unresolved reference/inferensi akibat Compose tak ada di sandbox, pola sama dgn v82); kontras WCAG dihitung (di atas); simulasi gambar kedalaman 5 tema (Pillow) dipakai kalibrasi — BUKAN bukti tampilan Compose.
+### NOT VERIFIED
+Kompilasi Gradle/Compose (API baru: `drawWithCache`+`BlurMaskFilter`, `Card(onClick, interactionSource)`, `ColorScheme.copy`, `DrawScope.rotate/clipRect/drawPoints`), ArchUnit/SpotBugs/detekt/lint/tes setelah perubahan, serta **seluruh tampilan di HP**: kekuatan bayangan nyata (BlurMaskFilter di GPU), kinerja gulir (jumlah node bayangan), keterbacaan di 6 tema, ornamen tak mengganggu konten, tinggi dok di layar kecil.
+### DAMPAK / CATATAN
+- Dibiarkan: `VideoPickerScreen`, dialog, `OutlinedTextField`, `Slider`, `Switch` memakai warna tema baru tetapi BELUM gaya neumorfik penuh (ruang lingkup <= 5 berkas kode); Riwayat tetap `TopAppBar` sendiri.
+- Warna aksen alat di Beranda tetap, dipekatkan di tema terang.
+
 ## Batch 82: Hierarki UI bergaya app premium — hero Beranda, dok aksi tetap di Resizer, header & latar seragam, perbaikan SpotBugs
 
 User (setelah v81 + laporan run #22): "not enough. hierarchy nya belum berasa seperti vibes premium apps!!"

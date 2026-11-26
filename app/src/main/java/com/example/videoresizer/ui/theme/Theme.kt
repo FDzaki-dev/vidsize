@@ -6,6 +6,7 @@ import androidx.activity.SystemBarStyle
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
@@ -34,9 +35,18 @@ private val EdgeToEdgeDarkScrim = android.graphics.Color.argb(0x80, 0x1b, 0x1b, 
  */
 val LocalIsGlassTheme = compositionLocalOf { false }
 
+// Batch 83: nada kontainer Material (dialog/menu/lembar bawah) dibuat OPAK & seirama dgn badan kartu neumorfik.
+private fun ColorScheme.withContainers(lowest: Long, low: Long, base: Long, high: Long, highest: Long): ColorScheme = copy(
+    surfaceContainerLowest = Color(lowest),
+    surfaceContainerLow = Color(low),
+    surfaceContainer = Color(base),
+    surfaceContainerHigh = Color(high),
+    surfaceContainerHighest = Color(highest)
+)
+
 private val DarkColors = darkColorScheme(
-    primary = AccentPrimary,
-    onPrimary = Color_WhiteOn,
+    primary = DarkAccentPrimary,
+    onPrimary = Color(0xFF1C1240),
     secondary = AccentSecondary,
     background = DarkBackground,
     onBackground = DarkOnBackground,
@@ -46,7 +56,7 @@ private val DarkColors = darkColorScheme(
     onSurfaceVariant = DarkOnSurfaceMuted,
     outline = DarkOutline,
     error = DarkError
-)
+).withContainers(0xFF252934, 0xFF2C303C, 0xFF2F3441, 0xFF343A48, 0xFF3A4050)
 
 private val LightColors = lightColorScheme(
     primary = AccentPrimary,
@@ -60,7 +70,7 @@ private val LightColors = lightColorScheme(
     onSurfaceVariant = LightOnSurfaceMuted,
     outline = LightOutline,
     error = LightError
-)
+).withContainers(0xFFD9DEE8, 0xFFE0E4EB, 0xFFE6EAF1, 0xFFEBEEF4, 0xFFF0F3F8)
 
 private val NeonColors = darkColorScheme(
     primary = NeonPrimary,
@@ -74,7 +84,7 @@ private val NeonColors = darkColorScheme(
     onSurfaceVariant = NeonOnSurfaceMuted,
     outline = NeonOutline,
     error = NeonError
-)
+).withContainers(0xFF111829, 0xFF17213B, 0xFF1A2542, 0xFF1F2B4B, 0xFF25325A)
 
 private val PaperColors = lightColorScheme(
     primary = PaperPrimary,
@@ -88,7 +98,7 @@ private val PaperColors = lightColorScheme(
     onSurfaceVariant = PaperOnSurfaceMuted,
     outline = PaperOutline,
     error = PaperError
-)
+).withContainers(0xFFE0D1B6, 0xFFE8DCC5, 0xFFEDE1CC, 0xFFF1E6D3, 0xFFF5ECDB)
 
 // background/surface here are flat fallback fills (used by anything that
 // can't take a Brush, e.g. status/nav bar color) — the actual visible
@@ -108,7 +118,7 @@ private val GlassColors = darkColorScheme(
     onSurfaceVariant = GlassOnSurfaceMuted,
     outline = GlassBorder,
     error = GlassError
-)
+).withContainers(0xFF18214F, 0xFF202C69, 0xFF253376, 0xFF2A397F, 0xFF304188)
 
 // Sharper, tighter corners than Material3's default (4/8/12/16/28dp) — part
 // of what makes Midnight Neon read as a genuinely different theme rather
@@ -168,10 +178,22 @@ fun VideoResizerTheme(
     val context = LocalContext.current
     val isDark = style == AppThemeStyle.DARK || style == AppThemeStyle.MIDNIGHT_NEON || style == AppThemeStyle.MIDNIGHT_BLUE_GLASS
     val colorScheme = when {
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && style == AppThemeStyle.DARK ->
-            dynamicDarkColorScheme(context)
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && style == AppThemeStyle.LIGHT ->
-            dynamicLightColorScheme(context)
+        // Batch 83: warna dinamis wallpaper hanya untuk AKSEN; netral (latar/permukaan/teks) tetap dari palet tema supaya
+        // kontras sorot & bayangan neumorfik terjamin (netral dinamis bisa nyaris putih/hitam -> bayangan "nyatu").
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && style == AppThemeStyle.DARK -> {
+            val dyn = dynamicDarkColorScheme(context)
+            DarkColors.copy(
+                primary = dyn.primary, onPrimary = dyn.onPrimary, primaryContainer = dyn.primaryContainer,
+                onPrimaryContainer = dyn.onPrimaryContainer, secondary = dyn.secondary, onSecondary = dyn.onSecondary
+            )
+        }
+        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && style == AppThemeStyle.LIGHT -> {
+            val dyn = dynamicLightColorScheme(context)
+            LightColors.copy(
+                primary = dyn.primary, onPrimary = dyn.onPrimary, primaryContainer = dyn.primaryContainer,
+                onPrimaryContainer = dyn.onPrimaryContainer, secondary = dyn.secondary, onSecondary = dyn.onSecondary
+            )
+        }
         style == AppThemeStyle.DARK -> DarkColors
         style == AppThemeStyle.LIGHT -> LightColors
         style == AppThemeStyle.MIDNIGHT_NEON -> NeonColors
@@ -212,7 +234,11 @@ fun VideoResizerTheme(
         typography = typography,
         shapes = shapes
     ) {
-        CompositionLocalProvider(LocalIsGlassTheme provides (style == AppThemeStyle.MIDNIGHT_BLUE_GLASS)) {
+        CompositionLocalProvider(
+            LocalIsGlassTheme provides (style == AppThemeStyle.MIDNIGHT_BLUE_GLASS),
+            LocalThemeStyle provides style,
+            LocalDepthSpec provides depthSpecFor(style)
+        ) {
             content()
         }
     }

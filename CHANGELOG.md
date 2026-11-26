@@ -1,5 +1,27 @@
 # Changelog
 
+## Batch 92: thumbnail Riwayat tak lagi jatuh ke placeholder + komposisi bertahap layar Ekspor Batch
+
+User (setelah v91; screenshot Riwayat): "1. tab ekspor batch masih berat transisi nya 2. kenapa hasil riwayat bingkai nya fall back ke placeholder?!!"
+
+### TEMUAN
+1. **Riwayat -> placeholder (akar masalah):** `StudioEntryCard` hanya membaca `entry.thumbnailPath`, dan file thumbnail (JPEG bingkai pertama) ditulis ke `cacheDir/thumbs`. Penyebab PALING MUNGKIN = pembersihan cache oleh Android / pembersih HP: tak ada jalur hapus lain di kode (sudah dicek `deleteRecursively`/`listFiles`/`.delete()`; `AppUpdater.clearCache` hanya menyentuh `cacheDir/updates`), tetapi ini kesimpulan dari kode, belum direproduksi di HP. Begitu file hilang, `decodeSampledBitmapFromFile` mengembalikan null -> ikon klaker. Tombol "Galeri" tetap jalan karena memakai `publicUri` (salinan MediaStore yang tahan pembersih) — thumbnail satu-satunya yang tak punya cadangan. Entri GIF lebih rentan: `thumbnailPath` = berkas GIF di `cacheDir` itu sendiri.
+2. **Tab Ekspor Batch berat:** layar ini paling padat di antara alat: ~45 `DepthChip` dalam 8 `LazyRow` + `OutlinedTextField` + 2 `DepthSwitch`/progres, SEMUA dikomposisi dan digambar di frame ketukan. Selama bake bitmap (utas tunggal, serial) belum siap, tiap chip menggambar bayangan blur langsung -> lonjakan frame pertama paling besar di layar ini. Batch 91 menyatakan Kompres/GIF ringan; Batch justru terberat karena jumlah chip.
+
+### PERUBAHAN (1 berkas kode `MainActivity.kt`)
+- Thumbnail baru disimpan di `filesDir/thumbs` (3 situs `ensureThumbDir`: Resizer, Batch, Kompres) — tidak disapu pembersih cache.
+- `loadHistoryThumbnail` (baru): urutan (1) file thumbnail; (2) cadangan `ContentResolver.loadThumbnail(publicUri)` dari salinan Galeri (item milik app sendiri, tanpa izin tambahan; berlaku utk video & GIF). Entri LAMA yang file cache-nya sudah hilang ikut pulih selama salinan Galerinya masih ada. Placeholder hanya muncul bila keduanya tak ada (mis. video dihapus dari Galeri).
+- `BatchScreen`: komposisi BERTAHAP (`stage` 0..6, `BATCH_LAST_STAGE`): frame ketukan hanya memuat bar atas + teks + tombol pilih + antrean; preset sosial & aspect ratio (1), resolusi & mode resize (2), kualitas & rotasi (3), flip/frame rate/mute (4), watermark & caption (5), tombol Proses/progres & catatan (6) masuk satu kelompok per frame lewat `withFrameNanos`. Semuanya di bawah layar-lipat -> bukan "layar kosong" seperti penundaan Batch 90. State, urutan, dan logika batch TIDAK berubah.
+
+### VERIFIED
+Statis: kurung seimbang ({} 1217, () 2470, [] 11, kedalaman 0); kotlinc 2.0.21 (`-language-version 1.9`) 0 galat SINTAKS (hanya `unresolved reference` karena tanpa classpath Android, pola sama dgn berkas v91); 6 pembungkus `if (stage >= N)` dicek isinya satu per satu.
+### NOT VERIFIED
+Kompilasi Gradle/Compose, lint, SpotBugs, detekt, ArchUnit, tes (tak ada AGP di sandbox); di HP: (a) transisi Ekspor Batch lebih ringan; (b) kartu Riwayat lama pulih dari Galeri; (c) entri baru tetap bergambar setelah "Hapus cache".
+### Bila masih terasa / masih placeholder
+Kirim video rekam layar transisi Batch + sebut apakah entri yang placeholder masih punya video di Galeri > Movies > VideoResizer (bila video sudah dihapus dari Galeri, thumbnail memang tak punya sumber). Opsi lanjutan Batch: ganti `LazyRow` chip kecil dgn `Row` + `horizontalScroll`, atau `Dispatchers.Default` utk pra-bake ukuran chip umum.
+### Jalan balik
+`Vidsize_v91.zip`.
+
 ## Batch 91: isi alat langsung terlihat saat meluncur (batalkan penundaan Batch 90) + perbaikan exclude.xml rusak
 
 User (setelah v90; video 363373.mp4 + CI run #31): "kok delay gitu hasilnya?!!"

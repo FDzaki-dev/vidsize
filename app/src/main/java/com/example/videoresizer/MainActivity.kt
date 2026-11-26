@@ -137,6 +137,9 @@ private enum class Screen { HOME, MAIN, STUDIO, BATCH, GIF, COMPRESSOR }
 
 private const val FRAME_STEP_CAP_NS = 24_000_000L
 
+/** Batch 92: jumlah tahap komposisi bertahap `BatchScreen` (tahap 0 = kerangka ringan, 1..N = satu kelompok bagian per frame). */
+private const val BATCH_LAST_STAGE = 6
+
 /**
  * Batch 90: animasi dengan jam yang DIBATASI per frame (maks 24ms). Frame panjang (komposisi/gambar berat) tidak lagi membuat animasi
  * "melompat" ke ~70% setelah jeda (jam dinding AnimatedVisibility), melainkan berhenti sebentar lalu lanjut halus.
@@ -1763,7 +1766,7 @@ private fun ResizerScreen(
                                     resultThumbnailFile = null
 
                                     val id = UUID.randomUUID().toString()
-                                    val thumbDir = ensureThumbDir(context.cacheDir)
+                                    val thumbDir = ensureThumbDir(context.filesDir)
                                     val request = ResizeRequest(
                                         sourceUri = uri,
                                         outputFile = File(context.cacheDir, "resized_$id.mp4"),
@@ -2445,6 +2448,18 @@ private fun BatchScreen(onBack: () -> Unit) {
     var captionPosition by remember { mutableStateOf(WatermarkPosition.BOTTOM_RIGHT) }
     var selectedSocialPreset by remember { mutableStateOf<SocialPreset?>(null) }
 
+    // Batch 92: komposisi BERTAHAP. Layar ini memuat ~45 DepthChip (8 LazyRow) + OutlinedTextField; semuanya dikomposisi + digambar
+    // (bayangan blur langsung, bake latar belum siap) di SATU frame ketukan -> transisi tab Ekspor Batch tersendat. Kini frame
+    // pertama hanya kerangka ringan (bar atas, teks, tombol pilih, antrean); sisanya masuk satu kelompok per frame (di luar
+    // layar-lipat, jadi tak terlihat sebagai "kosong" — beda dgn penundaan Batch 90 yang menunggu transisi selesai).
+    var stage by remember { mutableIntStateOf(0) }
+    LaunchedEffect(Unit) {
+        for (nextStage in 1..BATCH_LAST_STAGE) {
+            withFrameNanos { }
+            stage = nextStage
+        }
+    }
+
     // Shared with ResizerScreen via the same SharedPreferences key, so the
     // permission is asked at most once across the whole app — not once per
     // screen. See the fix note on ResizerScreen's identical block.
@@ -2580,7 +2595,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                 }
 
                 val id = UUID.randomUUID().toString()
-                val thumbDir = ensureThumbDir(context.cacheDir)
+                val thumbDir = ensureThumbDir(context.filesDir)
                 // Target-size mode resolves per item here, against this
                 // item's own probed `dur` — see targetSizeMb's doc comment
                 // above for why this can't be solved once for the whole
@@ -2815,265 +2830,277 @@ private fun BatchScreen(onBack: () -> Unit) {
                 }
             }
 
-            // BUG FIX (illogical leftover): selectedSocialPreset was already
-            // being declared and defensively reset to null in several
-            // places here, as if a preset could be active — but there was
-            // never actually a picker UI in this screen to set it to
-            // anything in the first place, so it was permanently dead
-            // state. Completing it properly here instead of deleting it,
-            // since batch export sharing the same one-tap presets as
-            // single-video export is the more useful outcome — same
-            // behavior as the main screen's version.
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        Icons.Filled.Public,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Preset media sosial", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                }
-                Text(
-                    "Sekali tap untuk atur resolusi & bitrate persis seperti rekomendasi platform-nya — berlaku untuk semua video di antrian ini.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                    items(SocialPreset.ENTRIES) { preset ->
-                        DepthChip(
-                            selected = selectedSocialPreset == preset,
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = preset
-                                aspectRatio = preset.aspectRatio
-                                resolution = ResolutionOption.CUSTOM
-                                customWidth = preset.width
-                                customHeight = preset.height
-                                quality = QualityOption.CUSTOM
-                                customBitrateKbps = preset.bitrateKbps
-                                targetSizeMb = null
-                            },
-                            label = { Text(preset.label) }
-                        )
-                    }
-                }
-                selectedSocialPreset?.let { p ->
-                    Text(
-                        "Dipakai: ${p.width}×${p.height}, ~${p.bitrateKbps} kbps. Mengubah resolusi/kualitas manual di bawah akan melepas preset ini.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            OptionSection(
-                title = "Aspect ratio",
-                options = AspectRatioOption.ENTRIES,
-                labelOf = { it.label },
-                selected = aspectRatio,
-                onSelect = {
-                    aspectRatio = it
-                    selectedSocialPreset = null
-                    if (resolution == ResolutionOption.CUSTOM) resolution = ResolutionOption.ORIGINAL
-                }
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Resolusi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                    items(ResolutionOption.ENTRIES) { option ->
-                        val isSelected = option == resolution
-                        val label = if (option == ResolutionOption.CUSTOM && customWidth != null && customHeight != null) {
-                            "${customWidth}×${customHeight}"
-                        } else option.label
-                        DepthChip(
-                            selected = isSelected,
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
-                                if (option == ResolutionOption.CUSTOM) showCustomResDialog = true else resolution = option
-                            },
-                            label = { Text(label) }
-                        )
-                    }
-                }
-            }
-
-            OptionSection(
-                title = "Mode resize",
-                options = ResizeMode.ENTRIES,
-                labelOf = { it.label },
-                selected = resizeMode,
-                onSelect = { resizeMode = it }
-            )
-            Text(
-                if (resizeMode == ResizeMode.CROP) {
-                    "Crop: sisi video yang tidak muat akan dipotong, tanpa distorsi."
-                } else {
-                    "Stretch: video ditekan/ditarik agar pas, gambar bisa terlihat gepeng."
-                },
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Kualitas / bitrate", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                Text(
-                    "Rendah = ukuran file lebih kecil, sedikit turun kualitas gambar. Tinggi = kualitas maksimal, ukuran file lebih besar.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                    items(QualityOption.ENTRIES) { option ->
-                        val isSelected = option == quality && targetSizeMb == null
-                        val label = if (option == QualityOption.CUSTOM && customBitrateKbps != null) {
-                            "${customBitrateKbps} kbps"
-                        } else option.label
-                        DepthChip(
-                            selected = isSelected,
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
-                                targetSizeMb = null
-                                if (option == QualityOption.CUSTOM) showCustomBitrateDialog = true else quality = option
-                            },
-                            label = { Text(label) }
-                        )
-                    }
-                    // Not one of QualityOption.ENTRIES, same "second entry
-                    // point into CUSTOM" idea as ResizerScreen's identical
-                    // chip — see targetSizeMb's doc comment above for how
-                    // batch resolves this per item instead of once.
-                    item {
-                        DepthChip(
-                            selected = targetSizeMb != null,
-                            onClick = {
-                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
-                                showTargetSizeDialog = true
-                            },
-                            label = { Text(targetSizeMb?.let { "${it} MB" } ?: "Ukuran target (MB)") }
-                        )
-                    }
-                }
-                if (targetSizeMb != null) {
-                    Text(
-                        "Bitrate akan dihitung per video sesuai durasi masing-masing saat batch diproses.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            OptionSection(
-                title = "Rotasi",
-                options = RotationOption.ENTRIES,
-                labelOf = { it.label },
-                selected = rotation,
-                onSelect = { rotation = it }
-            )
-
-            OptionSection(
-                title = "Flip / cermin",
-                options = FlipOption.ENTRIES,
-                labelOf = { it.label },
-                selected = flip,
-                onSelect = { flip = it }
-            )
-
-            OptionSection(
-                title = "Frame rate",
-                options = FrameRateOption.ENTRIES,
-                labelOf = { it.label },
-                selected = frameRate,
-                onSelect = { frameRate = it }
-            )
-
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
-                Text("Mute audio", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
-                DepthSwitch(checked = muteAudio, onCheckedChange = { muteAudio = it })
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text("Watermark / logo", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    if (watermarkUri == null) {
-                        TextButton(onClick = {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); pickWatermarkLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-                        }) { Text("Pilih gambar") }
-                    } else {
-                        TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkUri = null }) { Text("Hapus") }
-                    }
-                }
-                if (watermarkUri != null) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
-                        items(WatermarkPosition.ENTRIES) { pos ->
-                            DepthChip(
-                                selected = pos == watermarkPosition,
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkPosition = pos },
-                                label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) }
-                            )
-                        }
-                    }
-                }
-            }
-
-            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text("Caption", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                OutlinedTextField(
-                    value = captionText,
-                    onValueChange = { captionText = it },
-                    placeholder = { Text("Tulis caption singkat…") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-                if (captionText.isNotBlank()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
-                        items(WatermarkPosition.ENTRIES) { pos ->
-                            DepthChip(
-                                selected = pos == captionPosition,
-                                onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); captionPosition = pos },
-                                label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) }
-                            )
-                        }
-                    }
-                }
-            }
-
-            if (isProcessing) {
+            if (stage >= 1) {
+                // BUG FIX (illogical leftover): selectedSocialPreset was already
+                // being declared and defensively reset to null in several
+                // places here, as if a preset could be active — but there was
+                // never actually a picker UI in this screen to set it to
+                // anything in the first place, so it was permanently dead
+                // state. Completing it properly here instead of deleting it,
+                // since batch export sharing the same one-tap presets as
+                // single-video export is the more useful outcome — same
+                // behavior as the main screen's version.
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Filled.Public,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Preset media sosial", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                    }
                     Text(
-                        "Memproses video ${(currentIndex + 1).coerceAtLeast(1)} dari ${items.size}…",
-                        color = MaterialTheme.colorScheme.onBackground
+                        "Sekali tap untuk atur resolusi & bitrate persis seperti rekomendasi platform-nya — berlaku untuk semua video di antrian ini.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    OutlinedButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); cancelBatch() }, modifier = Modifier.fillMaxWidth()) {
-                        Text("Batalkan batch")
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
+                        items(SocialPreset.ENTRIES) { preset ->
+                            DepthChip(
+                                selected = selectedSocialPreset == preset,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = preset
+                                    aspectRatio = preset.aspectRatio
+                                    resolution = ResolutionOption.CUSTOM
+                                    customWidth = preset.width
+                                    customHeight = preset.height
+                                    quality = QualityOption.CUSTOM
+                                    customBitrateKbps = preset.bitrateKbps
+                                    targetSizeMb = null
+                                },
+                                label = { Text(preset.label) }
+                            )
+                        }
+                    }
+                    selectedSocialPreset?.let { p ->
+                        Text(
+                            "Dipakai: ${p.width}×${p.height}, ~${p.bitrateKbps} kbps. Mengubah resolusi/kualitas manual di bawah akan melepas preset ini.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     }
                 }
-            } else {
-                Button(
-                    onClick = { startBatch() },
-                    enabled = items.isNotEmpty(),
-                    modifier = Modifier.fillMaxWidth().height(52.dp),
-                    shape = RoundedCornerShape(14.dp)
-                ) {
-                    Icon(Icons.Filled.PlayArrow, contentDescription = null)
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Proses semua (${items.size})")
+
+                OptionSection(
+                    title = "Aspect ratio",
+                    options = AspectRatioOption.ENTRIES,
+                    labelOf = { it.label },
+                    selected = aspectRatio,
+                    onSelect = {
+                        aspectRatio = it
+                        selectedSocialPreset = null
+                        if (resolution == ResolutionOption.CUSTOM) resolution = ResolutionOption.ORIGINAL
+                    }
+                )
+            }
+
+            if (stage >= 2) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Resolusi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
+                        items(ResolutionOption.ENTRIES) { option ->
+                            val isSelected = option == resolution
+                            val label = if (option == ResolutionOption.CUSTOM && customWidth != null && customHeight != null) {
+                                "${customWidth}×${customHeight}"
+                            } else option.label
+                            DepthChip(
+                                selected = isSelected,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
+                                    if (option == ResolutionOption.CUSTOM) showCustomResDialog = true else resolution = option
+                                },
+                                label = { Text(label) }
+                            )
+                        }
+                    }
+                }
+
+                OptionSection(
+                    title = "Mode resize",
+                    options = ResizeMode.ENTRIES,
+                    labelOf = { it.label },
+                    selected = resizeMode,
+                    onSelect = { resizeMode = it }
+                )
+                Text(
+                    if (resizeMode == ResizeMode.CROP) {
+                        "Crop: sisi video yang tidak muat akan dipotong, tanpa distorsi."
+                    } else {
+                        "Stretch: video ditekan/ditarik agar pas, gambar bisa terlihat gepeng."
+                    },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            if (stage >= 3) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Kualitas / bitrate", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                    Text(
+                        "Rendah = ukuran file lebih kecil, sedikit turun kualitas gambar. Tinggi = kualitas maksimal, ukuran file lebih besar.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
+                        items(QualityOption.ENTRIES) { option ->
+                            val isSelected = option == quality && targetSizeMb == null
+                            val label = if (option == QualityOption.CUSTOM && customBitrateKbps != null) {
+                                "${customBitrateKbps} kbps"
+                            } else option.label
+                            DepthChip(
+                                selected = isSelected,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
+                                    targetSizeMb = null
+                                    if (option == QualityOption.CUSTOM) showCustomBitrateDialog = true else quality = option
+                                },
+                                label = { Text(label) }
+                            )
+                        }
+                        // Not one of QualityOption.ENTRIES, same "second entry
+                        // point into CUSTOM" idea as ResizerScreen's identical
+                        // chip — see targetSizeMb's doc comment above for how
+                        // batch resolves this per item instead of once.
+                        item {
+                            DepthChip(
+                                selected = targetSizeMb != null,
+                                onClick = {
+                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
+                                    showTargetSizeDialog = true
+                                },
+                                label = { Text(targetSizeMb?.let { "${it} MB" } ?: "Ukuran target (MB)") }
+                            )
+                        }
+                    }
+                    if (targetSizeMb != null) {
+                        Text(
+                            "Bitrate akan dihitung per video sesuai durasi masing-masing saat batch diproses.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                OptionSection(
+                    title = "Rotasi",
+                    options = RotationOption.ENTRIES,
+                    labelOf = { it.label },
+                    selected = rotation,
+                    onSelect = { rotation = it }
+                )
+            }
+
+            if (stage >= 4) {
+                OptionSection(
+                    title = "Flip / cermin",
+                    options = FlipOption.ENTRIES,
+                    labelOf = { it.label },
+                    selected = flip,
+                    onSelect = { flip = it }
+                )
+
+                OptionSection(
+                    title = "Frame rate",
+                    options = FrameRateOption.ENTRIES,
+                    labelOf = { it.label },
+                    selected = frameRate,
+                    onSelect = { frameRate = it }
+                )
+
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                    Text("Mute audio", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
+                    DepthSwitch(checked = muteAudio, onCheckedChange = { muteAudio = it })
                 }
             }
 
-            summaryMessage?.let {
-                Text(it, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Medium)
+            if (stage >= 5) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Watermark / logo", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                        if (watermarkUri == null) {
+                            TextButton(onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); pickWatermarkLauncher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                            }) { Text("Pilih gambar") }
+                        } else {
+                            TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkUri = null }) { Text("Hapus") }
+                        }
+                    }
+                    if (watermarkUri != null) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
+                            items(WatermarkPosition.ENTRIES) { pos ->
+                                DepthChip(
+                                    selected = pos == watermarkPosition,
+                                    onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkPosition = pos },
+                                    label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+                    }
+                }
+
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Caption", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
+                    OutlinedTextField(
+                        value = captionText,
+                        onValueChange = { captionText = it },
+                        placeholder = { Text("Tulis caption singkat…") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (captionText.isNotBlank()) {
+                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
+                            items(WatermarkPosition.ENTRIES) { pos ->
+                                DepthChip(
+                                    selected = pos == captionPosition,
+                                    onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); captionPosition = pos },
+                                    label = { Text(pos.label, style = MaterialTheme.typography.labelSmall) }
+                                )
+                            }
+                        }
+                    }
+                }
             }
 
-            Text(
-                "Hasil setiap video otomatis tersimpan ke Galeri > Movies > VideoResizer dan muncul di Riwayat, sama seperti export satu-per-satu.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            if (stage >= 6) {
+                if (isProcessing) {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            "Memproses video ${(currentIndex + 1).coerceAtLeast(1)} dari ${items.size}…",
+                            color = MaterialTheme.colorScheme.onBackground
+                        )
+                        OutlinedButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); cancelBatch() }, modifier = Modifier.fillMaxWidth()) {
+                            Text("Batalkan batch")
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = { startBatch() },
+                        enabled = items.isNotEmpty(),
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(14.dp)
+                    ) {
+                        Icon(Icons.Filled.PlayArrow, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Proses semua (${items.size})")
+                    }
+                }
+
+                summaryMessage?.let {
+                    Text(it, color = MaterialTheme.colorScheme.onBackground, fontWeight = FontWeight.Medium)
+                }
+
+                Text(
+                    "Hasil setiap video otomatis tersimpan ke Galeri > Movies > VideoResizer dan muncul di Riwayat, sama seperti export satu-per-satu.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
         }
     }
 }
@@ -4340,6 +4367,7 @@ private fun StudioEntryCard(
     onDelete: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
+    val context = androidx.compose.ui.platform.LocalContext.current
     var thumb by remember(entry.id) { mutableStateOf<Bitmap?>(null) }
     // Batch 44 (Prioritas 5): was decodeFile() at FULL output resolution
     // (up to ~8MB as an ARGB_8888 Bitmap for a 1080p export) for every
@@ -4353,7 +4381,7 @@ private fun StudioEntryCard(
     // little it would still save.
     LaunchedEffect(entry.id) {
         thumb = withContext(Dispatchers.IO) {
-            runCatching { decodeSampledBitmapFromFile(entry.thumbnailPath, 240) }.getOrNull()
+            runCatching { loadHistoryThumbnail(context, entry, 240) }.getOrNull()
         }
     }
 
@@ -4676,20 +4704,39 @@ private fun decodeSampledBitmapFromFile(path: String, reqHeightPx: Int): Bitmap?
     }
 }
 
-/** Grabs the first frame of [videoFile] and saves it as a JPEG at [thumbnailFile]. Returns success. */
 /**
- * Folder cache thumbnail (`cacheDir/thumbs`). Hasil `mkdirs()` dipakai, bukan diabaikan.
- * Best-effort: gagal hanya dicatat ke logcat dan tidak melempar — [extractVideoThumbnail]
- * lalu gagal sendiri dan mengembalikan `false` (thumbnail dilewati, ekspor tetap jalan).
+ * Batch 92: thumbnail kartu Riwayat. (1) file thumbnail tersimpan; bila hilang (entri lama di `cacheDir` yang sudah disapu, atau GIF
+ * yang `thumbnailPath`-nya berkas cache) -> (2) thumbnail MediaStore dari salinan Galeri ([VideoHistoryEntry.publicUri], item milik
+ * app sendiri sehingga terbaca tanpa izin tambahan; video & GIF). Null hanya bila keduanya tak ada (mis. dihapus dari Galeri).
  */
-private fun ensureThumbDir(cacheDir: File): File {
-    val dir = File(cacheDir, "thumbs")
+private fun loadHistoryThumbnail(context: android.content.Context, entry: VideoHistoryEntry, reqPx: Int): Bitmap? {
+    decodeSampledBitmapFromFile(entry.thumbnailPath, reqPx)?.let { return it }
+    val publicUri = entry.publicUri?.let { Uri.parse(it) } ?: return null
+    return CrashLogger.nonFatal<Bitmap?>(
+        onFailure = { e ->
+            android.util.Log.w(LOG_TAG, "loadHistoryThumbnail", e)
+            null
+        }
+    ) {
+        context.contentResolver.loadThumbnail(publicUri, android.util.Size(reqPx, reqPx), null)
+    }
+}
+
+/**
+ * Folder thumbnail Riwayat (`filesDir/thumbs`). Batch 92: dulu `cacheDir/thumbs` -> dibersihkan Android/pembersih HP (mis. Infinix)
+ * kapan saja, sehingga kartu Riwayat jatuh ke ikon placeholder. `filesDir` tak disapu pembersih cache. Hasil `mkdirs()` dipakai,
+ * bukan diabaikan. Best-effort: gagal hanya dicatat ke logcat dan tidak melempar — [extractVideoThumbnail] lalu gagal sendiri
+ * dan mengembalikan `false` (thumbnail dilewati, ekspor tetap jalan).
+ */
+private fun ensureThumbDir(baseDir: File): File {
+    val dir = File(baseDir, "thumbs")
     if (!dir.isDirectory && !dir.mkdirs() && !dir.isDirectory) {
         android.util.Log.w(LOG_TAG, "ensureThumbDir: gagal membuat ${dir.absolutePath}")
     }
     return dir
 }
 
+/** Grabs the first frame of [videoFile] and saves it as a JPEG at [thumbnailFile]. Returns success. */
 private fun extractVideoThumbnail(videoFile: File, thumbnailFile: File): Boolean {
     val retriever = MediaMetadataRetriever()
     return try {
@@ -5545,7 +5592,7 @@ private fun CompressorScreen(onBack: () -> Unit) {
                                                         val displayName = result.outputFile.name
                                                         val publicUri = PublicMovieExporter.publish(context, result.outputFile, displayName)
                                                         val size = result.outputFile.length()
-                                                        val thumbDir = ensureThumbDir(context.cacheDir)
+                                                        val thumbDir = ensureThumbDir(context.filesDir)
                                                         val thumbnailFile = File(thumbDir, "thumb_$id.jpg")
                                                         if (extractVideoThumbnail(result.outputFile, thumbnailFile)) {
                                                             VideoHistoryStore.add(

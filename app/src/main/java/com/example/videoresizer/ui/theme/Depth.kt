@@ -63,7 +63,7 @@ import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
-import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.inset
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
@@ -412,7 +412,7 @@ private class RaisedKit(
 // GPU kelas menengah (Infinix/Mali) kewalahan oleh overdraw blur itu di 90/120Hz. Sebelum bake siap, saat animasi tekan, dan untuk
 // elemen raksasa, gambar langsung (kit) tetap dipakai -> tampilan identik, hanya jalurnya yang lebih murah.
 
-private const val BAKE_MAX_BYTES = 2_400_000L
+private const val BAKE_MAX_BYTES = 6_000_000L
 private const val BAKE_BUDGET_BYTES = 48L * 1024L * 1024L
 
 internal data class BakeKey(
@@ -466,7 +466,9 @@ internal object DepthBakery {
 internal fun bakeBitmap(width: Int, height: Int, margin: Int, density: Density, block: DrawScope.() -> Unit): ImageBitmap {
     val image = ImageBitmap(width + 2 * margin, height + 2 * margin)
     CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(image), Size(image.width.toFloat(), image.height.toFloat())) {
-        translate(margin.toFloat(), margin.toFloat()) { block() }
+        // `inset` menggeser asal DAN mengecilkan `size` ke ukuran elemen: kode gambar yang memakai size default (badan, kilau, ornamen,
+        // sumur) tetap menggambar tepat seukuran elemen, bukan seukuran bitmap + margin (bug v88: "bingkai" persegi di tiap ubin).
+        inset(margin.toFloat()) { block() }
     }
     return image
 }
@@ -495,7 +497,7 @@ fun Modifier.depthRaised(
     val hi = h.roundToInt()
     val margin = ceil(d + blur * RING_SPREAD).toInt() + 2
     val bytes = (wi + 2L * margin) * (hi + 2L * margin) * 4L
-    val bakeable = !kit.big && wi > 0 && hi > 0 && bytes <= BAKE_MAX_BYTES
+    val bakeable = wi > 0 && hi > 0 && bytes <= BAKE_MAX_BYTES
     val snapshot = Density(this.density, this.fontScale)
     val key = BakeKey(spec, 0, 0, wi, hi, r.roundToInt(), depth, style, accent.value.toLong(), snapshot.density)
     fun slotFor(variant: Int, pressedValue: Float): BakeSlot = DepthBakery.request(key.copy(variant = variant), bytes) {

@@ -1,5 +1,21 @@
 # Changelog
 
+## Batch 89: perbaikan "bingkai" persegi di tiap ubin (bug bake v88) + kartu besar ikut di-bake
+
+User (setelah v88; screenshot Beranda tema Midnight & Glass): "masih sedikit stuttering dan sekarang malah ada bingkai aneh di setiap ubin!!"
+
+### TEMUAN
+`bakeBitmap` memakai `translate(margin)` sehingga `DrawScope.size` = ukuran bitmap (w+2m x h+2m), bukan ukuran elemen. Kode gambar yang memakai size default (`drawRoundRect(brush = body)`, `WellKit`, `drawCardOrnament`) mengisi seluruh bitmap -> persegi gradien tampak di sekeliling tiap ubin/tombol (terlihat jelas: tepi bawah = margin 27dp). Kartu hero (besar, tak di-bake) bersih -> konsisten. Overdraw berlebih ini juga menambah stutter.
+
+### PERUBAHAN (1 berkas kode `ui/theme/Depth.kt`)
+- `bakeBitmap`: `translate` -> `inset(margin)` (menggeser asal DAN mengecilkan `size` ke ukuran elemen).
+- Batas bake 2,4MB -> 6MB dan elemen "besar" (mis. kartu hero ~4,6MB di 1080p) kini ikut di-bake (mode cincin bayangan dipakai saat bake).
+
+### VERIFIED
+Statis: kurung seimbang; kotlinc 0 galat sintaks; detekt lokal 0. Diagnosa dicocokkan dgn screenshot (hero bersih, ubin/tombol berbingkai).
+### NOT VERIFIED
+Kompilasi Gradle, lint, SpotBugs, tes (run v87/v88 belum ada); di HP: bingkai hilang & kelancaran.
+
 ## Batch 88: BAKE bitmap (elemen depth + latar tema) + pengatur refresh rate adaptif — akhiri stutter di GPU kelas menengah
 
 User (setelah v87; belum ada run baru): "transisi dan bergulir masih stuttering, belum smooth!!" (Infinix).

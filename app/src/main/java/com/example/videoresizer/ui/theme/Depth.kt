@@ -187,11 +187,28 @@ private val NoPress: () -> Float = { 0f }
 /** Skala jarak/radius lapisan KONTAK (bayangan rapat dekat tepi) relatif terhadap lapisan ambient. */
 private const val CONTACT_SCALE = 0.35f
 
-private fun blurPaint(blur: Float): android.graphics.Paint =
-    android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-        style = android.graphics.Paint.Style.FILL
-        maskFilter = BlurMaskFilter(blur.coerceAtLeast(1f), BlurMaskFilter.Blur.NORMAL)
+/** Batch 86: ambang luas (dp^2) elemen "besar": bayangan digambar hanya sebagai CINCIN (bagian dalam tertutup badan opak) dan kilau dibatasi. */
+private const val BIG_AREA_DP2 = 40_000f
+
+/** Batch 86: jangkauan efektif bayangan blur (~3 sigma) relatif terhadap radius blur. */
+private const val RING_SPREAD = 1.8f
+
+/**
+ * Batch 86: Paint blur DIBAGI per radius (hanya segelintir nilai). Sebelumnya tiap elemen membuat 4 Paint + 4 BlurMaskFilter native
+ * (plus 4 lagi utk kit cekung) pada SETIAP rekomposisi (modifier gambar dibuat ulang -> cache ditolak), ~70 chip x 8 objek native per ketukan.
+ * Aman dibagi: gambar hanya di utas utama dan HWUI menyalin state Paint saat merekam tiap operasi.
+ */
+private val blurPaintCache = HashMap<Float, android.graphics.Paint>()
+
+private fun blurPaint(blur: Float): android.graphics.Paint {
+    val radius = blur.coerceAtLeast(1f)
+    return blurPaintCache.getOrPut(radius) {
+        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+            style = android.graphics.Paint.Style.FILL
+            maskFilter = BlurMaskFilter(radius, BlurMaskFilter.Blur.NORMAL)
+        }
     }
+}
 
 private fun cornerRadiusPx(shape: Shape, size: Size, density: Density): Float {
     val radius = (shape as? CornerBasedShape)?.topStart?.toPx(size, density) ?: 0f
@@ -209,9 +226,45 @@ private fun bevelBrush(first: Color, firstAlpha: Float, second: Color, secondAlp
         end = Offset(span, span)
     )
 
-private fun drawShadowLayer(n: android.graphics.Canvas, paint: android.graphics.Paint, color: Color, alpha: Float, shift: Float, w: Float, h: Float, r: Float) {
+private fun drawShadowLayer(
+    n: android.graphics.Canvas,
+    paint: android.graphics.Paint,
+    color: Color,
+    alpha: Float,
+    shift: Float,
+    w: Float,
+    h: Float,
+    r: Float,
+    ring: Float
+) {
     paint.color = color.copy(alpha = alpha.coerceIn(0f, 1f)).toArgb()
-    n.drawRoundRect(shift, shift, w + shift, h + shift, r, r, paint)
+    if (ring <= 0f) {
+        n.drawRoundRect(shift, shift, w + shift, h + shift, r, r, paint)
+        return
+    }
+    // Elemen besar: 4 pita TANPA tumpang-tindih (atas, bawah, kiri, kanan) membentuk cincin; interior (tertutup badan opak) dilewati
+    // lewat clipRect (scissor GPU) -> fragmen blur di interior kartu raksasa tak lagi dihitung tiap frame.
+    drawShadowBand(n, paint, shift, w, h, r, -ring, -ring, w + ring, ring)
+    drawShadowBand(n, paint, shift, w, h, r, -ring, h - ring, w + ring, h + ring)
+    drawShadowBand(n, paint, shift, w, h, r, -ring, ring, ring, h - ring)
+    drawShadowBand(n, paint, shift, w, h, r, w - ring, ring, w + ring, h - ring)
+}
+
+private fun drawShadowBand(
+    n: android.graphics.Canvas,
+    paint: android.graphics.Paint,
+    shift: Float,
+    w: Float,
+    h: Float,
+    r: Float,
+    left: Float,
+    top: Float,
+    right: Float,
+    bottom: Float
+) {
+    n.save()
+    if (n.clipRect(left, top, right, bottom)) n.drawRoundRect(shift, shift, w + shift, h + shift, r, r, paint)
+    n.restore()
 }
 
 /** Peralatan gambar lekuk (cekung) yang di-cache per ukuran: jalur potong, gradien badan, bingkai bayangan dalam, bibir. */
@@ -290,22 +343,29 @@ fun Modifier.depthRaised(
     val r = cornerRadiusPx(shape, this.size, this)
     val d = depth.distance.toPx()
     val blur = depth.blur.toPx()
-    val dark = blurPaint(blur)
-    val light = blurPaint(blur)
-    val darkTight = blurPaint(blur * CONTACT_SCALE)
-    val lightTight = blurPaint(blur * CONTACT_SCALE)
+    val ambient = blurPaint(blur)
+    val contact = blurPaint(blur * CONTACT_SCALE)
+    val big = (w / density) * (h / density) > BIG_AREA_DP2
+    val ring = d + blur * RING_SPREAD
+    val shadowRing = if (big && w > 2f * ring && h > 2f * ring) ring else 0f
     val span = (w + h) / 2f
     val body = Brush.linearGradient(listOf(spec.bodyHi, spec.bodyLo), Offset.Zero, Offset(span, span))
+    // Kartu besar: kilau radial dibatasi ke area dekat sudut kiri-atas (bukan separuh layar yang tak terlihat bedanya).
+    val sheenR = if (big) minOf(maxOf(w, h) * 0.75f, 200.dp.toPx()) else maxOf(w, h) * 0.75f
+    val sheenCx = if (big) minOf(w * 0.28f, 90.dp.toPx()) else w * 0.28f
+    val sheenCy = if (big) minOf(h * 0.22f, 60.dp.toPx()) else h * 0.22f
+    val sheenSize = if (big) Size(minOf(w, sheenCx + sheenR), minOf(h, sheenCy + sheenR)) else Size(w, h)
     val sheen = Brush.radialGradient(
         0f to spec.highlight.copy(alpha = spec.sheenAlpha),
         0.4f to spec.highlight.copy(alpha = spec.sheenAlpha * 0.35f),
         1f to spec.highlight.copy(alpha = 0f),
-        center = Offset(w * 0.28f, h * 0.22f),
-        radius = (maxOf(w, h) * 0.75f).coerceAtLeast(1f)
+        center = Offset(sheenCx, sheenCy),
+        radius = sheenR.coerceAtLeast(1f)
     )
     val rimWidth = 1.5.dp.toPx()
     val rim = bevelBrush(spec.highlight, spec.rimLightAlpha, spec.shadow, spec.rimDarkAlpha, span)
-    val well = WellKit(spec, w, h, r, d, blur, rimWidth)
+    // Batch 86: kit cekung hanya dibangun saat benar-benar ditekan (sebelumnya selalu dibangun utk SETIAP elemen).
+    val well by lazy(LazyThreadSafetyMode.NONE) { WellKit(spec, w, h, r, d, blur, rimWidth) }
     val clip = Path().apply { addRoundRect(RoundRect(0f, 0f, w, h, CornerRadius(r, r))) }
     onDrawBehind {
         val p = pressed().coerceIn(0f, 1f)
@@ -313,14 +373,14 @@ fun Modifier.depthRaised(
         if (k > 0.01f) {
             drawIntoCanvas { c ->
                 val n = c.nativeCanvas
-                drawShadowLayer(n, dark, spec.shadow, spec.shadowAlpha * 0.72f * k, d, w, h, r)
-                drawShadowLayer(n, light, spec.highlight, spec.highlightAlpha * 0.80f * k, -d, w, h, r)
-                drawShadowLayer(n, darkTight, spec.shadow, spec.shadowAlpha * 0.85f * k, d * CONTACT_SCALE, w, h, r)
-                drawShadowLayer(n, lightTight, spec.highlight, spec.highlightAlpha * 0.90f * k, -d * CONTACT_SCALE, w, h, r)
+                drawShadowLayer(n, ambient, spec.shadow, spec.shadowAlpha * 0.72f * k, d, w, h, r, shadowRing)
+                drawShadowLayer(n, ambient, spec.highlight, spec.highlightAlpha * 0.80f * k, -d, w, h, r, shadowRing)
+                drawShadowLayer(n, contact, spec.shadow, spec.shadowAlpha * 0.85f * k, d * CONTACT_SCALE, w, h, r, shadowRing)
+                drawShadowLayer(n, contact, spec.highlight, spec.highlightAlpha * 0.90f * k, -d * CONTACT_SCALE, w, h, r, shadowRing)
             }
         }
         drawRoundRect(brush = body, cornerRadius = CornerRadius(r, r))
-        drawRoundRect(brush = sheen, cornerRadius = CornerRadius(r, r))
+        drawRoundRect(brush = sheen, size = sheenSize, cornerRadius = CornerRadius(r, r))
         if (style != null) drawCardOrnament(style, accent, r, clip)
         if (k > 0.01f) {
             drawRoundRect(

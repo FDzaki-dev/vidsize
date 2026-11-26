@@ -1,5 +1,28 @@
 # Changelog
 
+## Batch 86: Kinerja render depth (stutter di 120Hz) + filter SpotBugs coroutine
+
+User (setelah v85; CI run #26 HIJAU: ArchUnit 12/0, detekt 0, lint 0, 40 tes, kompilator 0; SpotBugs 1 temuan): "sudah unlock 120hz. tapi aplikasinya sendiri ternyata nge frame/stuttering!!"
+
+### TEMUAN (dari source, tanpa profiler)
+1. Anggaran frame turun 16,6ms -> 8,3ms di 120Hz; pekerjaan gambar depth sudah berat sejak v83/v84 (v85 menambah ~35% area bayangan).
+2. `depthRaised` membuat 4 `Paint` + 4 `BlurMaskFilter` native + SELURUH `WellKit` (4 Paint blur lagi, Path, 2 Brush) untuk SETIAP elemen, dan modifier gambar dibuat ulang tiap rekomposisi -> cache ditolak -> ~70 chip x 8 objek native dibangun ulang pada tiap ketukan/rekomposisi layar.
+3. Kartu raksasa (mis. kartu pengaturan ~700dp) menggambar 4 lapis blur di SELURUH area-nya (interior tertutup badan opak, tapi fragmen tetap dihitung) + kilau radial berjari-jari 0,75 x sisi terpanjang -> overdraw berlipat tiap frame gulir.
+4. SpotBugs `SA_FIELD_SELF_ASSIGNMENT` @ Depth.kt:631 = field `L$0` mesin-status korutin hasil kompilator (`DepthSlider$3$1$1`), bukan bug kode.
+
+### PERUBAHAN (1 berkas kode `ui/theme/Depth.kt` + `config/spotbugs/exclude.xml`)
+- `blurPaint` dibagi per radius (cache kecil; HWUI menyalin state Paint saat merekam) -> tanpa alokasi native per elemen/rekomposisi.
+- `WellKit` pada `depthRaised` dibangun LAZY, hanya saat ditekan.
+- Elemen besar (luas > 40.000 dp^2): bayangan digambar sebagai CINCIN (4 pita `clipRect` tanpa tumpang-tindih; interior dilewati lewat scissor) dan kilau radial dibatasi (jari-jari maks 200dp di dekat sudut kiri-atas). Elemen kecil: tampilan identik v85.
+- `exclude.xml`: `SA_FIELD_SELF_ASSIGNMENT` pada `Depth.kt` (noise kompilator terbukti dari elemen logis `$L$0`).
+
+### VERIFIED
+CI run #26 (v85): semua gerbang hijau kecuali 1 temuan SpotBugs (noise di atas) -> API Compose v85 (toggleable/horizontalDrag/dll.) terbukti kompilasi. Statis v86: kurung seimbang; kotlinc 0 galat sintaks; detekt lokal 0.
+### NOT VERIFIED
+Kompilasi Gradle, lint, SpotBugs, tes; **di HP:** apakah stutter hilang (kinerja tak bisa diukur di sandbox), kemiripan visual bayangan cincin dengan v85.
+### Bila masih stutter
+Kirim: merek/tipe HP + kapan terjadi (gulir / ketuk chip / pindah layar). Opsi lanjutan: batasi 90Hz (1 baris di `applyHighestRefreshRate`), cache latar `themeBackdrop` jadi bitmap, kurangi lapisan kontak pada chip.
+
 ## Batch 85: Refresh rate TIDAK lagi terkunci 60Hz + kedalaman neumorfik lebih kuat (bayangan chip tak terpotong, Slider/Switch bergaya timbul-cekung)
 
 User (setelah v84; CI run #25 HIJAU PENUH: ArchUnit 12/0, SpotBugs 0, detekt 0, lint 0, 40 tes, kompilator 0): "not enough. dan app cuman lock di 60hz, tidak bisa lebih!!"

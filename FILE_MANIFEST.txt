@@ -54,7 +54,7 @@ app/src/main/java/com/example/videoresizer/
   SocialPreset.kt                          social-media aspect ratio/bitrate presets (Instagram/TikTok/etc.)
 
 app/src/main/java/com/example/videoresizer/ui/theme/
-  Depth.kt                                 Batch 85: DepthSize +35%, alfa 5 tema naik, depthRowPadding, DepthSwitch, DepthSlider; Batch 84: model realistis (bayangan ambient+kontak, bevel, kilau radial, bibir lekuk); Batch 83: kedalaman neumorfik (DepthSpec per tema, depthRaised/depthInset, DepthCard/DepthChip/DepthIconButton/DepthProgressBar/DepthWell, accentGradient/accentContent, LocalThemeStyle/LocalDepthSpec)
+  Depth.kt                                 Batch 86: blurPaint cache, WellKit lazy, bayangan cincin utk elemen besar; Batch 85: DepthSize +35%, alfa 5 tema naik, depthRowPadding, DepthSwitch, DepthSlider; Batch 84: model realistis (bayangan ambient+kontak, bevel, kilau radial, bibir lekuk); Batch 83: kedalaman neumorfik (DepthSpec per tema, depthRaised/depthInset, DepthCard/DepthChip/DepthIconButton/DepthProgressBar/DepthWell, accentGradient/accentContent, LocalThemeStyle/LocalDepthSpec)
   Ornaments.kt                             Batch 83: ornamen khas tema (themeBackdrop/rememberThemeBackdrop, drawCardOrnament, drawHeroArt)
   Color.kt                                 Batch 83: dasar bernada-tengah + Glass opak; all palettes: Dark/Light/Neon/Paper/Glass (Batch 3) + MidnightBlueGlassGradient Brush
   Theme.kt                                 Batch 83: warna dinamis hanya aksen, withContainers, provider LocalThemeStyle/LocalDepthSpec; Batch 74: SideEffect warna bar opak -> DisposableEffect enableEdgeToEdge(SystemBarStyle.auto { isDark }); AppThemeStyle enum, VideoResizerTheme(), LocalIsGlassTheme (Batch 3)

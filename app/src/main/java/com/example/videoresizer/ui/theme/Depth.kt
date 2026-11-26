@@ -53,13 +53,17 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.RoundRect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.drawscope.CanvasDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
@@ -75,8 +79,15 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import java.util.concurrent.Executors
+import kotlin.math.ceil
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.asCoroutineDispatcher
+import kotlinx.coroutines.launch
 
 /**
  * Batch 83: bahasa kedalaman neumorfisme untuk SEMUA tema. Dua keadaan fisik yang sungguh berbeda, bukan sekadar bayangan:
@@ -200,15 +211,14 @@ private const val RING_SPREAD = 1.8f
  */
 private val blurPaintCache = HashMap<Float, android.graphics.Paint>()
 
-private fun blurPaint(blur: Float): android.graphics.Paint {
-    val radius = blur.coerceAtLeast(1f)
-    return blurPaintCache.getOrPut(radius) {
-        android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
-            style = android.graphics.Paint.Style.FILL
-            maskFilter = BlurMaskFilter(radius, BlurMaskFilter.Blur.NORMAL)
-        }
+/** Paint blur SEGAR (tanpa berbagi) — dipakai utas bake latar belakang; cache bersama di bawah hanya aman di utas utama. */
+private fun newBlurPaint(blur: Float): android.graphics.Paint =
+    android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+        style = android.graphics.Paint.Style.FILL
+        maskFilter = BlurMaskFilter(blur.coerceAtLeast(1f), BlurMaskFilter.Blur.NORMAL)
     }
-}
+
+private fun blurPaint(blur: Float): android.graphics.Paint = blurPaintCache.getOrPut(blur.coerceAtLeast(1f)) { newBlurPaint(blur) }
 
 private fun cornerRadiusPx(shape: Shape, size: Size, density: Density): Float {
     val radius = (shape as? CornerBasedShape)?.topStart?.toPx(size, density) ?: 0f
@@ -275,7 +285,8 @@ private class WellKit(
     private val r: Float,
     private val d: Float,
     blur: Float,
-    private val lipWidth: Float
+    private val lipWidth: Float,
+    paint: (Float) -> android.graphics.Paint
 ) {
     private val clip = Path().apply { addRoundRect(RoundRect(0f, 0f, w, h, CornerRadius(r, r))) }
     private val span = (w + h) / 2f
@@ -287,10 +298,10 @@ private class WellKit(
         addRect(-m, -m, w + m, h + m, android.graphics.Path.Direction.CW)
         addRoundRect(0f, 0f, w, h, r, r, android.graphics.Path.Direction.CW)
     }
-    private val dark = blurPaint(blur)
-    private val light = blurPaint(blur)
-    private val darkTight = blurPaint(blur * CONTACT_SCALE)
-    private val lightTight = blurPaint(blur * CONTACT_SCALE)
+    private val dark = paint(blur)
+    private val light = dark
+    private val darkTight = paint(blur * CONTACT_SCALE)
+    private val lightTight = darkTight
 
     private fun innerLayer(n: android.graphics.Canvas, paint: android.graphics.Paint, color: Color, alpha: Float, shift: Float) {
         paint.color = color.copy(alpha = alpha.coerceIn(0f, 1f)).toArgb()
@@ -325,10 +336,146 @@ private class WellKit(
 }
 
 /**
+ * Kit gambar TIMBUL: semua objek (paint, brush, path) dibangun SEKALI per ukuran. `draw` identik untuk gambar langsung (GPU,
+ * dipakai saat animasi tekan / sebelum bake siap / elemen raksasa) maupun untuk bake ke bitmap (CPU, utas latar).
+ */
+private class RaisedKit(
+    private val spec: DepthSpec,
+    private val w: Float,
+    private val h: Float,
+    private val r: Float,
+    private val d: Float,
+    private val blur: Float,
+    private val style: AppThemeStyle?,
+    private val accent: Color,
+    density: Density,
+    paint: (Float) -> android.graphics.Paint
+) {
+    private val ambient = paint(blur)
+    private val contact = paint(blur * CONTACT_SCALE)
+    val big = (w / density.density) * (h / density.density) > BIG_AREA_DP2
+    private val ring = d + blur * RING_SPREAD
+    private val shadowRing = if (big && w > 2f * ring && h > 2f * ring) ring else 0f
+    private val span = (w + h) / 2f
+    private val body = Brush.linearGradient(listOf(spec.bodyHi, spec.bodyLo), Offset.Zero, Offset(span, span))
+    // Kartu besar: kilau radial dibatasi ke area dekat sudut kiri-atas (bukan separuh layar yang tak terlihat bedanya).
+    private val sheenR = if (big) minOf(maxOf(w, h) * 0.75f, with(density) { 200.dp.toPx() }) else maxOf(w, h) * 0.75f
+    private val sheenCx = if (big) minOf(w * 0.28f, with(density) { 90.dp.toPx() }) else w * 0.28f
+    private val sheenCy = if (big) minOf(h * 0.22f, with(density) { 60.dp.toPx() }) else h * 0.22f
+    private val sheenSize = if (big) Size(minOf(w, sheenCx + sheenR), minOf(h, sheenCy + sheenR)) else Size(w, h)
+    private val sheen = Brush.radialGradient(
+        0f to spec.highlight.copy(alpha = spec.sheenAlpha),
+        0.4f to spec.highlight.copy(alpha = spec.sheenAlpha * 0.35f),
+        1f to spec.highlight.copy(alpha = 0f),
+        center = Offset(sheenCx, sheenCy),
+        radius = sheenR.coerceAtLeast(1f)
+    )
+    private val rimWidth = with(density) { 1.5.dp.toPx() }
+    private val rim = bevelBrush(spec.highlight, spec.rimLightAlpha, spec.shadow, spec.rimDarkAlpha, span)
+    // Kit cekung hanya dibangun saat benar-benar ditekan.
+    private val well by lazy(LazyThreadSafetyMode.NONE) { WellKit(spec, w, h, r, d, blur, rimWidth, paint) }
+    private val clip = Path().apply { addRoundRect(RoundRect(0f, 0f, w, h, CornerRadius(r, r))) }
+
+    fun draw(scope: DrawScope, p: Float) {
+        with(scope) {
+            val k = 1f - p
+            if (k > 0.01f) {
+                drawIntoCanvas { c ->
+                    val n = c.nativeCanvas
+                    drawShadowLayer(n, ambient, spec.shadow, spec.shadowAlpha * 0.72f * k, d, w, h, r, shadowRing)
+                    drawShadowLayer(n, ambient, spec.highlight, spec.highlightAlpha * 0.80f * k, -d, w, h, r, shadowRing)
+                    drawShadowLayer(n, contact, spec.shadow, spec.shadowAlpha * 0.85f * k, d * CONTACT_SCALE, w, h, r, shadowRing)
+                    drawShadowLayer(n, contact, spec.highlight, spec.highlightAlpha * 0.90f * k, -d * CONTACT_SCALE, w, h, r, shadowRing)
+                }
+            }
+            drawRoundRect(brush = body, cornerRadius = CornerRadius(r, r))
+            drawRoundRect(brush = sheen, size = sheenSize, cornerRadius = CornerRadius(r, r))
+            if (style != null) drawCardOrnament(style, accent, r, clip)
+            if (k > 0.01f) {
+                drawRoundRect(
+                    brush = rim,
+                    topLeft = Offset(rimWidth / 2f, rimWidth / 2f),
+                    size = Size((w - rimWidth).coerceAtLeast(1f), (h - rimWidth).coerceAtLeast(1f)),
+                    cornerRadius = CornerRadius((r - rimWidth / 2f).coerceAtLeast(0f)),
+                    style = Stroke(width = rimWidth),
+                    alpha = k
+                )
+            }
+            if (p > 0.01f) well.draw(this, p)
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Batch 88: BAKE. Elemen statis (chip, kartu sedang, sumur) dirender SEKALI ke bitmap di utas latar belakang (CPU), lalu tiap frame
+// cukup 1 `drawImage` (quad bertekstur) -- bukan 4 draw blur + gradien + kilau + bevel (~8 draw bershader berat) per elemen.
+// GPU kelas menengah (Infinix/Mali) kewalahan oleh overdraw blur itu di 90/120Hz. Sebelum bake siap, saat animasi tekan, dan untuk
+// elemen raksasa, gambar langsung (kit) tetap dipakai -> tampilan identik, hanya jalurnya yang lebih murah.
+
+private const val BAKE_MAX_BYTES = 2_400_000L
+private const val BAKE_BUDGET_BYTES = 48L * 1024L * 1024L
+
+internal data class BakeKey(
+    val spec: DepthSpec,
+    val kind: Int,
+    val variant: Int,
+    val w: Int,
+    val h: Int,
+    val r: Int,
+    val depth: DepthSize,
+    val style: AppThemeStyle?,
+    val accentBits: Long,
+    val density: Float
+)
+
+/** Wadah hasil bake; `image` adalah state Compose sehingga gambar elemen otomatis beralih begitu bitmap siap. */
+internal class BakeSlot(val bytes: Long) {
+    var image: ImageBitmap? by mutableStateOf(null)
+}
+
+internal object DepthBakery {
+    private val slots = LinkedHashMap<Any, BakeSlot>(64, 0.75f, true)
+    private var totalBytes = 0L
+    private val worker = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "depth-bake").apply {
+            priority = Thread.NORM_PRIORITY - 1
+            isDaemon = true
+        }
+    }.asCoroutineDispatcher()
+    private val scope = CoroutineScope(SupervisorJob() + worker)
+
+    /** Hanya dipanggil dari utas utama. `render` berjalan di utas latar; kegagalan/OOM -> `image` tetap null (gambar langsung). */
+    fun request(key: Any, bytes: Long, render: () -> ImageBitmap): BakeSlot {
+        slots[key]?.let { return it }
+        val oldest = slots.entries.iterator()
+        while (totalBytes + bytes > BAKE_BUDGET_BYTES && oldest.hasNext()) {
+            val evicted = oldest.next().value
+            totalBytes -= evicted.bytes
+            evicted.image = null
+            oldest.remove()
+        }
+        val slot = BakeSlot(bytes)
+        slots[key] = slot
+        totalBytes += bytes
+        scope.launch { slot.image = runCatching(render).getOrNull() }
+        return slot
+    }
+}
+
+/** Menggambar `block` (koordinat lokal 0..w, 0..h) ke bitmap berukuran (w + 2*margin) x (h + 2*margin). */
+internal fun bakeBitmap(width: Int, height: Int, margin: Int, density: Density, block: DrawScope.() -> Unit): ImageBitmap {
+    val image = ImageBitmap(width + 2 * margin, height + 2 * margin)
+    CanvasDrawScope().draw(density, LayoutDirection.Ltr, Canvas(image), Size(image.width.toFloat(), image.height.toFloat())) {
+        translate(margin.toFloat(), margin.toFloat()) { block() }
+    }
+    return image
+}
+
+/**
  * Permukaan TIMBUL. `pressed` (0..1, dibaca saat menggambar) melebur ke keadaan cekung — tombol "tertekan ke dalam".
  * `style` != null menambah ornamen kartu khas tema (lihat [drawCardOrnament]).
  * Lapisan gambar: bayangan ambient + kontak (gelap kanan-bawah) dan sorot ambient + kontak (terang kiri-atas) -> badan
- * gradien 45 derajat -> kilau radial -> ornamen -> tepi bevel.
+ * gradien 45 derajat -> kilau radial -> ornamen -> tepi bevel. Diam (p=0) atau tertekan penuh (p=1) -> bitmap hasil bake.
  */
 fun Modifier.depthRaised(
     spec: DepthSpec,
@@ -343,70 +490,61 @@ fun Modifier.depthRaised(
     val r = cornerRadiusPx(shape, this.size, this)
     val d = depth.distance.toPx()
     val blur = depth.blur.toPx()
-    val ambient = blurPaint(blur)
-    val contact = blurPaint(blur * CONTACT_SCALE)
-    val big = (w / density) * (h / density) > BIG_AREA_DP2
-    val ring = d + blur * RING_SPREAD
-    val shadowRing = if (big && w > 2f * ring && h > 2f * ring) ring else 0f
-    val span = (w + h) / 2f
-    val body = Brush.linearGradient(listOf(spec.bodyHi, spec.bodyLo), Offset.Zero, Offset(span, span))
-    // Kartu besar: kilau radial dibatasi ke area dekat sudut kiri-atas (bukan separuh layar yang tak terlihat bedanya).
-    val sheenR = if (big) minOf(maxOf(w, h) * 0.75f, 200.dp.toPx()) else maxOf(w, h) * 0.75f
-    val sheenCx = if (big) minOf(w * 0.28f, 90.dp.toPx()) else w * 0.28f
-    val sheenCy = if (big) minOf(h * 0.22f, 60.dp.toPx()) else h * 0.22f
-    val sheenSize = if (big) Size(minOf(w, sheenCx + sheenR), minOf(h, sheenCy + sheenR)) else Size(w, h)
-    val sheen = Brush.radialGradient(
-        0f to spec.highlight.copy(alpha = spec.sheenAlpha),
-        0.4f to spec.highlight.copy(alpha = spec.sheenAlpha * 0.35f),
-        1f to spec.highlight.copy(alpha = 0f),
-        center = Offset(sheenCx, sheenCy),
-        radius = sheenR.coerceAtLeast(1f)
-    )
-    val rimWidth = 1.5.dp.toPx()
-    val rim = bevelBrush(spec.highlight, spec.rimLightAlpha, spec.shadow, spec.rimDarkAlpha, span)
-    // Batch 86: kit cekung hanya dibangun saat benar-benar ditekan (sebelumnya selalu dibangun utk SETIAP elemen).
-    val well by lazy(LazyThreadSafetyMode.NONE) { WellKit(spec, w, h, r, d, blur, rimWidth) }
-    val clip = Path().apply { addRoundRect(RoundRect(0f, 0f, w, h, CornerRadius(r, r))) }
+    val kit = RaisedKit(spec, w, h, r, d, blur, style, accent, this, ::blurPaint)
+    val wi = w.roundToInt()
+    val hi = h.roundToInt()
+    val margin = ceil(d + blur * RING_SPREAD).toInt() + 2
+    val bytes = (wi + 2L * margin) * (hi + 2L * margin) * 4L
+    val bakeable = !kit.big && wi > 0 && hi > 0 && bytes <= BAKE_MAX_BYTES
+    val snapshot = Density(this.density, this.fontScale)
+    val key = BakeKey(spec, 0, 0, wi, hi, r.roundToInt(), depth, style, accent.value.toLong(), snapshot.density)
+    fun slotFor(variant: Int, pressedValue: Float): BakeSlot = DepthBakery.request(key.copy(variant = variant), bytes) {
+        bakeBitmap(wi, hi, margin, snapshot) {
+            RaisedKit(spec, w, h, r, d, blur, style, accent, snapshot, ::newBlurPaint).draw(this, pressedValue)
+        }
+    }
+    val restSlot by lazy(LazyThreadSafetyMode.NONE) { slotFor(0, 0f) }
+    val pressSlot by lazy(LazyThreadSafetyMode.NONE) { slotFor(1, 1f) }
     onDrawBehind {
         val p = pressed().coerceIn(0f, 1f)
-        val k = 1f - p
-        if (k > 0.01f) {
-            drawIntoCanvas { c ->
-                val n = c.nativeCanvas
-                drawShadowLayer(n, ambient, spec.shadow, spec.shadowAlpha * 0.72f * k, d, w, h, r, shadowRing)
-                drawShadowLayer(n, ambient, spec.highlight, spec.highlightAlpha * 0.80f * k, -d, w, h, r, shadowRing)
-                drawShadowLayer(n, contact, spec.shadow, spec.shadowAlpha * 0.85f * k, d * CONTACT_SCALE, w, h, r, shadowRing)
-                drawShadowLayer(n, contact, spec.highlight, spec.highlightAlpha * 0.90f * k, -d * CONTACT_SCALE, w, h, r, shadowRing)
-            }
+        val baked = when {
+            !bakeable -> null
+            p <= 0.01f -> restSlot.image
+            p >= 0.99f -> pressSlot.image
+            else -> null
         }
-        drawRoundRect(brush = body, cornerRadius = CornerRadius(r, r))
-        drawRoundRect(brush = sheen, size = sheenSize, cornerRadius = CornerRadius(r, r))
-        if (style != null) drawCardOrnament(style, accent, r, clip)
-        if (k > 0.01f) {
-            drawRoundRect(
-                brush = rim,
-                topLeft = Offset(rimWidth / 2f, rimWidth / 2f),
-                size = Size((w - rimWidth).coerceAtLeast(1f), (h - rimWidth).coerceAtLeast(1f)),
-                cornerRadius = CornerRadius((r - rimWidth / 2f).coerceAtLeast(0f)),
-                style = Stroke(width = rimWidth),
-                alpha = k
-            )
-        }
-        if (p > 0.01f) well.draw(this, p)
+        if (baked != null) drawImage(baked, Offset(-margin.toFloat(), -margin.toFloat())) else kit.draw(this, p)
     }
 }
 
-/** Permukaan CEKUNG (lekuk): jalur tab, ubin ikon, bak progres, keadaan terpilih. */
+/** Permukaan CEKUNG (lekuk): jalur tab, ubin ikon, bak progres, keadaan terpilih. Dibake seperti [depthRaised]. */
 fun Modifier.depthInset(
     spec: DepthSpec,
     shape: Shape,
     depth: DepthSize = DepthSize.WELL
 ): Modifier = this.drawWithCache {
-    val kit = WellKit(
-        spec, this.size.width, this.size.height, cornerRadiusPx(shape, this.size, this),
-        depth.distance.toPx(), depth.blur.toPx(), 1.5.dp.toPx()
-    )
-    onDrawBehind { kit.draw(this, 1f) }
+    val w = this.size.width
+    val h = this.size.height
+    val r = cornerRadiusPx(shape, this.size, this)
+    val d = depth.distance.toPx()
+    val blur = depth.blur.toPx()
+    val lip = 1.5.dp.toPx()
+    val kit = WellKit(spec, w, h, r, d, blur, lip, ::blurPaint)
+    val wi = w.roundToInt()
+    val hi = h.roundToInt()
+    val bytes = wi.toLong() * hi * 4L
+    val snapshot = Density(this.density, this.fontScale)
+    val slot = if (wi > 0 && hi > 0 && bytes <= BAKE_MAX_BYTES) {
+        DepthBakery.request(BakeKey(spec, 1, 0, wi, hi, r.roundToInt(), depth, null, 0L, snapshot.density), bytes) {
+            bakeBitmap(wi, hi, 0, snapshot) { WellKit(spec, w, h, r, d, blur, lip, ::newBlurPaint).draw(this, 1f) }
+        }
+    } else {
+        null
+    }
+    onDrawBehind {
+        val baked = slot?.image
+        if (baked != null) drawImage(baked) else kit.draw(this, 1f)
+    }
 }
 
 /** Kartu neumorfik statis. `inset = true` -> cekung (mis. entri terpilih). Pengganti `Card` (tanpa warna/bayangan Material). */

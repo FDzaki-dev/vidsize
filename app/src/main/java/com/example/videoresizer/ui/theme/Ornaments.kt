@@ -5,7 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -21,7 +21,11 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.unit.Density
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 import kotlin.random.Random
 
 /*
@@ -50,8 +54,50 @@ fun rememberThemeBackdrop(): ThemeBackdrop {
     }
 }
 
-/** Menggambar latar tema (warna/gradien dasar + ornamen) di belakang layar. */
-fun Modifier.themeBackdrop(backdrop: ThemeBackdrop): Modifier = this.drawBehind { drawThemeBackdrop(backdrop) }
+private const val BACKDROP_MAX_BYTES = 24L * 1024L * 1024L
+
+private data class BackdropKey(val style: AppThemeStyle, val bg: Color, val accent: Color, val accent2: Color, val w: Int, val h: Int)
+
+private class BackdropBake(val style: AppThemeStyle, val bg: Color, val accent: Color, val accent2: Color, val w: Int, val h: Int, val slot: BakeSlot)
+
+/** Satu entri aktif: dipakai ulang untuk semua layar selama tema sama dan ukuran yang diminta tidak lebih besar (~5%) dari hasil bake. */
+private var activeBackdropBake: BackdropBake? = null
+
+private fun obtainBackdropBake(b: ThemeBackdrop, w: Int, h: Int, density: Density): BackdropBake {
+    val cur = activeBackdropBake
+    if (cur != null && cur.style == b.style && cur.bg == b.bg && cur.accent == b.accent && cur.accent2 == b.accent2 &&
+        w <= cur.w * 1.05f && h <= cur.h * 1.05f
+    ) {
+        return cur
+    }
+    val key = BackdropKey(b.style, b.bg, b.accent, b.accent2, w, h)
+    val slot = DepthBakery.request(key, w.toLong() * h * 4L) { bakeBitmap(w, h, 0, density) { drawThemeBackdrop(b) } }
+    return BackdropBake(b.style, b.bg, b.accent, b.accent2, w, h, slot).also { activeBackdropBake = it }
+}
+
+/**
+ * Menggambar latar tema (warna/gradien dasar + ornamen) di belakang layar.
+ * Batch 88: latar statis dirender SEKALI ke bitmap (utas latar) dan dipakai bersama semua layar -> 1 quad bertekstur per frame,
+ * bukan 3 gradien radial layar-penuh + puluhan lingkaran/garis/titik yang digambar ulang tiap frame gulir/transisi.
+ * Sebelum bitmap siap (atau bila terlalu besar) digambar langsung seperti sebelumnya.
+ */
+fun Modifier.themeBackdrop(backdrop: ThemeBackdrop): Modifier = this.drawWithCache {
+    val wi = size.width.roundToInt()
+    val hi = size.height.roundToInt()
+    val baked = if (wi > 0 && hi > 0 && wi.toLong() * hi * 4L <= BACKDROP_MAX_BYTES) {
+        obtainBackdropBake(backdrop, wi, hi, Density(this.density, this.fontScale))
+    } else {
+        null
+    }
+    onDrawBehind {
+        val image = baked?.slot?.image
+        if (image != null) {
+            drawImage(image, IntOffset.Zero, IntSize(image.width, image.height), IntOffset.Zero, IntSize(wi, hi))
+        } else {
+            drawThemeBackdrop(backdrop)
+        }
+    }
+}
 
 private fun DrawScope.drawThemeBackdrop(b: ThemeBackdrop) {
     if (b.style == AppThemeStyle.MIDNIGHT_BLUE_GLASS) drawRect(MidnightBlueGlassGradient) else drawRect(b.bg)

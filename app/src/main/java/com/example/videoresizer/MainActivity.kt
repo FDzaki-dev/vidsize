@@ -250,6 +250,51 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         applyHighestRefreshRate()
+        jankyFrames = 0
+        sampledFrames = 0
+        window.addOnFrameMetricsAvailableListener(frameListener, frameHandler)
+    }
+
+    override fun onPause() {
+        window.removeOnFrameMetricsAvailableListener(frameListener)
+        super.onPause()
+    }
+
+    // Batch 88: pengatur refresh rate adaptif. Meminta 120Hz di GPU yang hanya sanggup ~60fps membuat irama frame TIDAK RATA
+    // (120/60 bergantian = tersendat). Bila >= GOVERNOR_JANK_PERCENT% dari GOVERNOR_WINDOW frame berturut-turut melewati tenggatnya
+    // (TOTAL_DURATION > DEADLINE, API 31), turunkan batas ke refresh rate berikutnya yang lebih rendah (resolusi sama) — irama
+    // konsisten lebih baik daripada 120Hz yang patah-patah. Hanya turun (tanpa naik lagi) sampai app dibuka ulang.
+    private var refreshCapHz = Float.MAX_VALUE
+    private var jankyFrames = 0
+    private var sampledFrames = 0
+    private val frameHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private val frameListener = android.view.Window.OnFrameMetricsAvailableListener { _, metrics, _ -> onFrameMetrics(metrics) }
+
+    private fun onFrameMetrics(metrics: android.view.FrameMetrics) {
+        if (metrics.getMetric(android.view.FrameMetrics.FIRST_DRAW_FRAME) != 0L) return
+        sampledFrames++
+        if (metrics.getMetric(android.view.FrameMetrics.TOTAL_DURATION) > metrics.getMetric(android.view.FrameMetrics.DEADLINE)) {
+            jankyFrames++
+        }
+        if (sampledFrames < GOVERNOR_WINDOW) return
+        val janky = jankyFrames
+        sampledFrames = 0
+        jankyFrames = 0
+        if (janky * 100 >= GOVERNOR_WINDOW * GOVERNOR_JANK_PERCENT) lowerRefreshCap()
+    }
+
+    @Suppress("USELESS_ELVIS")
+    private fun lowerRefreshCap() {
+        val currentDisplay = display ?: return
+        val active = currentDisplay.mode
+        val lower = currentDisplay.supportedModes
+            .filter { it.physicalWidth == active.physicalWidth && it.physicalHeight == active.physicalHeight }
+            .map { it.refreshRate }
+            .filter { it < currentDisplay.refreshRate - 1f }
+            .maxOrNull()
+            ?: return
+        refreshCapHz = lower
+        applyHighestRefreshRate()
     }
 
     /**
@@ -265,6 +310,7 @@ class MainActivity : ComponentActivity() {
         val active = currentDisplay.mode
         val best = currentDisplay.supportedModes
             .filter { it.physicalWidth == active.physicalWidth && it.physicalHeight == active.physicalHeight }
+            .filter { it.refreshRate <= refreshCapHz + 0.5f }
             .maxByOrNull { it.refreshRate }
             ?: return
         val params = window.attributes
@@ -381,6 +427,8 @@ private val IosPushEasing = CubicBezierEasing(0.32f, 0.72f, 0f, 1f)
 private const val IOS_PUSH_MS = 420
 private const val IOS_POP_MS = 360
 private const val LOG_TAG = "VidsizeMain"
+private const val GOVERNOR_WINDOW = 120
+private const val GOVERNOR_JANK_PERCENT = 30
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable

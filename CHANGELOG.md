@@ -1,5 +1,24 @@
 # Changelog
 
+## Batch 88: BAKE bitmap (elemen depth + latar tema) + pengatur refresh rate adaptif — akhiri stutter di GPU kelas menengah
+
+User (setelah v87; belum ada run baru): "transisi dan bergulir masih stuttering, belum smooth!!" (Infinix).
+
+### TEMUAN
+Setelah layar tersembunyi tak digambar (v87), beban per frame yang tersisa = overdraw bershader berat: tiap chip/kartu ~8 draw (4 blur + gradien badan + kilau + bevel), tiap sumur 4 blur-path, plus latar tema (3 gradien radial layar-penuh + puluhan ornamen) digambar ULANG tiap frame gulir/transisi. GPU Mali kelas menengah tak sanggup di 90/120Hz; selain itu 120Hz di GPU yang hanya sanggup ~60fps membuat irama frame tak rata (120/60 bergantian).
+
+### PERUBAHAN (3 berkas kode: `ui/theme/Depth.kt`, `ui/theme/Ornaments.kt`, `MainActivity.kt`)
+- **Bake elemen:** `depthRaised`/`depthInset` merender tampilan statis SEKALI ke `ImageBitmap` di utas latar (`DepthBakery`, 1 thread, LRU 48MB, kunci = spec+ukuran+radius+depth+style+aksen+varian), lalu tiap frame cukup 1 `drawImage`. Varian diam (p=0) dan tertekan penuh (p=1, mis. chip terpilih) di-bake; animasi tekan (0<p<1), bake belum siap, dan elemen raksasa (>40.000dp²/>2,4MB) tetap digambar langsung (`RaisedKit`/`WellKit`, kode sama -> tampilan identik).
+- **Bake latar:** `themeBackdrop` dirender sekali ke bitmap (dibagi semua layar; dipakai ulang bila tema sama & ukuran ≤ +5%), digambar 1 quad per frame.
+- **Governor refresh rate:** `FrameMetrics` (API 31: `TOTAL_DURATION` > `DEADLINE`); bila ≥30% dari 120 frame berturut-turut terlambat, batas refresh rate turun ke tingkat berikutnya (120->90->60, resolusi sama) — irama konsisten lebih baik daripada 120Hz patah-patah. Hanya turun sampai app dibuka ulang.
+
+### VERIFIED
+Statis: kurung seimbang di 3 berkas; kotlinc 0 galat sintaks; detekt lokal 0 temuan; aturan ArchUnit `ui.theme` mandiri tak tersentuh.
+### NOT VERIFIED
+Kompilasi Gradle (API baru: `CanvasDrawScope.draw`, `ImageBitmap(w,h)`, `FrameMetrics.DEADLINE`), lint, SpotBugs, tes; **di HP Infinix:** kelancaran gulir/transisi, kemiripan visual bake vs gambar langsung, apakah governor menurunkan refresh rate.
+### Bila masih berat
+Kirim run CI + keterangan: apakah refresh rate turun ke 90/60 sendiri? Opsi lanjutan: bake bayangan kartu raksasa (nine-patch), kurangi lapisan, fling ala iOS.
+
 ## Batch 87: Gulir/transisi lebih mulus di HP kelas menengah (Infinix) — layar tersembunyi tak lagi digambar + push iOS asli
 
 User (setelah v86; CI run #27 HIJAU PENUH: ArchUnit 12/0, SpotBugs 0, detekt 0, lint 0, 40 tes, kompilator 0): "not enough. device Infinix. gulir, pindah layar/transisi gak kayak iOS"

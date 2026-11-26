@@ -511,6 +511,7 @@ the GitHub Actions route above is much faster in practice.
   project's Media3 version is ever bumped. If a build error appears around the watermark
   specifically, `createStaticBitmapOverlay`'s parameter order/types are the next thing
   to check — Android Studio's error will name the exact expected signature.
+- **Batch 84:** kedalaman lebih realistis — `Depth.kt`: bayangan berlapis (ambient + kontak), badan gradien 45 derajat + kilau radial, tepi bevel, lekuk dgn bibir; tuning di `DepthSpec`/`DepthSize`. `exclude.xml` menyaring NP_PARAMETER x `Depth.kt`/`Ornaments.kt` (artefak `$composer`).
 - **Batch 83:** kedalaman neumorfik di semua tema — `ui/theme/Depth.kt` (`depthRaised` timbul, `depthInset` cekung, `DepthCard/Chip/IconButton/ProgressBar/Well`; sorot+bayangan dikalibrasi per tema, tidak bergantung warna dinamis) dan `ui/theme/Ornaments.kt` (latar + motif kartu + seni hero khas tiap tema, Canvas murni). Glass kini permukaan opak (terbaca). Warna dinamis wallpaper hanya untuk aksen. Mengubah tampilan: sesuaikan `DepthSpec`/`DepthSize` di Depth.kt.
 - **Batch 82:** hierarki UI — Beranda = header (judul besar + aksi Update/Tema bulat) -> kartu hero Resize/Edit Video -> kicker
   "ALAT LAINNYA" -> grid 2x2 (Kompres/GIF/Batch/Riwayat; aksen warna tetap per alat, bukan dari tema). Alat memakai `ToolTopBar`

@@ -1,5 +1,33 @@
 # Changelog
 
+## Batch 84: Kedalaman neumorfik lebih REALISTIS (bayangan berlapis, bevel tepi, kilau cembung, bibir lekuk) + filter SpotBugs berkas baru
+
+User (setelah v83; CI run #24): "depth efek masih kurang realistis!!"
+
+### TEMUAN (akar "kurang realistis", dari kode Depth.kt v83)
+1. **Satu pasang bayangan saja** (ambient lebar): objek tampak "stiker melayang/berbayang kabur", tanpa bayangan KONTAK rapat di tepi — ciri utama benda nyata.
+2. **Tak ada tepi (bevel):** permukaan timbul tak punya garis sorot kiri-atas / garis gelap kanan-bawah -> tepi "lumer" ke latar.
+3. **Badan datar-cembung:** gradien memakai diagonal sudut-ke-sudut -> pada elemen lebar (dok, tab) gradien nyaris horizontal (arah cahaya tak konsisten); tak ada kilau radial -> tak terasa cembung/bantal.
+4. **Lekuk tanpa bibir:** bayangan dalam saja; tak ada tepi gelap kiri-atas / terang kanan-bawah yang membuat lekuk terasa "terukir".
+5. **CI run #24 (v83):** semua gerbang hijau kecuali SpotBugs 10x `NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE` (`$composer` di fungsi @Composable `Depth.kt` x9 + `Ornaments.kt` x1).
+
+### PERUBAHAN (3 berkas: `Depth.kt`, `Color.kt`, `config/spotbugs/exclude.xml`; tanpa dependensi/izin; API publik Depth* TIDAK berubah -> tak ada edit di MainActivity)
+- **`Depth.kt` — model fisik baru** (dikalibrasi lewat simulasi gambar 5 tema di sandbox):
+  - **Timbul:** 4 lapisan bayangan = ambient (gelap kanan-bawah, sorot kiri-atas, lebar) + KONTAK (offset/radius x0.35, lebih pekat); badan gradien **45 derajat tetap** (`span=(w+h)/2`, arah cahaya konsisten utk semua rasio); **kilau radial** kiri-atas; **tepi bevel 1.5dp** (sorot kiri-atas memudar ke tengah, gelap kanan-bawah).
+  - **Cekung:** badan gradien 45 derajat, 4 lapisan bayangan dalam (ambient+kontak, gelap kiri-atas / terang kanan-bawah) + **bibir** 1.5dp (gelap kiri-atas, terang kanan-bawah).
+  - Tekan: bayangan+bevel memudar saat badan melebur ke lekuk (animasi dibaca di fase gambar, tanpa rekomposisi).
+  - `DepthSpec` +5 parameter per tema (`sheenAlpha, rimLightAlpha, rimDarkAlpha, lipDarkAlpha, lipLightAlpha`); nilai warna/alfa 5 tema disetel ulang. `DepthSize.SMALL` = 3dp/6.5dp.
+- **`Color.kt`:** aksen dinaikkan kontrasnya terhadap badan baru: Dark `#B6A2FF` (4.9:1), Paper `#9A3519` (4.4:1), Glass `#8FBAFF` (4.8:1); teks utama >= 8:1, muted >= 4.6:1 di semua badan (dihitung WCAG).
+- **`config/spotbugs/exclude.xml`:** filter SEMPIT `NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE` x `Depth.kt` & `Ornaments.kt` (bukti run #24: 10/10 titik = `#$composer` pada deklarasi fungsi/lambda @Composable; tak ada parameter `T?` di sumber; pola identik Batch 65). Jalur audit: run berikutnya SpotBugs 10 -> 0.
+
+### VERIFIED
+- CI run #24 (v83): ArchUnit 12/0, detekt 0, lint 0, 40 tes, peringatan kompilator 0, kompilasi Compose OK; SpotBugs 10 (diatasi di atas).
+- Statis (sandbox): kurung seimbang `Depth.kt`; `kotlinc` 0 galat parse (sisa = unresolved reference/inferensi, pola sama dgn batch sebelumnya); `exclude.xml` XML valid; simulasi gambar model lama vs baru (Pillow) -> baru jelas lebih berdimensi di 5 tema (kalibrasi, BUKAN bukti tampilan Compose).
+### NOT VERIFIED
+Kompilasi Gradle/Compose atas `Depth.kt` baru (`Brush.linearGradient/radialGradient(vararg Pair)`, `Stroke`, `drawRoundRect(style=Stroke)`), hilangnya 10 temuan SpotBugs, ArchUnit/detekt/lint/tes; **tampilan di HP** (BlurMaskFilter di GPU nyata: kekuatan bayangan/bevel per tema, kinerja gulir dgn 4 lapisan bayangan per elemen). Bila bayangan terlalu lemah/kuat: tuning `DepthSpec` (alfa) & `DepthSize` di Depth.kt.
+### DAMPAK / CATATAN
+- Belum diberi kedalaman: `VideoPickerScreen`, dialog, `OutlinedTextField`, `Slider`, `Switch` (dicatat di RESUME POINT).
+
 ## Batch 83: Neumorfisme sungguhan (timbul + cekung) di SEMUA tema, Glass buram & terbaca, ornamen khas tema diperbanyak
 
 User (setelah v82; CI run #23 hijau penuh — Batch 82 + fix SpotBugs terverifikasi CI): "1. glass theme masih banyak yang tembus pandang, readability minus banget. 2. semua tema diberi depth style ala Neumorphism, real cekung timbul, bukan permainan shadow murahan yang nyatu dengan background. 3. ornamen khas tiap tema dibanyakin biar gak sepi."

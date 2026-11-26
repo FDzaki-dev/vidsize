@@ -58,6 +58,13 @@
     menandai bug nyata di sumber Kotlin; baris :0 = metode sintetis tanpa nomor baris (pola sama, tidak diperiksa bytecode-nya).
     Disaring SEMPIT: pola ini x berkas di atas. AppUpdater.kt (2 titik :0, BUKAN berkas Compose) SENGAJA tidak disaring
     saat itu (kemudian dibaca dan disaring di Batch 67, lihat entri Batch 67 di atas).
+  - Batch 84 (bukti laporan run #24 = v83; 10/10 titik terbaca): NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE x10 pada BERKAS BARU
+    `Depth.kt` (x9: DepthCard x2, DepthChip, lambda komposabel `DepthChip$2$1$1.invoke`, DepthIconButton, DepthProgressBar, DepthWell,
+    accentGradient, accentContent) dan `Ornaments.kt` (x1: rememberThemeBackdrop). SEMUA berparameter `#$composer` = argumen sintetis
+    `Composer` (@Nullable) yang disisipkan kompilator Compose pada deklarasi fungsi/lambda @Composable (10/10 cocok dgn jumlah fungsi/lambda
+    komposabel berparameter di kedua berkas; tak ada parameter `T?` yang ditulis di sumber kedua berkas — grep `?` pada parameter = kosong).
+    Pola identik dgn Batch 65 (MainActivity.kt/VideoPickerScreen.kt/Theme.kt). Disaring SEMPIT: pola ini x `Depth.kt` & `Ornaments.kt`.
+    Jalur audit: SpotBugs run berikutnya harus 10 -> 0.
 -->
 <FindBugsFilter>
   <Match>
@@ -86,6 +93,14 @@
   <Match>
     <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
     <Source name="Theme.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+    <Source name="Depth.kt"/>
+  </Match>
+  <Match>
+    <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
+    <Source name="Ornaments.kt"/>
   </Match>
   <Match>
     <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>

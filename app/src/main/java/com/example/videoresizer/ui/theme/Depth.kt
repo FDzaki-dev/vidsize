@@ -43,6 +43,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.lerp
@@ -75,51 +76,64 @@ class DepthSpec(
     val highlight: Color,
     val highlightAlpha: Float,
     val insetShadowAlpha: Float,
-    val insetHighlightAlpha: Float
+    val insetHighlightAlpha: Float,
+    val sheenAlpha: Float,
+    val rimLightAlpha: Float,
+    val rimDarkAlpha: Float,
+    val lipDarkAlpha: Float,
+    val lipLightAlpha: Float
 )
 
 /** Ukuran kedalaman: jarak offset + radius buram bayangan. LARGE = kartu, MEDIUM = panel kecil/dok, SMALL = tombol/chip, WELL = lekuk. */
 enum class DepthSize(val distance: Dp, val blur: Dp) {
     LARGE(6.dp, 13.dp),
     MEDIUM(4.dp, 9.dp),
-    SMALL(2.5.dp, 6.dp),
+    SMALL(3.dp, 6.5.dp),
     WELL(4.dp, 8.dp)
 }
 
+// Batch 84: model realistis (dikalibrasi lewat simulasi gambar 5 tema): bayangan BERLAPIS (ambient lebar + kontak rapat),
+// badan cembung berarah 45 derajat + kilau radial kiri-atas, tepi bevel (sorot kiri-atas / bayangan kanan-bawah), dan
+// lekuk dengan "bibir" (gelap kiri-atas / terang kanan-bawah).
 private val DarkDepth = DepthSpec(
-    bodyHi = Color(0xFF363B4A), bodyLo = Color(0xFF272B37),
-    wellDark = Color(0xFF212530), wellLight = Color(0xFF2F3341),
-    shadow = Color(0xFF000000), shadowAlpha = 0.62f,
-    highlight = Color(0xFFFFFFFF), highlightAlpha = 0.13f,
-    insetShadowAlpha = 0.70f, insetHighlightAlpha = 0.11f
+    bodyHi = Color(0xFF383E4E), bodyLo = Color(0xFF262A36),
+    wellDark = Color(0xFF1F222C), wellLight = Color(0xFF303544),
+    shadow = Color(0xFF000000), shadowAlpha = 0.66f,
+    highlight = Color(0xFFFFFFFF), highlightAlpha = 0.15f,
+    insetShadowAlpha = 0.72f, insetHighlightAlpha = 0.13f,
+    sheenAlpha = 0.08f, rimLightAlpha = 0.22f, rimDarkAlpha = 0.34f, lipDarkAlpha = 0.42f, lipLightAlpha = 0.10f
 )
 private val LightDepth = DepthSpec(
-    bodyHi = Color(0xFFEEF1F6), bodyLo = Color(0xFFD9DEE8),
-    wellDark = Color(0xFFD3D9E4), wellLight = Color(0xFFE8ECF3),
-    shadow = Color(0xFF8F9BB3), shadowAlpha = 0.60f,
+    bodyHi = Color(0xFFF1F4F9), bodyLo = Color(0xFFD6DCE7),
+    wellDark = Color(0xFFCDD4E0), wellLight = Color(0xFFEAEEF4),
+    shadow = Color(0xFF7F8CA6), shadowAlpha = 0.62f,
     highlight = Color(0xFFFFFFFF), highlightAlpha = 1.0f,
-    insetShadowAlpha = 0.65f, insetHighlightAlpha = 0.95f
+    insetShadowAlpha = 0.68f, insetHighlightAlpha = 1.0f,
+    sheenAlpha = 0.55f, rimLightAlpha = 0.95f, rimDarkAlpha = 0.28f, lipDarkAlpha = 0.35f, lipLightAlpha = 0.95f
 )
 private val NeonDepth = DepthSpec(
-    bodyHi = Color(0xFF202C4C), bodyLo = Color(0xFF141D36),
-    wellDark = Color(0xFF0F172B), wellLight = Color(0xFF1B2644),
-    shadow = Color(0xFF01030A), shadowAlpha = 0.72f,
-    highlight = Color(0xFF8CEBFF), highlightAlpha = 0.13f,
-    insetShadowAlpha = 0.75f, insetHighlightAlpha = 0.12f
+    bodyHi = Color(0xFF22304F), bodyLo = Color(0xFF131C34),
+    wellDark = Color(0xFF0C1325), wellLight = Color(0xFF1C2848),
+    shadow = Color(0xFF000208), shadowAlpha = 0.75f,
+    highlight = Color(0xFF8CEBFF), highlightAlpha = 0.15f,
+    insetShadowAlpha = 0.78f, insetHighlightAlpha = 0.14f,
+    sheenAlpha = 0.07f, rimLightAlpha = 0.26f, rimDarkAlpha = 0.38f, lipDarkAlpha = 0.46f, lipLightAlpha = 0.12f
 )
 private val PaperDepth = DepthSpec(
-    bodyHi = Color(0xFFF4EAD8), bodyLo = Color(0xFFE2D3BA),
-    wellDark = Color(0xFFDFD0B5), wellLight = Color(0xFFF1E7D4),
-    shadow = Color(0xFF9A8156), shadowAlpha = 0.55f,
-    highlight = Color(0xFFFFF9EC), highlightAlpha = 1.0f,
-    insetShadowAlpha = 0.55f, insetHighlightAlpha = 0.95f
+    bodyHi = Color(0xFFF7EEDD), bodyLo = Color(0xFFE0D0B4),
+    wellDark = Color(0xFFD8C8AB), wellLight = Color(0xFFF3E9D6),
+    shadow = Color(0xFF8E7549), shadowAlpha = 0.58f,
+    highlight = Color(0xFFFFFAEE), highlightAlpha = 1.0f,
+    insetShadowAlpha = 0.62f, insetHighlightAlpha = 1.0f,
+    sheenAlpha = 0.55f, rimLightAlpha = 0.95f, rimDarkAlpha = 0.30f, lipDarkAlpha = 0.35f, lipLightAlpha = 0.95f
 )
 private val GlassDepth = DepthSpec(
-    bodyHi = Color(0xFF2D3C86), bodyLo = Color(0xFF1D2866),
-    wellDark = Color(0xFF131B47), wellLight = Color(0xFF222F70),
-    shadow = Color(0xFF020512), shadowAlpha = 0.70f,
-    highlight = Color(0xFFB4C6FF), highlightAlpha = 0.16f,
-    insetShadowAlpha = 0.75f, insetHighlightAlpha = 0.14f
+    bodyHi = Color(0xFF30408C), bodyLo = Color(0xFF1B2564),
+    wellDark = Color(0xFF10173F), wellLight = Color(0xFF25327A),
+    shadow = Color(0xFF010310), shadowAlpha = 0.74f,
+    highlight = Color(0xFFB4C6FF), highlightAlpha = 0.18f,
+    insetShadowAlpha = 0.78f, insetHighlightAlpha = 0.16f,
+    sheenAlpha = 0.10f, rimLightAlpha = 0.28f, rimDarkAlpha = 0.38f, lipDarkAlpha = 0.46f, lipLightAlpha = 0.14f
 )
 
 /** Spesifikasi kedalaman per gaya tema (tetap, TIDAK bergantung warna dinamis wallpaper -> kontras sorot/bayangan terjamin). */
@@ -139,6 +153,9 @@ val LocalDepthSpec = staticCompositionLocalOf { DarkDepth }
 
 private val NoPress: () -> Float = { 0f }
 
+/** Skala jarak/radius lapisan KONTAK (bayangan rapat dekat tepi) relatif terhadap lapisan ambient. */
+private const val CONTACT_SCALE = 0.35f
+
 private fun blurPaint(blur: Float): android.graphics.Paint =
     android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
         style = android.graphics.Paint.Style.FILL
@@ -150,17 +167,36 @@ private fun cornerRadiusPx(shape: Shape, size: Size, density: Density): Float {
     return radius.coerceAtMost(minOf(size.width, size.height) / 2f)
 }
 
-/** Peralatan gambar lekuk (cekung) yang di-cache per ukuran: jalur potong, gradien badan, bingkai bayangan dalam. */
+/** Gradien tepi bevel berarah 45 derajat: warna pertama pekat di sudut kiri-atas memudar ke tengah; warna kedua pekat di kanan-bawah. */
+private fun bevelBrush(first: Color, firstAlpha: Float, second: Color, secondAlpha: Float, span: Float): Brush =
+    Brush.linearGradient(
+        0f to first.copy(alpha = firstAlpha.coerceIn(0f, 1f)),
+        0.5f to first.copy(alpha = 0f),
+        0.5f to second.copy(alpha = 0f),
+        1f to second.copy(alpha = secondAlpha.coerceIn(0f, 1f)),
+        start = Offset.Zero,
+        end = Offset(span, span)
+    )
+
+private fun drawShadowLayer(n: android.graphics.Canvas, paint: android.graphics.Paint, color: Color, alpha: Float, shift: Float, w: Float, h: Float, r: Float) {
+    paint.color = color.copy(alpha = alpha.coerceIn(0f, 1f)).toArgb()
+    n.drawRoundRect(shift, shift, w + shift, h + shift, r, r, paint)
+}
+
+/** Peralatan gambar lekuk (cekung) yang di-cache per ukuran: jalur potong, gradien badan, bingkai bayangan dalam, bibir. */
 private class WellKit(
     private val spec: DepthSpec,
-    w: Float,
-    h: Float,
+    private val w: Float,
+    private val h: Float,
     private val r: Float,
     private val d: Float,
-    blur: Float
+    blur: Float,
+    private val lipWidth: Float
 ) {
     private val clip = Path().apply { addRoundRect(RoundRect(0f, 0f, w, h, CornerRadius(r, r))) }
-    private val brush = Brush.linearGradient(listOf(spec.wellDark, spec.wellLight), Offset.Zero, Offset(w, h))
+    private val span = (w + h) / 2f
+    private val brush = Brush.linearGradient(listOf(spec.wellDark, spec.wellLight), Offset.Zero, Offset(span, span))
+    private val lip = bevelBrush(spec.shadow, spec.lipDarkAlpha, spec.highlight, spec.lipLightAlpha, span)
     private val frame = android.graphics.Path().apply {
         fillType = android.graphics.Path.FillType.EVEN_ODD
         val m = blur * 3f
@@ -169,6 +205,16 @@ private class WellKit(
     }
     private val dark = blurPaint(blur)
     private val light = blurPaint(blur)
+    private val darkTight = blurPaint(blur * CONTACT_SCALE)
+    private val lightTight = blurPaint(blur * CONTACT_SCALE)
+
+    private fun innerLayer(n: android.graphics.Canvas, paint: android.graphics.Paint, color: Color, alpha: Float, shift: Float) {
+        paint.color = color.copy(alpha = alpha.coerceIn(0f, 1f)).toArgb()
+        n.save()
+        n.translate(shift, shift)
+        n.drawPath(frame, paint)
+        n.restore()
+    }
 
     fun draw(scope: DrawScope, intensity: Float) {
         with(scope) {
@@ -176,17 +222,19 @@ private class WellKit(
                 drawRoundRect(brush = brush, cornerRadius = CornerRadius(r, r), alpha = intensity)
                 drawIntoCanvas { c ->
                     val n = c.nativeCanvas
-                    dark.color = spec.shadow.copy(alpha = spec.insetShadowAlpha * intensity).toArgb()
-                    n.save()
-                    n.translate(d, d)
-                    n.drawPath(frame, dark)
-                    n.restore()
-                    light.color = spec.highlight.copy(alpha = spec.insetHighlightAlpha * intensity).toArgb()
-                    n.save()
-                    n.translate(-d, -d)
-                    n.drawPath(frame, light)
-                    n.restore()
+                    innerLayer(n, dark, spec.shadow, spec.insetShadowAlpha * 0.80f * intensity, d)
+                    innerLayer(n, light, spec.highlight, spec.insetHighlightAlpha * 0.80f * intensity, -d)
+                    innerLayer(n, darkTight, spec.shadow, spec.insetShadowAlpha * 0.90f * intensity, d * 0.4f)
+                    innerLayer(n, lightTight, spec.highlight, spec.insetHighlightAlpha * 0.80f * intensity, -d * 0.4f)
                 }
+                drawRoundRect(
+                    brush = lip,
+                    topLeft = Offset(lipWidth / 2f, lipWidth / 2f),
+                    size = Size((w - lipWidth).coerceAtLeast(1f), (h - lipWidth).coerceAtLeast(1f)),
+                    cornerRadius = CornerRadius((r - lipWidth / 2f).coerceAtLeast(0f)),
+                    style = Stroke(width = lipWidth),
+                    alpha = intensity
+                )
             }
         }
     }
@@ -195,6 +243,8 @@ private class WellKit(
 /**
  * Permukaan TIMBUL. `pressed` (0..1, dibaca saat menggambar) melebur ke keadaan cekung — tombol "tertekan ke dalam".
  * `style` != null menambah ornamen kartu khas tema (lihat [drawCardOrnament]).
+ * Lapisan gambar: bayangan ambient + kontak (gelap kanan-bawah) dan sorot ambient + kontak (terang kiri-atas) -> badan
+ * gradien 45 derajat -> kilau radial -> ornamen -> tepi bevel.
  */
 fun Modifier.depthRaised(
     spec: DepthSpec,
@@ -208,10 +258,23 @@ fun Modifier.depthRaised(
     val h = this.size.height
     val r = cornerRadiusPx(shape, this.size, this)
     val d = depth.distance.toPx()
-    val dark = blurPaint(depth.blur.toPx())
-    val light = blurPaint(depth.blur.toPx())
-    val body = Brush.linearGradient(listOf(spec.bodyHi, spec.bodyLo), Offset.Zero, Offset(w, h))
-    val well = WellKit(spec, w, h, r, d, depth.blur.toPx())
+    val blur = depth.blur.toPx()
+    val dark = blurPaint(blur)
+    val light = blurPaint(blur)
+    val darkTight = blurPaint(blur * CONTACT_SCALE)
+    val lightTight = blurPaint(blur * CONTACT_SCALE)
+    val span = (w + h) / 2f
+    val body = Brush.linearGradient(listOf(spec.bodyHi, spec.bodyLo), Offset.Zero, Offset(span, span))
+    val sheen = Brush.radialGradient(
+        0f to spec.highlight.copy(alpha = spec.sheenAlpha),
+        0.4f to spec.highlight.copy(alpha = spec.sheenAlpha * 0.35f),
+        1f to spec.highlight.copy(alpha = 0f),
+        center = Offset(w * 0.28f, h * 0.22f),
+        radius = (maxOf(w, h) * 0.75f).coerceAtLeast(1f)
+    )
+    val rimWidth = 1.5.dp.toPx()
+    val rim = bevelBrush(spec.highlight, spec.rimLightAlpha, spec.shadow, spec.rimDarkAlpha, span)
+    val well = WellKit(spec, w, h, r, d, blur, rimWidth)
     val clip = Path().apply { addRoundRect(RoundRect(0f, 0f, w, h, CornerRadius(r, r))) }
     onDrawBehind {
         val p = pressed().coerceIn(0f, 1f)
@@ -219,14 +282,25 @@ fun Modifier.depthRaised(
         if (k > 0.01f) {
             drawIntoCanvas { c ->
                 val n = c.nativeCanvas
-                dark.color = spec.shadow.copy(alpha = spec.shadowAlpha * k).toArgb()
-                n.drawRoundRect(d, d, w + d, h + d, r, r, dark)
-                light.color = spec.highlight.copy(alpha = spec.highlightAlpha * k).toArgb()
-                n.drawRoundRect(-d, -d, w - d, h - d, r, r, light)
+                drawShadowLayer(n, dark, spec.shadow, spec.shadowAlpha * 0.72f * k, d, w, h, r)
+                drawShadowLayer(n, light, spec.highlight, spec.highlightAlpha * 0.80f * k, -d, w, h, r)
+                drawShadowLayer(n, darkTight, spec.shadow, spec.shadowAlpha * 0.85f * k, d * CONTACT_SCALE, w, h, r)
+                drawShadowLayer(n, lightTight, spec.highlight, spec.highlightAlpha * 0.90f * k, -d * CONTACT_SCALE, w, h, r)
             }
         }
         drawRoundRect(brush = body, cornerRadius = CornerRadius(r, r))
+        drawRoundRect(brush = sheen, cornerRadius = CornerRadius(r, r))
         if (style != null) drawCardOrnament(style, accent, r, clip)
+        if (k > 0.01f) {
+            drawRoundRect(
+                brush = rim,
+                topLeft = Offset(rimWidth / 2f, rimWidth / 2f),
+                size = Size((w - rimWidth).coerceAtLeast(1f), (h - rimWidth).coerceAtLeast(1f)),
+                cornerRadius = CornerRadius((r - rimWidth / 2f).coerceAtLeast(0f)),
+                style = Stroke(width = rimWidth),
+                alpha = k
+            )
+        }
         if (p > 0.01f) well.draw(this, p)
     }
 }
@@ -237,7 +311,10 @@ fun Modifier.depthInset(
     shape: Shape,
     depth: DepthSize = DepthSize.WELL
 ): Modifier = this.drawWithCache {
-    val kit = WellKit(spec, this.size.width, this.size.height, cornerRadiusPx(shape, this.size, this), depth.distance.toPx(), depth.blur.toPx())
+    val kit = WellKit(
+        spec, this.size.width, this.size.height, cornerRadiusPx(shape, this.size, this),
+        depth.distance.toPx(), depth.blur.toPx(), 1.5.dp.toPx()
+    )
     onDrawBehind { kit.draw(this, 1f) }
 }
 

@@ -1,5 +1,24 @@
 # Changelog
 
+## Batch 91: isi alat langsung terlihat saat meluncur (batalkan penundaan Batch 90) + perbaikan exclude.xml rusak
+
+User (setelah v90; video 363373.mp4 + CI run #31): "kok delay gitu hasilnya?!!"
+
+### TEMUAN
+1. **Video (60fps, dianalisis per frame):** setelah ketukan, Beranda bergeser dan cangkang KOSONG (latar saja) menutup layar ~0,45 dtk, baru isi ("Kompres Video" dst.) muncul sesudah tiba -> inilah "delay". Penundaan isi Batch 90 salah arah; isi Kompres/GIF ternyata ringan dikomposisi (muncul <1 frame setelah tiba), jadi jeda lama (v89) bukan terutama komposisi tetapi lonjakan frame pertama (fade -> lapisan offscreen layar-penuh + jam animasi yang melompat).
+2. **CI run #31: SpotBugs 338 temuan** = `config/spotbugs/exclude.xml` RUSAK sejak v90: komentar yang saya tambah memuat dua tanda hubung berurutan (tak sah di komentar XML) -> parser gagal -> seluruh filter noise tak terpakai. Gerbang lain hijau (ArchUnit 12/0, detekt 0, lint 0, 40 tes, kompilator 0).
+
+### PERUBAHAN (1 berkas kode `MainActivity.kt` + `config/spotbugs/exclude.xml`)
+- `PushScreen`: isi alat dikomposisi langsung di frame ketukan dan terlihat sejak awal meluncur; jam animasi dibatasi 24ms/frame dan baru berjalan setelah frame komposisi pertama (tanpa lompatan); tanpa fade/offscreen; keluar: isi tetap ada sampai habis meluncur; penelan sentuhan dipertahankan. Cangkang kosong + `BackHandler` sementara dihapus.
+- `exclude.xml`: komentar Batch 90 diperbaiki (tanpa dua tanda hubung); XML divalidasi dengan parser (valid).
+
+### VERIFIED
+Video user dianalisis per frame (alasan perubahan). XML `exclude.xml` valid (parser). Statis: kurung seimbang; kotlinc 0 galat sintaks; detekt lokal 0.
+### NOT VERIFIED
+Kompilasi Gradle, lint, SpotBugs (harus kembali 0), tes; di HP: jeda awal berkurang (lonjakan frame pertama kini tanpa fade/offscreen + jam terbatas).
+### Bila masih terasa
+Kirim video lagi (rekam layar). Opsi: transisi Resizer ikut push (z-index + geser), skeleton ringan, atau baseline profile utk kode dingin.
+
 ## Batch 90: transisi alat tanpa jeda awal (cangkang meluncur dulu, isi berat menyusul) + filter SpotBugs DepthBakery
 
 User (setelah v89; CI run #30 HIJAU: ArchUnit 12/0, detekt 0, lint 0, 40 tes, kompilator 0; SpotBugs 1 temuan): "bingkai udah balik normal. tapi transisi tiap menu itu masih jeda sepersekian detik!!"

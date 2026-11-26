@@ -162,29 +162,25 @@ private suspend fun animateShown(state: MutableFloatState, target: Float, durati
 }
 
 /**
- * Batch 90: layar alat (push iOS) tanpa jeda awal. Akar "jeda sepersekian detik": `AnimatedVisibility` mengomposisi SELURUH layar alat
- * (ribuan node, kode dingin) di frame pertama transisi -> animasi menunggu ~100-250ms lalu melompat. Kini cangkang ringan (latar tema
- * ter-bake) langsung meluncur masuk mulus (tanpa fade/lapisan offscreen); isi berat dikomposisi SETELAH tiba (seperti postponeEnterTransition).
- * Saat keluar, isi tetap ada sampai meluncur habis. Cangkang menelan sentuhan agar Beranda di bawahnya tak ikut terketuk.
+ * Batch 91: layar alat (push iOS). Menggantikan `AnimatedVisibility` (fade + lapisan offscreen layar-penuh + jam dinding yang "melompat"
+ * setelah frame pertama yang berat). Isi dikomposisi LANGSUNG di frame ketukan dan terlihat sejak awal meluncur (Batch 90 menunda isi
+ * sampai tiba -> layar kosong ~0,5 dtk, terbukti di video user). Jam animasi dibatasi 24ms/frame ([animateShown]) dan dimulai SETELAH
+ * frame komposisi pertama, jadi tak ada lompatan; tanpa fade/offscreen. Saat keluar, isi tetap ada sampai habis meluncur. Kotak
+ * pembungkus menelan sentuhan agar Beranda di bawahnya tak ikut terketuk.
  */
 @Composable
 private fun PushScreen(visible: Boolean, shown: MutableFloatState, content: @Composable () -> Unit) {
     var mounted by remember { mutableStateOf(false) }
-    var contentReady by remember { mutableStateOf(false) }
     LaunchedEffect(visible) {
         if (visible) {
             mounted = true
             animateShown(shown, 1f, IOS_PUSH_MS)
-            withFrameNanos { }
-            contentReady = true
         } else if (mounted) {
             animateShown(shown, 0f, IOS_POP_MS)
             mounted = false
-            contentReady = false
         }
     }
-    androidx.activity.compose.BackHandler(enabled = mounted && !contentReady) { }
-    if (mounted) {
+    if (visible || mounted) {
         Box(
             modifier = Modifier
                 .fillMaxSize()
@@ -195,7 +191,7 @@ private fun PushScreen(visible: Boolean, shown: MutableFloatState, content: @Com
                     }
                 }
         ) {
-            if (contentReady) content() else Box(modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()))
+            content()
         }
     }
 }

@@ -106,7 +106,7 @@
     <Bug pattern="NP_PARAMETER_MUST_BE_NONNULL_BUT_MARKED_AS_NULLABLE"/>
     <Source name="AppUpdater.kt"/>
   </Match>
-  <!-- Batch 90 (run #30): DepthBakery.totalBytes = pembukuan anggaran cache bake pada objek tunggal (hanya utas utama) -- sengaja, bukan bug. -->
+  <!-- Batch 90 (run #30): DepthBakery.totalBytes = pembukuan anggaran cache bake pada objek tunggal (hanya utas utama) sengaja, bukan bug. -->
   <Match>
     <Bug pattern="ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD"/>
     <Source name="Depth.kt"/>

@@ -1,5 +1,27 @@
 # Changelog
 
+## Batch 85: Refresh rate TIDAK lagi terkunci 60Hz + kedalaman neumorfik lebih kuat (bayangan chip tak terpotong, Slider/Switch bergaya timbul-cekung)
+
+User (setelah v84; CI run #25 HIJAU PENUH: ArchUnit 12/0, SpotBugs 0, detekt 0, lint 0, 40 tes, kompilator 0): "not enough. dan app cuman lock di 60hz, tidak bisa lebih!!"
+
+### TEMUAN (akar masalah, dari source v84)
+1. **60Hz:** `grep` seluruh `app/src/main` (kode + manifest + tema) = NOL referensi ke `preferredDisplayModeId` / `preferredRefreshRate` / `supportedModes` / `setFrameRate`. App tak pernah meminta refresh rate tinggi; pada banyak perangkat (mode layar "Otomatis/Adaptif" OEM) app yang tak dikenal ditahan di 60Hz.
+2. **Depth "kurang":** (a) 13 `LazyRow` + 1 `LazyRow` berpaket `contentPadding = PaddingValues(end = 20.dp)` berisi `DepthChip` tanpa ruang vertikal; kontainer gulir MEMOTONG gambar anak di batasnya -> bayangan timbul chip terpotong LURUS di tepi atas/bawah baris (efek "stiker datar"); (b) `Slider`/`Switch` Material (4 situs) tetap datar di tengah komponen bergaya timbul; (c) amplitudo bayangan/sorot masih lemah (LARGE 6dp/13dp).
+
+### PERUBAHAN (2 berkas kode: `MainActivity.kt`, `ui/theme/Depth.kt`; tanpa dependensi/izin/manifest)
+- **`MainActivity.kt`:** `applyHighestRefreshRate()` (dipanggil di `onCreate` + `onResume`): ambil `display.supportedModes`, saring resolusi fisik SAMA dengan mode aktif (tanpa ganti resolusi), pilih refresh rate tertinggi, set `window.attributes.preferredDisplayModeId` + `preferredRefreshRate`. Hanya permintaan: Hemat baterai / pengaturan "Standar 60Hz" sistem tetap menang. 14 `LazyRow` chip -> `contentPadding = depthRowPadding()`; 2 `Slider` -> `DepthSlider`; 2 `Switch` -> `DepthSwitch` (nama argumen sama).
+- **`Depth.kt`:** `DepthSize` ~+35% (LARGE 8dp/18dp, MEDIUM 5.5/12, SMALL 4/8.5, WELL 5.5/10); alfa bayangan/sorot/bevel/bibir 5 tema dinaikkan, `bodyLo`/`wellDark` sedikit digelapkan (`bodyHi` TIDAK diubah -> kontras teks/aksen Batch 84 terjaga); jumlah lapisan gambar TIDAK ditambah (kinerja 90/120Hz). Baru: `depthRowPadding()`, `DepthSwitch` (jalur cekung + isi aksen + kenop timbul), `DepthSlider` (bak cekung + isi aksen + kenop timbul; sentuh = lompat, geser horizontal mengikuti jari, vertikal diteruskan ke gulir induk; semantik `progressBarRangeInfo`/`setProgress`).
+
+### VERIFIED
+- CI run #25 (v84): semua gerbang hijau (lihat atas).
+- Statis (sandbox): kurung/kurawal seimbang di 2 berkas; `kotlinc` 1.9.24: 0 galat sintaks (sisa = unresolved reference/inferensi, kategori sama dgn baseline v84); detekt-cli 1.23.8 dgn `config/detekt/detekt.yml`: 0 temuan (main+test).
+### NOT VERIFIED
+Kompilasi Gradle/Compose (API `toggleable(interactionSource, indication)`, `awaitHorizontalTouchSlopOrCancellation`, `horizontalDrag`, `ProgressBarRangeInfo`, `Display.supportedModes`), lint, ArchUnit, SpotBugs, tes unit; **di HP:** refresh rate sungguhan naik (cek Opsi pengembang -> tampilkan refresh rate; atau pengaturan layar = Tinggi/Adaptif), bayangan chip tak terpotong, tampilan/geser Slider & Switch, kinerja gulir.
+### DAMPAK / CATATAN
+- Baris chip kini ~22dp lebih tinggi (ruang bayangan); chip bergeser 6dp ke kanan (ruang sorot kiri). Tuning: `depthRowPadding()`, `DepthSize`, `DepthSpec` di `Depth.kt`.
+- Bila refresh rate tetap 60Hz di HP: periksa pengaturan sistem (Hemat baterai / layar "Standar"); kirim merek/tipe HP.
+- Belum diberi kedalaman: `VideoPickerScreen`, dialog, `OutlinedTextField`, header Riwayat.
+
 ## Batch 84: Kedalaman neumorfik lebih REALISTIS (bayangan berlapis, bevel tepi, kilau cembung, bibir lekuk) + filter SpotBugs berkas baru
 
 User (setelah v83; CI run #24): "depth efek masih kurang realistis!!"

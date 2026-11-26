@@ -110,6 +110,8 @@ import com.example.videoresizer.ui.theme.DepthChip
 import com.example.videoresizer.ui.theme.DepthIconButton
 import com.example.videoresizer.ui.theme.DepthProgressBar
 import com.example.videoresizer.ui.theme.DepthSize
+import com.example.videoresizer.ui.theme.DepthSlider
+import com.example.videoresizer.ui.theme.DepthSwitch
 import com.example.videoresizer.ui.theme.DepthWell
 import com.example.videoresizer.ui.theme.LocalDepthSpec
 import com.example.videoresizer.ui.theme.LocalThemeStyle
@@ -118,6 +120,7 @@ import com.example.videoresizer.ui.theme.accentContent
 import com.example.videoresizer.ui.theme.accentGradient
 import com.example.videoresizer.ui.theme.depthInset
 import com.example.videoresizer.ui.theme.depthRaised
+import com.example.videoresizer.ui.theme.depthRowPadding
 import com.example.videoresizer.ui.theme.drawHeroArt
 import com.example.videoresizer.ui.theme.rememberThemeBackdrop
 import com.example.videoresizer.ui.theme.themeBackdrop
@@ -180,6 +183,7 @@ class MainActivity : ComponentActivity() {
         // Gaya bar mengikuti tema aplikasi lewat `VideoResizerTheme` (DisposableEffect -> enableEdgeToEdge); inset ditangani
         // Scaffold/TopAppBar (status bar), `padding(padding)` tiap layar (bar bawah), dan Surface akar di bawah (keyboard + cutout).
         enableEdgeToEdge()
+        applyHighestRefreshRate()
         setContent {
             // Batch 57 (root-cause fix — user: "regresi persisten pada theme
             // yang di select user"): this used to be `remember { mutableStateOf(
@@ -236,6 +240,33 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        applyHighestRefreshRate()
+    }
+
+    /**
+     * Batch 85 (user: "app cuman lock di 60hz, tidak bisa lebih"): akar masalah = TIDAK ADA kode yang meminta refresh rate
+     * tinggi. Tanpa permintaan, banyak perangkat (mode "Otomatis/Adaptif" OEM) menahan app yang tak dikenalnya di 60Hz.
+     * Meminta mode layar dengan refresh rate TERTINGGI pada resolusi fisik yang SAMA (tanpa ganti resolusi) lewat
+     * `preferredDisplayModeId` + `preferredRefreshRate`. Dipanggil di onCreate dan onResume (layar bisa berganti: foldable/eksternal).
+     * Hanya permintaan: bila pengaturan sistem (Hemat baterai / "Standar" 60Hz) melarang, sistem tetap menang.
+     */
+    @Suppress("USELESS_ELVIS")
+    private fun applyHighestRefreshRate() {
+        val currentDisplay = display ?: return
+        val active = currentDisplay.mode
+        val best = currentDisplay.supportedModes
+            .filter { it.physicalWidth == active.physicalWidth && it.physicalHeight == active.physicalHeight }
+            .maxByOrNull { it.refreshRate }
+            ?: return
+        val params = window.attributes
+        if (params.preferredDisplayModeId == best.modeId) return
+        params.preferredDisplayModeId = best.modeId
+        params.preferredRefreshRate = best.refreshRate
+        window.attributes = params
     }
 }
 
@@ -1851,7 +1882,7 @@ private fun ResizerScreen(
                             // jelas ada ruang scroll, tidak terlihat seperti terpotong/cutoff.
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                contentPadding = PaddingValues(end = 20.dp)
+                                contentPadding = PaddingValues(start = 6.dp, end = 20.dp, top = 8.dp, bottom = 14.dp)
                             ) {
                                 items(SocialPreset.ENTRIES) { preset ->
                                     DepthChip(
@@ -1893,7 +1924,7 @@ private fun ResizerScreen(
 
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text("Resolusi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
                                     items(ResolutionOption.ENTRIES) { option ->
                                         val isSelected = option == resolution
                                         val label = if (option == ResolutionOption.CUSTOM && customWidth != null && customHeight != null) {
@@ -1949,7 +1980,7 @@ private fun ResizerScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
                                 items(QualityOption.ENTRIES) { option ->
                                     val isSelected = option == quality
                                     val label = if (option == QualityOption.CUSTOM && customBitrateKbps != null) {
@@ -2061,7 +2092,7 @@ private fun ResizerScreen(
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text("Posisi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
                                                 items(WatermarkPosition.ENTRIES) { pos ->
                                                     DepthChip(
                                                         selected = pos == watermarkPosition,
@@ -2073,13 +2104,13 @@ private fun ResizerScreen(
                                         }
                                     }
                                     Text("Ukuran: ${watermarkScalePercent.roundToInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Slider(
+                                    DepthSlider(
                                         value = watermarkScalePercent,
                                         onValueChange = { watermarkScalePercent = it },
                                         valueRange = 5f..50f
                                     )
                                     Text("Transparansi: ${watermarkOpacityPercent.roundToInt()}%", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                    Slider(
+                                    DepthSlider(
                                         value = watermarkOpacityPercent,
                                         onValueChange = { watermarkOpacityPercent = it },
                                         valueRange = 10f..100f
@@ -2115,7 +2146,7 @@ private fun ResizerScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 if (captionText.isNotBlank()) {
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
                                         items(WatermarkPosition.ENTRIES) { pos ->
                                             DepthChip(
                                                 selected = pos == captionPosition,
@@ -2174,7 +2205,7 @@ private fun ResizerScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text("Bisukan audio", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                                Switch(checked = muteAudio, onCheckedChange = { muteAudio = it })
+                                DepthSwitch(checked = muteAudio, onCheckedChange = { muteAudio = it })
                             }
                         }
                     }
@@ -2700,7 +2731,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
                     items(SocialPreset.ENTRIES) { preset ->
                         DepthChip(
                             selected = selectedSocialPreset == preset,
@@ -2741,7 +2772,7 @@ private fun BatchScreen(onBack: () -> Unit) {
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Text("Resolusi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
                     items(ResolutionOption.ENTRIES) { option ->
                         val isSelected = option == resolution
                         val label = if (option == ResolutionOption.CUSTOM && customWidth != null && customHeight != null) {
@@ -2783,7 +2814,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
                     items(QualityOption.ENTRIES) { option ->
                         val isSelected = option == quality && targetSizeMb == null
                         val label = if (option == QualityOption.CUSTOM && customBitrateKbps != null) {
@@ -2849,7 +2880,7 @@ private fun BatchScreen(onBack: () -> Unit) {
 
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
                 Text("Mute audio", modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onBackground)
-                Switch(checked = muteAudio, onCheckedChange = { muteAudio = it })
+                DepthSwitch(checked = muteAudio, onCheckedChange = { muteAudio = it })
             }
 
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -2868,7 +2899,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                     }
                 }
                 if (watermarkUri != null) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
                         items(WatermarkPosition.ENTRIES) { pos ->
                             DepthChip(
                                 selected = pos == watermarkPosition,
@@ -2890,7 +2921,7 @@ private fun BatchScreen(onBack: () -> Unit) {
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (captionText.isNotBlank()) {
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
                         items(WatermarkPosition.ENTRIES) { pos ->
                             DepthChip(
                                 selected = pos == captionPosition,
@@ -3953,7 +3984,7 @@ private fun <T> OptionSection(
     val haptic = LocalHapticFeedback.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
             items(options) { option ->
                 val isSelected = option == selected
                 DepthChip(
@@ -4857,7 +4888,7 @@ private fun GifScreen(
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Frame rate GIF", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
                         items(listOf(5, 10, 15)) { f ->
                             DepthChip(
                                 selected = fps == f,
@@ -4870,7 +4901,7 @@ private fun GifScreen(
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Lebar GIF", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
                         items(listOf(240, 360, 480)) { w ->
                             DepthChip(
                                 selected = targetWidth == w,
@@ -5294,7 +5325,7 @@ private fun CompressorScreen(onBack: () -> Unit) {
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Tingkat kompresi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
                         items(CompressionLevel.ENTRIES) { opt ->
                             DepthChip(
                                 selected = level == opt,

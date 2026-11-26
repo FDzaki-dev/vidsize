@@ -1,6 +1,6 @@
 # PROJECT_STATE.md — Vidsize
 
-Snapshot as of **Batch 84**. This is the first-read file per the context
+Snapshot as of **Batch 85**. This is the first-read file per the context
 hierarchy (Chat Saat Ini > this file > FILE_MANIFEST.txt > CHANGELOG.md >
 README.md) — update it at the end of every batch rather than making it
 stale. Full detail for anything summarized here lives in CHANGELOG.md;
@@ -73,6 +73,7 @@ Batch 35) sebelum mulai.
   permanent policy.
 
 ## Current version
+- **Batch 85 (2 berkas kode: `MainActivity.kt`, `ui/theme/Depth.kt`; tanpa dependensi/izin):** user "not enough. dan app cuman lock di 60hz" -> `applyHighestRefreshRate()` (mode layar refresh rate tertinggi pada resolusi sama, `preferredDisplayModeId`+`preferredRefreshRate`, onCreate+onResume); depth lebih kuat (`DepthSize` ~+35%, alfa naik, `depthRowPadding()` di 14 LazyRow chip agar bayangan tak terpotong, `DepthSwitch`/`DepthSlider` baru). CI run #25 (v84) hijau penuh. NOT VERIFIED di CI/HP. Detail: CHANGELOG Batch 85.
 - **Batch 84 (3 berkas: `Depth.kt`, `Color.kt`, `config/spotbugs/exclude.xml`; API publik Depth* tetap):** kedalaman neumorfik lebih realistis — bayangan berlapis (ambient+kontak), badan gradien 45 derajat + kilau radial, tepi bevel, lekuk bergibir; kontras aksen dinaikkan; SpotBugs `NP_PARAMETER` x `Depth.kt`/`Ornaments.kt` disaring (bukti run #24). CI run #24 (v83) hijau kecuali SpotBugs 10. NOT VERIFIED di CI/HP. Detail: CHANGELOG Batch 84.
 - **Batch 83 (5 berkas kode: `Depth.kt` baru, `Ornaments.kt` baru, `Color.kt`, `Theme.kt`, `MainActivity.kt`; tanpa dependensi/izin):** neumorfisme timbul+cekung di semua tema (`depthRaised/depthInset`, `DepthCard/Chip/IconButton/ProgressBar/Well`), Glass kini OPAK (readability), ornamen khas tema (`themeBackdrop`, `drawCardOrnament`, `drawHeroArt`), dasar tema bernada-tengah, warna dinamis hanya aksen. CI run #23 (v82) hijau penuh. NOT VERIFIED di CI/HP. Detail: CHANGELOG Batch 83.
 - **Batch 82 (1 berkas kode: `MainActivity.kt`; tanpa perubahan kontrak/dependensi):** permintaan "hierarchy belum terasa premium" -> Beranda: header besar + kartu hero (Resize) + grid 2x2 alat sekunder beraksen warna + efek tekan; `ToolTopBar` bersama (Resizer/Batch/GIF/Kompres); `glassAwareBackground()` (GIF & Kompres ikut gradien tema Glass); Resizer: tombol Resize/progres jadi DOK TETAP (`Scaffold.bottomBar`) + kartu hasil di atas pengaturan + auto-gulir ke atas; `VideoPickerCard` keadaan kosong baru (Indonesia); perbaikan SpotBugs `MS_EXPOSE_REP` (`THEME_CHOICES` -> `themeLabel()`). Detail: CHANGELOG Batch 82. NOT VERIFIED di CI/HP.
@@ -284,6 +285,10 @@ Batch 35) sebelum mulai.
 _Rebrand "Video Resizer" → "Vidsize" TUNTAS 100% (kode, UI, dokumentasi,
 nama file APK Release). 1 item sisanya (rename repo GitHub) tetap aksi
 manual di luar ZIP — lihat pesan chat._
+🟡 **[RESUME POINT — Batch 85]** Kunci 60Hz (`MainActivity.applyHighestRefreshRate`) + depth lebih kuat (`Depth.kt`: ukuran/alfa, `depthRowPadding`, `DepthSwitch`, `DepthSlider`) -> **SELESAI di ZIP; kurung seimbang + kotlinc 0 galat sintaks + detekt lokal 0; Gradle/Compose, lint, ArchUnit, SpotBugs, tes & refresh rate/tampilan HP NOT VERIFIED (run #25 = v84: hijau penuh)** ->
+**LANGKAH BERIKUTNYA:** (1) push ZIP; run berikutnya diharapkan: build hijau, 40 tes, ArchUnit 12/0, SpotBugs 0, detekt 0, lint 0, kompilator 0 peringatan. Bila MERAH: baca `e:` pertama; kandidat: `Depth.kt` `DepthSlider`/`DepthSwitch` (`toggleable(value, interactionSource, indication, ...)`, `awaitHorizontalTouchSlopOrCancellation`, `horizontalDrag`, `ProgressBarRangeInfo`, `mutableFloatStateOf`), `MainActivity.kt` `applyHighestRefreshRate` (`display` nullability / `@Suppress("USELESS_ELVIS")`). Jalan balik = `Vidsize_v84.zip`.
+(2) Uji HP (user): refresh rate naik >60Hz (Opsi pengembang -> tampilkan refresh rate; layar = Tinggi/Adaptif, Hemat baterai OFF), bayangan chip tidak terpotong, Slider/Switch bergaya timbul-cekung, gulir mulus. Tuning: `depthRowPadding()`, `DepthSize`, `DepthSpec`. Bila tetap 60Hz: kirim merek/tipe HP (OEM bisa menolak permintaan app).
+(3) BELUM DIKERJAKAN: gaya neumorfik utk `VideoPickerScreen`, dialog, `OutlinedTextField`, header Riwayat; dok CTA GIF/Kompres; animasi masuk Beranda; strip "Terakhir diekspor"; splash Android 12; cek update otomatis; unduhan update di WorkManager.
 🟡 **[RESUME POINT — Batch 84]** Realisme kedalaman neumorfik (Depth.kt: bayangan ambient+kontak, bevel, kilau, bibir lekuk; Color.kt aksen; exclude.xml filter Depth.kt/Ornaments.kt) -> **SELESAI di ZIP; kurung seimbang + kotlinc 0 galat parse + XML valid; Gradle/Compose, SpotBugs(10->0?)/ArchUnit/detekt/lint/tes & tampilan HP NOT VERIFIED (run #24 = v83: hijau kecuali SpotBugs 10)** ->
 **LANGKAH BERIKUTNYA:** (1) push ZIP; run berikutnya diharapkan: build hijau, 40 tes, ArchUnit 12/0, **SpotBugs 0**, detekt 0, lint 0, kompilator 0 peringatan. Bila MERAH: baca `e:` pertama; kandidat: `Depth.kt` (`Brush.linearGradient(vararg Pair, start, end)`, `Brush.radialGradient(vararg Pair, center, radius)`, `Stroke`). Jalan balik = `Vidsize_v83.zip` (+ filter exclude.xml Batch 84).
 (2) Uji HP (user; kirim tangkapan layar bila masih kurang): bayangan kontak + ambient, bevel tepi, kilau, lekuk bergibir terlihat di 6 tema; gulir mulus. Tuning: `DepthSpec` (shadowAlpha/highlightAlpha/sheenAlpha/rim*/lip*), `DepthSize` di Depth.kt.

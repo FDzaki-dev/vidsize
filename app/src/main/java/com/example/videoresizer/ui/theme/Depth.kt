@@ -4,17 +4,26 @@ import android.graphics.BlurMaskFilter
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.awaitHorizontalTouchSlopOrCancellation
+import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -27,10 +36,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.drawWithCache
@@ -50,10 +64,19 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
+import kotlin.math.roundToInt
 
 /**
  * Batch 83: bahasa kedalaman neumorfisme untuk SEMUA tema. Dua keadaan fisik yang sungguh berbeda, bukan sekadar bayangan:
@@ -86,54 +109,62 @@ class DepthSpec(
 
 /** Ukuran kedalaman: jarak offset + radius buram bayangan. LARGE = kartu, MEDIUM = panel kecil/dok, SMALL = tombol/chip, WELL = lekuk. */
 enum class DepthSize(val distance: Dp, val blur: Dp) {
-    LARGE(6.dp, 13.dp),
-    MEDIUM(4.dp, 9.dp),
-    SMALL(3.dp, 6.5.dp),
-    WELL(4.dp, 8.dp)
+    LARGE(8.dp, 18.dp),
+    MEDIUM(5.5.dp, 12.dp),
+    SMALL(4.dp, 8.5.dp),
+    WELL(5.5.dp, 10.dp)
 }
 
+/**
+ * Batch 85: padding konten untuk `LazyRow` berisi [DepthChip]. Kontainer gulir MEMOTONG gambar anak di batasnya sendiri, jadi
+ * tanpa ruang ini bayangan timbul chip terpotong LURUS di tepi atas/bawah baris (akar utama kesan "depth kurang nyata").
+ * Fungsi (bukan val publik) supaya SpotBugs tak menandai field statis.
+ */
+fun depthRowPadding(): PaddingValues = PaddingValues(start = 6.dp, end = 16.dp, top = 8.dp, bottom = 14.dp)
+
+// Batch 85: ukuran DepthSize ~+35% dan alfa bayangan/sorot dinaikkan (user: "not enough"); jumlah lapisan gambar TIDAK ditambah (kinerja 90/120Hz).
 // Batch 84: model realistis (dikalibrasi lewat simulasi gambar 5 tema): bayangan BERLAPIS (ambient lebar + kontak rapat),
 // badan cembung berarah 45 derajat + kilau radial kiri-atas, tepi bevel (sorot kiri-atas / bayangan kanan-bawah), dan
 // lekuk dengan "bibir" (gelap kiri-atas / terang kanan-bawah).
 private val DarkDepth = DepthSpec(
-    bodyHi = Color(0xFF383E4E), bodyLo = Color(0xFF262A36),
-    wellDark = Color(0xFF1F222C), wellLight = Color(0xFF303544),
-    shadow = Color(0xFF000000), shadowAlpha = 0.66f,
-    highlight = Color(0xFFFFFFFF), highlightAlpha = 0.15f,
-    insetShadowAlpha = 0.72f, insetHighlightAlpha = 0.13f,
-    sheenAlpha = 0.08f, rimLightAlpha = 0.22f, rimDarkAlpha = 0.34f, lipDarkAlpha = 0.42f, lipLightAlpha = 0.10f
+    bodyHi = Color(0xFF383E4E), bodyLo = Color(0xFF222632),
+    wellDark = Color(0xFF1A1D27), wellLight = Color(0xFF303544),
+    shadow = Color(0xFF000000), shadowAlpha = 0.80f,
+    highlight = Color(0xFFFFFFFF), highlightAlpha = 0.22f,
+    insetShadowAlpha = 0.84f, insetHighlightAlpha = 0.19f,
+    sheenAlpha = 0.10f, rimLightAlpha = 0.30f, rimDarkAlpha = 0.42f, lipDarkAlpha = 0.52f, lipLightAlpha = 0.15f
 )
 private val LightDepth = DepthSpec(
-    bodyHi = Color(0xFFF1F4F9), bodyLo = Color(0xFFD6DCE7),
-    wellDark = Color(0xFFCDD4E0), wellLight = Color(0xFFEAEEF4),
-    shadow = Color(0xFF7F8CA6), shadowAlpha = 0.62f,
+    bodyHi = Color(0xFFF1F4F9), bodyLo = Color(0xFFD2D9E5),
+    wellDark = Color(0xFFC8CFDC), wellLight = Color(0xFFEAEEF4),
+    shadow = Color(0xFF6F7C98), shadowAlpha = 0.74f,
     highlight = Color(0xFFFFFFFF), highlightAlpha = 1.0f,
-    insetShadowAlpha = 0.68f, insetHighlightAlpha = 1.0f,
-    sheenAlpha = 0.55f, rimLightAlpha = 0.95f, rimDarkAlpha = 0.28f, lipDarkAlpha = 0.35f, lipLightAlpha = 0.95f
+    insetShadowAlpha = 0.80f, insetHighlightAlpha = 1.0f,
+    sheenAlpha = 0.60f, rimLightAlpha = 1.0f, rimDarkAlpha = 0.36f, lipDarkAlpha = 0.44f, lipLightAlpha = 1.0f
 )
 private val NeonDepth = DepthSpec(
-    bodyHi = Color(0xFF22304F), bodyLo = Color(0xFF131C34),
-    wellDark = Color(0xFF0C1325), wellLight = Color(0xFF1C2848),
-    shadow = Color(0xFF000208), shadowAlpha = 0.75f,
-    highlight = Color(0xFF8CEBFF), highlightAlpha = 0.15f,
-    insetShadowAlpha = 0.78f, insetHighlightAlpha = 0.14f,
-    sheenAlpha = 0.07f, rimLightAlpha = 0.26f, rimDarkAlpha = 0.38f, lipDarkAlpha = 0.46f, lipLightAlpha = 0.12f
+    bodyHi = Color(0xFF22304F), bodyLo = Color(0xFF111932),
+    wellDark = Color(0xFF0A1022), wellLight = Color(0xFF1C2848),
+    shadow = Color(0xFF000208), shadowAlpha = 0.88f,
+    highlight = Color(0xFF8CEBFF), highlightAlpha = 0.22f,
+    insetShadowAlpha = 0.88f, insetHighlightAlpha = 0.20f,
+    sheenAlpha = 0.09f, rimLightAlpha = 0.34f, rimDarkAlpha = 0.46f, lipDarkAlpha = 0.56f, lipLightAlpha = 0.18f
 )
 private val PaperDepth = DepthSpec(
-    bodyHi = Color(0xFFF7EEDD), bodyLo = Color(0xFFE0D0B4),
-    wellDark = Color(0xFFD8C8AB), wellLight = Color(0xFFF3E9D6),
-    shadow = Color(0xFF8E7549), shadowAlpha = 0.58f,
+    bodyHi = Color(0xFFF7EEDD), bodyLo = Color(0xFFDCCBAE),
+    wellDark = Color(0xFFD2C1A3), wellLight = Color(0xFFF3E9D6),
+    shadow = Color(0xFF86693B), shadowAlpha = 0.70f,
     highlight = Color(0xFFFFFAEE), highlightAlpha = 1.0f,
-    insetShadowAlpha = 0.62f, insetHighlightAlpha = 1.0f,
-    sheenAlpha = 0.55f, rimLightAlpha = 0.95f, rimDarkAlpha = 0.30f, lipDarkAlpha = 0.35f, lipLightAlpha = 0.95f
+    insetShadowAlpha = 0.74f, insetHighlightAlpha = 1.0f,
+    sheenAlpha = 0.60f, rimLightAlpha = 1.0f, rimDarkAlpha = 0.38f, lipDarkAlpha = 0.44f, lipLightAlpha = 1.0f
 )
 private val GlassDepth = DepthSpec(
-    bodyHi = Color(0xFF30408C), bodyLo = Color(0xFF1B2564),
-    wellDark = Color(0xFF10173F), wellLight = Color(0xFF25327A),
-    shadow = Color(0xFF010310), shadowAlpha = 0.74f,
-    highlight = Color(0xFFB4C6FF), highlightAlpha = 0.18f,
-    insetShadowAlpha = 0.78f, insetHighlightAlpha = 0.16f,
-    sheenAlpha = 0.10f, rimLightAlpha = 0.28f, rimDarkAlpha = 0.38f, lipDarkAlpha = 0.46f, lipLightAlpha = 0.14f
+    bodyHi = Color(0xFF30408C), bodyLo = Color(0xFF18215E),
+    wellDark = Color(0xFF0D1338), wellLight = Color(0xFF25327A),
+    shadow = Color(0xFF010310), shadowAlpha = 0.86f,
+    highlight = Color(0xFFB4C6FF), highlightAlpha = 0.27f,
+    insetShadowAlpha = 0.88f, insetHighlightAlpha = 0.23f,
+    sheenAlpha = 0.12f, rimLightAlpha = 0.38f, rimDarkAlpha = 0.46f, lipDarkAlpha = 0.56f, lipLightAlpha = 0.20f
 )
 
 /** Spesifikasi kedalaman per gaya tema (tetap, TIDAK bergantung warna dinamis wallpaper -> kontras sorot/bayangan terjamin). */
@@ -486,3 +517,159 @@ fun accentGradient(): Brush {
 /** Warna konten di atas [accentGradient] (`onPrimary` tema: gelap di aksen terang seperti cyan Neon, terang di aksen gelap). */
 @Composable
 fun accentContent(): Color = MaterialTheme.colorScheme.onPrimary
+
+/**
+ * Batch 85: saklar neumorfik (pengganti `Switch`). Jalur CEKUNG; isi aksen "menyala" dari kiri sampai kenop; kenop TIMBUL yang
+ * bergeser dan masuk ke dalam saat ditekan. Memakai `absoluteOffset` + gambar fisik (sama seperti gagang trim: tak ikut cermin RTL).
+ */
+@Composable
+fun DepthSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    val spec = LocalDepthSpec.current
+    val fill = accentGradient()
+    val density = LocalDensity.current
+    val knob = 26.dp
+    val pad = 4.dp
+    val trackWidth = 60.dp
+    val travelPx = with(density) { (trackWidth - knob - pad * 2).toPx() }
+    val knobPx = with(density) { knob.toPx() }
+    val source = remember { MutableInteractionSource() }
+    val isPressed by source.collectIsPressedAsState()
+    val press = animateFloatAsState(if (isPressed) 1f else 0f, animationSpec = tween(90), label = "depthSwitchPress")
+    val position = animateFloatAsState(if (checked) 1f else 0f, animationSpec = tween(180), label = "depthSwitchPos")
+    Box(
+        modifier = modifier
+            .then(if (enabled) Modifier else Modifier.alpha(0.45f))
+            .size(trackWidth, knob + pad * 2)
+            .depthInset(spec, RoundedCornerShape(50), DepthSize.SMALL)
+            .toggleable(
+                value = checked,
+                interactionSource = source,
+                indication = null,
+                enabled = enabled,
+                role = Role.Switch,
+                onValueChange = onCheckedChange
+            )
+    ) {
+        Box(
+            modifier = Modifier
+                .matchParentSize()
+                .padding(pad)
+                .drawBehind {
+                    val reach = (travelPx * position.value + knobPx).coerceAtMost(size.width)
+                    drawRoundRect(
+                        brush = fill,
+                        size = Size(reach, size.height),
+                        cornerRadius = CornerRadius(size.height / 2f, size.height / 2f),
+                        alpha = position.value
+                    )
+                }
+        )
+        Box(
+            modifier = Modifier
+                .padding(pad)
+                .absoluteOffset { IntOffset((travelPx * position.value).roundToInt(), 0) }
+                .size(knob)
+                .depthRaised(spec, CircleShape, DepthSize.SMALL, pressed = { press.value })
+        )
+    }
+}
+
+/**
+ * Batch 85: slider neumorfik (pengganti `Slider`): bak CEKUNG berisi isi aksen sampai kenop, kenop TIMBUL (masuk ke dalam saat
+ * disentuh) dengan titik aksen. Sentuh = langsung melompat ke posisi itu; geser horizontal = mengikuti jari (gerak vertikal tetap
+ * diteruskan ke gulir induk). Semantik `progressBarRangeInfo` + `setProgress` untuk aksesibilitas.
+ */
+@Composable
+fun DepthSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    modifier: Modifier = Modifier,
+    valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
+    enabled: Boolean = true
+) {
+    val spec = LocalDepthSpec.current
+    val fill = accentGradient()
+    val accent = MaterialTheme.colorScheme.primary
+    val density = LocalDensity.current
+    val knob = 28.dp
+    val knobPx = with(density) { knob.toPx() }
+    val edgePx = with(density) { 2.dp.toPx() }
+    val span = valueRange.endInclusive - valueRange.start
+    val fraction = if (span > 0f) ((value - valueRange.start) / span).coerceIn(0f, 1f) else 0f
+    val latestChange by rememberUpdatedState(onValueChange)
+    var widthPx by remember { mutableFloatStateOf(0f) }
+    var dragging by remember { mutableStateOf(false) }
+    val press = animateFloatAsState(if (dragging) 1f else 0f, animationSpec = tween(90), label = "depthSliderPress")
+    Box(
+        modifier = modifier
+            .then(if (enabled) Modifier else Modifier.alpha(0.45f))
+            .fillMaxWidth()
+            .height(knob + 12.dp)
+            .onSizeChanged { widthPx = it.width.toFloat() }
+            .semantics {
+                progressBarRangeInfo = ProgressBarRangeInfo(value.coerceIn(valueRange), valueRange)
+                setProgress { target ->
+                    if (enabled) latestChange(target.coerceIn(valueRange.start, valueRange.endInclusive))
+                    enabled
+                }
+            }
+            .pointerInput(enabled, valueRange) {
+                if (!enabled) return@pointerInput
+                val pick: (Float) -> Unit = { x ->
+                    val usable = size.width - knobPx
+                    if (usable > 0f) {
+                        val f = ((x - knobPx / 2f) / usable).coerceIn(0f, 1f)
+                        latestChange(valueRange.start + f * (valueRange.endInclusive - valueRange.start))
+                    }
+                }
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    dragging = true
+                    try {
+                        pick(down.position.x)
+                        val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
+                        if (slop != null) {
+                            horizontalDrag(slop.id) { change ->
+                                pick(change.position.x)
+                                change.consume()
+                            }
+                        }
+                    } finally {
+                        dragging = false
+                    }
+                }
+            },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(14.dp)
+                .depthInset(spec, RoundedCornerShape(50), DepthSize.SMALL)
+                .padding(2.dp)
+                .drawBehind {
+                    val center = knobPx / 2f + (widthPx - knobPx) * fraction
+                    val reach = (center - edgePx).coerceAtLeast(size.height).coerceAtMost(size.width)
+                    drawRoundRect(
+                        brush = fill,
+                        size = Size(reach, size.height),
+                        cornerRadius = CornerRadius(size.height / 2f, size.height / 2f)
+                    )
+                }
+        )
+        Box(
+            modifier = Modifier
+                .absoluteOffset { IntOffset(((widthPx - knobPx) * fraction).roundToInt(), 0) }
+                .size(knob)
+                .depthRaised(spec, CircleShape, DepthSize.SMALL, pressed = { press.value }),
+            contentAlignment = Alignment.Center
+        ) {
+            Box(modifier = Modifier.size(8.dp).background(accent, CircleShape))
+        }
+    }
+}

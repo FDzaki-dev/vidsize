@@ -16,8 +16,12 @@ import androidx.compose.foundation.gestures.horizontalDrag
 import androidx.compose.foundation.interaction.InteractionSource
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.absoluteOffset
@@ -143,6 +147,26 @@ enum class DepthSize(val distance: Dp, val blur: Dp) {
  * Fungsi (bukan val publik) supaya SpotBugs tak menandai field statis.
  */
 fun depthRowPadding(): PaddingValues = PaddingValues(start = 6.dp, end = 16.dp, top = 8.dp, bottom = 14.dp)
+
+/**
+ * Batch 99: kelompok [DepthChip] yang MEMBUNGKUS ke baris berikutnya (pengganti `LazyRow` + [depthRowPadding]). `LazyRow` memotong
+ * chip keras di batas padding layar ("Vert", "1:1", "YouTub" terpotong, sisanya tersembunyi harus digeser); sekarang semua
+ * pilihan terlihat utuh. Padding sama dgn [depthRowPadding] supaya bayangan timbul tak terpotong kontainer di atasnya.
+ */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+fun DepthChipFlow(
+    modifier: Modifier = Modifier,
+    spacing: Dp = 10.dp,
+    content: @Composable FlowRowScope.() -> Unit
+) {
+    FlowRow(
+        modifier = modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 14.dp),
+        horizontalArrangement = Arrangement.spacedBy(spacing),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        content = content
+    )
+}
 
 // Batch 85: ukuran DepthSize ~+35% dan alfa bayangan/sorot dinaikkan (user: "not enough"); jumlah lapisan gambar TIDAK ditambah (kinerja 90/120Hz).
 // Batch 84: model realistis (dikalibrasi lewat simulasi gambar 5 tema): bayangan BERLAPIS (ambient lebar + kontak rapat),

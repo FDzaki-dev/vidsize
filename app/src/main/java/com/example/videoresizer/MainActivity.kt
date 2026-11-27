@@ -15,7 +15,6 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
@@ -38,7 +37,6 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -124,7 +122,7 @@ import com.example.videoresizer.ui.theme.accentContent
 import com.example.videoresizer.ui.theme.accentGradient
 import com.example.videoresizer.ui.theme.depthInset
 import com.example.videoresizer.ui.theme.depthRaised
-import com.example.videoresizer.ui.theme.depthRowPadding
+import com.example.videoresizer.ui.theme.DepthChipFlow
 import com.example.videoresizer.ui.theme.drawHeroArt
 import com.example.videoresizer.ui.theme.rememberThemeBackdrop
 import com.example.videoresizer.ui.theme.themeBackdrop
@@ -2144,11 +2142,8 @@ private fun ResizerScreen(
                             // (16:9)") punya jarak dari tepi layar, bukan mepet-terpotong —
                             // baris ini tetap horizontal-scrollable, cuma sekarang kelihatan
                             // jelas ada ruang scroll, tidak terlihat seperti terpotong/cutoff.
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                contentPadding = PaddingValues(start = 6.dp, end = 20.dp, top = 8.dp, bottom = 14.dp)
-                            ) {
-                                items(SocialPreset.ENTRIES) { preset ->
+                            DepthChipFlow(spacing = 10.dp) {
+                                SocialPreset.ENTRIES.forEach { preset ->
                                     DepthChip(
                                         selected = selectedSocialPreset == preset,
                                         onClick = {
@@ -2188,8 +2183,8 @@ private fun ResizerScreen(
 
                             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                                 Text("Resolusi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                                LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                                    items(ResolutionOption.ENTRIES) { option ->
+                                DepthChipFlow(spacing = 10.dp) {
+                                    ResolutionOption.ENTRIES.forEach { option ->
                                         val isSelected = option == resolution
                                         val label = if (option == ResolutionOption.CUSTOM && customWidth != null && customHeight != null) {
                                             "${customWidth}×${customHeight}"
@@ -2244,8 +2239,8 @@ private fun ResizerScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
-                            LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                                items(QualityOption.ENTRIES) { option ->
+                            DepthChipFlow(spacing = 10.dp) {
+                                QualityOption.ENTRIES.forEach { option ->
                                     val isSelected = option == quality
                                     val label = if (option == QualityOption.CUSTOM && customBitrateKbps != null) {
                                         "${customBitrateKbps} kbps"
@@ -2356,8 +2351,8 @@ private fun ResizerScreen(
                                         Spacer(modifier = Modifier.width(12.dp))
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text("Posisi", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
-                                                items(WatermarkPosition.ENTRIES) { pos ->
+                                            DepthChipFlow(spacing = 8.dp) {
+                                                WatermarkPosition.ENTRIES.forEach { pos ->
                                                     DepthChip(
                                                         selected = pos == watermarkPosition,
                                                         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkPosition = pos },
@@ -2410,8 +2405,8 @@ private fun ResizerScreen(
                                     modifier = Modifier.fillMaxWidth()
                                 )
                                 if (captionText.isNotBlank()) {
-                                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
-                                        items(WatermarkPosition.ENTRIES) { pos ->
+                                    DepthChipFlow(spacing = 8.dp) {
+                                        WatermarkPosition.ENTRIES.forEach { pos ->
                                             DepthChip(
                                                 selected = pos == captionPosition,
                                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); captionPosition = pos },
@@ -3008,8 +3003,8 @@ private fun BatchScreen(onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                        items(SocialPreset.ENTRIES) { preset ->
+                    DepthChipFlow(spacing = 10.dp) {
+                        SocialPreset.ENTRIES.forEach { preset ->
                             DepthChip(
                                 selected = selectedSocialPreset == preset,
                                 onClick = {
@@ -3051,8 +3046,8 @@ private fun BatchScreen(onBack: () -> Unit) {
             if (stage >= 2) {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Resolusi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                        items(ResolutionOption.ENTRIES) { option ->
+                    DepthChipFlow(spacing = 10.dp) {
+                        ResolutionOption.ENTRIES.forEach { option ->
                             val isSelected = option == resolution
                             val label = if (option == ResolutionOption.CUSTOM && customWidth != null && customHeight != null) {
                                 "${customWidth}×${customHeight}"
@@ -3095,8 +3090,8 @@ private fun BatchScreen(onBack: () -> Unit) {
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                        items(QualityOption.ENTRIES) { option ->
+                    DepthChipFlow(spacing = 10.dp) {
+                        QualityOption.ENTRIES.forEach { option ->
                             val isSelected = option == quality && targetSizeMb == null
                             val label = if (option == QualityOption.CUSTOM && customBitrateKbps != null) {
                                 "${customBitrateKbps} kbps"
@@ -3184,8 +3179,8 @@ private fun BatchScreen(onBack: () -> Unit) {
                         }
                     }
                     if (watermarkUri != null) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
-                            items(WatermarkPosition.ENTRIES) { pos ->
+                        DepthChipFlow(spacing = 8.dp) {
+                            WatermarkPosition.ENTRIES.forEach { pos ->
                                 DepthChip(
                                     selected = pos == watermarkPosition,
                                     onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); watermarkPosition = pos },
@@ -3206,8 +3201,8 @@ private fun BatchScreen(onBack: () -> Unit) {
                         modifier = Modifier.fillMaxWidth()
                     )
                     if (captionText.isNotBlank()) {
-                        LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), contentPadding = depthRowPadding()) {
-                            items(WatermarkPosition.ENTRIES) { pos ->
+                        DepthChipFlow(spacing = 8.dp) {
+                            WatermarkPosition.ENTRIES.forEach { pos ->
                                 DepthChip(
                                     selected = pos == captionPosition,
                                     onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); captionPosition = pos },
@@ -3281,17 +3276,17 @@ private fun VideoEditorPreview(
     val exoPlayer = remember(uri) {
         ExoPlayer.Builder(context).build().apply {
             setMediaItem(MediaItem.fromUri(uri))
+            // Batch 99: geser/ketuk linimasa memindahkan pratinjau secara langsung -> lompat ke keyframe terdekat (cepat, mulus).
+            setSeekParameters(androidx.media3.exoplayer.SeekParameters.CLOSEST_SYNC)
             prepare()
         }
     }
 
     var isPlaying by remember { mutableStateOf(false) }
-    // NEW FEATURE: maximize/minimize toggle — minimized (default) keeps the
-    // original fixed 220dp height; maximized grows the player to show the
-    // video at its real aspect ratio (computed below via BoxWithConstraints)
-    // instead of being squeezed into a fixed short box. Resets to minimized
-    // whenever a different video is loaded (keyed on uri via remember).
-    var isMaximized by remember(uri) { mutableStateOf(false) }
+    // Batch 99: mode LAYAR PENUH sungguhan (dialog layar penuh, landscape otomatis utk video lebar). Versi lama hanya mengganti tinggi
+    // kotak 220dp <-> lebar/rasio (= 191dp utk 16:9), jadi "memperbesar" malah MENGECILKAN. Kembali ke keadaan biasa tiap video baru.
+    var isFullscreen by remember(uri) { mutableStateOf(false) }
+    var inlinePlayerView by remember { mutableStateOf<PlayerView?>(null) }
 
     // BUG FIX: since ResizerScreen (and this preview inside it) now stays
     // permanently composed even while Studio/Batch is open on top of it
@@ -3329,21 +3324,49 @@ private fun VideoEditorPreview(
         }
     }
 
+    val startMs = (trimRange.start * durationMs).toLong()
+    val endMs = (trimRange.endInclusive * durationMs).toLong()
+    var controlsVisible by remember { mutableStateOf(true) }
+
     // PERF: updated every 100ms while playing — unboxed Float avoids an
     // allocation on every one of those ticks.
     var playheadFraction by remember { mutableFloatStateOf(0f) }
 
-    // Poll playback position while playing, to animate the filmstrip playhead.
-    LaunchedEffect(exoPlayer, isPlaying) {
+    // Batch 99: pindahkan posisi pratinjau (dan kepala-putar) ke [ms]; dipakai geser handle, ketuk/geser linimasa, slider layar penuh.
+    fun seekPreview(ms: Long) {
+        val target = ms.coerceIn(0L, durationMs.coerceAtLeast(0L))
+        exoPlayer.seekTo(target)
+        playheadFraction = if (durationMs > 0) (target.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
+    }
+
+    // Satu-satunya jalur play/pause (tombol kotak & layar penuh). Hanya lompat ke awal potongan bila posisi di luar rentang trim;
+    // jeda lalu lanjut di dalam rentang mempertahankan posisi persis.
+    fun togglePlay() {
+        if (isPlaying) {
+            exoPlayer.pause()
+        } else {
+            val pos = exoPlayer.currentPosition
+            if (pos < startMs || pos >= endMs) seekPreview(startMs)
+            exoPlayer.play()
+        }
+        isPlaying = !isPlaying
+        controlsVisible = true
+    }
+
+    // Poll posisi saat memutar; berhenti OTOMATIS di batas akhir potongan (dulu terus memutar melewati trim sampai video habis).
+    LaunchedEffect(exoPlayer, isPlaying, endMs) {
         while (isPlaying) {
             val pos = exoPlayer.currentPosition.coerceAtLeast(0)
             playheadFraction = if (durationMs > 0) (pos.toFloat() / durationMs).coerceIn(0f, 1f) else 0f
-            kotlinx.coroutines.delay(100)
+            if (pos >= endMs || exoPlayer.playbackState == androidx.media3.common.Player.STATE_ENDED) {
+                exoPlayer.pause()
+                isPlaying = false
+                controlsVisible = true
+            } else {
+                kotlinx.coroutines.delay(100)
+            }
         }
     }
-
-    val startMs = (trimRange.start * durationMs).toLong()
-    val endMs = (trimRange.endInclusive * durationMs).toLong()
 
     // BUG FIX (reported: play/pause button never fades, whether playing or
     // paused/static): there used to be no auto-hide logic at all — the
@@ -3355,7 +3378,6 @@ private fun VideoEditorPreview(
     // and on every direct tap on the video itself, but only actually
     // *counts down* to hidden while playing — while paused/static the
     // button stays visible, since there's nothing to watch unobstructed.
-    var controlsVisible by remember { mutableStateOf(true) }
     LaunchedEffect(isPlaying, controlsVisible) {
         if (isPlaying && controlsVisible) {
             kotlinx.coroutines.delay(2500)
@@ -3363,30 +3385,31 @@ private fun VideoEditorPreview(
         }
     }
 
+    if (isFullscreen) {
+        VideoFullscreenDialog(
+            exoPlayer = exoPlayer,
+            inlineView = inlinePlayerView,
+            landscape = sourceWidth > 0 && sourceHeight > 0 && sourceWidth.toFloat() / sourceHeight.toFloat() > 1.05f,
+            isPlaying = isPlaying,
+            startMs = startMs,
+            endMs = endMs,
+            onTogglePlay = { togglePlay() },
+            onSeek = { seekPreview(it) },
+            onDismiss = { isFullscreen = false }
+        )
+    }
+
     DepthCard(
         shape = MaterialTheme.shapes.large,
         modifier = Modifier.fillMaxWidth()
     ) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // NEW FEATURE: maximize/minimize. BoxWithConstraints exposes this
-            // Card's actual measured width (maxWidth) so the maximized height
-            // can be derived from the VIDEO's real aspect ratio instead of an
-            // arbitrary fixed number — a 9:16 clip maximizes tall, a 1:1 clip
-            // maximizes square, etc. Capped at 520dp so an extreme portrait
-            // video can't push the maximized box off-screen.
+            // Batch 99: tinggi kotak pratinjau mengikuti rasio video ASLI (tanpa pita hitam), dibatasi 160..380dp.
             BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
                 val videoAspectRatio = remember(sourceWidth, sourceHeight) {
                     if (sourceWidth > 0 && sourceHeight > 0) sourceWidth.toFloat() / sourceHeight.toFloat() else 16f / 9f
                 }
-                val minimizedHeight = 220.dp
-                val maximizedHeight = remember(maxWidth, videoAspectRatio) {
-                    (maxWidth / videoAspectRatio).coerceAtMost(520.dp)
-                }
-                val playerHeight by animateDpAsState(
-                    targetValue = if (isMaximized) maximizedHeight else minimizedHeight,
-                    animationSpec = tween(280),
-                    label = "VideoPlayerHeight"
-                )
+                val playerHeight = remember(maxWidth, videoAspectRatio) { (maxWidth / videoAspectRatio).coerceIn(160.dp, 380.dp) }
 
                 Box(
                     contentAlignment = Alignment.Center,
@@ -3403,6 +3426,7 @@ private fun VideoEditorPreview(
                             PlayerView(ctx).apply {
                                 player = exoPlayer
                                 useController = false // the filmstrip below is the real scrubber
+                                inlinePlayerView = this
                             }
                         },
                         modifier = Modifier
@@ -3410,11 +3434,7 @@ private fun VideoEditorPreview(
                             .clip(RoundedCornerShape(12.dp))
                     )
 
-                    // Maximize/minimize toggle — top-end corner. Shares the
-                    // exact same auto-hide fade as the play button below (both
-                    // driven by the same `controlsVisible` state): per user
-                    // request, this control "wajib bisa fade out juga" instead
-                    // of sitting permanently opaque over the video.
+                    // Tombol layar penuh (pojok kanan-atas), ikut memudar bersama tombol play.
                     androidx.compose.animation.AnimatedVisibility(
                         visible = controlsVisible,
                         enter = fadeIn(),
@@ -3424,7 +3444,7 @@ private fun VideoEditorPreview(
                         IconButton(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                isMaximized = !isMaximized
+                                isFullscreen = true
                                 controlsVisible = true
                             },
                             modifier = Modifier
@@ -3433,22 +3453,16 @@ private fun VideoEditorPreview(
                                 .background(Color.Black.copy(alpha = 0.45f), shape = androidx.compose.foundation.shape.CircleShape)
                         ) {
                             Icon(
-                                imageVector = if (isMaximized) Icons.Filled.FullscreenExit else Icons.Filled.Fullscreen,
-                                contentDescription = if (isMaximized) "Perkecil video" else "Perbesar video",
+                                imageVector = Icons.Filled.Fullscreen,
+                                contentDescription = "Layar penuh",
                                 tint = Color.White,
                                 modifier = Modifier.size(20.dp)
                             )
                         }
                     }
 
-                    // Fully-qualified call (not the bare `AnimatedVisibility(...)`
-                    // import): this Box sits inside the Card's outer Column, so
-                    // Kotlin's implicit-receiver search also finds the
-                    // ColumnScope.AnimatedVisibility extension from that
-                    // enclosing scope and prefers it over the plain top-level
-                    // composable — which then fails to compile because we're
-                    // not directly in a ColumnScope here. Qualifying the call
-                    // sidesteps the ambiguity entirely.
+                    // Pemanggilan penuh (bukan impor `AnimatedVisibility`): Box ini berada di dalam Column kartu, sehingga ekstensi
+                    // ColumnScope.AnimatedVisibility ikut terpilih dan gagal kompilasi.
                     androidx.compose.animation.AnimatedVisibility(
                         visible = controlsVisible,
                         enter = fadeIn(),
@@ -3457,31 +3471,7 @@ private fun VideoEditorPreview(
                         IconButton(
                             onClick = {
                                 haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                if (isPlaying) {
-                                    exoPlayer.pause()
-                                } else {
-                                    // BUG FIX (reported: pressing play resets the
-                                    // clip back to the start every time): this used
-                                    // to unconditionally call seekTo(startMs) before
-                                    // every play(), which overwrote wherever the user
-                                    // had paused. Now it only seeks when the current
-                                    // position has actually fallen outside the
-                                    // selected trim range — either genuinely the
-                                    // first play (position starts at 0, before a
-                                    // non-zero startMs), the trim handles were
-                                    // dragged past a paused position, or playback
-                                    // already ran to the trim end (replay should
-                                    // restart, not silently no-op). Any ordinary
-                                    // pause-then-resume inside the trim range now
-                                    // keeps its exact position.
-                                    val pos = exoPlayer.currentPosition
-                                    if (pos < startMs || pos >= endMs) {
-                                        exoPlayer.seekTo(startMs)
-                                    }
-                                    exoPlayer.play()
-                                }
-                                isPlaying = !isPlaying
-                                controlsVisible = true
+                                togglePlay()
                             },
                             modifier = Modifier
                                 .size(56.dp)
@@ -3531,6 +3521,13 @@ private fun VideoEditorPreview(
                 }
             }
 
+            val latestTrimRange = rememberUpdatedState(trimRange)
+            fun scrubTo(x: Float) {
+                if (trackWidthPx <= 0f) return
+                val r = latestTrimRange.value
+                seekPreview(((x / trackWidthPx).coerceIn(r.start, r.endInclusive) * durationMs).toLong())
+            }
+
             // FIX (asymmetric edges, reported by user): the trim handles
             // below are drawn as SIBLINGS of the filmstrip Row in this Box,
             // not children of it — so the filmstrip's own `.clip(...)` on
@@ -3549,6 +3546,16 @@ private fun VideoEditorPreview(
                     .fillMaxWidth()
                     .height(trackHeight)
                     .clip(RoundedCornerShape(10.dp))
+                    // Batch 99: ketuk/geser di linimasa memindahkan pratinjau (di dalam rentang trim); posisi TETAP, tak lagi ke-reset.
+                    .pointerInput(uri, durationMs) {
+                        androidx.compose.foundation.gestures.detectTapGestures(onTap = { offset -> scrubTo(offset.x) })
+                    }
+                    .pointerInput(uri, durationMs) {
+                        androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                            onDragStart = { offset -> pauseIfPlaying(); scrubTo(offset.x) },
+                            onHorizontalDrag = { change, _ -> change.consume(); scrubTo(change.position.x) }
+                        )
+                    }
             ) {
                 if (filmstrip.isNotEmpty()) {
                     Row(
@@ -3598,10 +3605,10 @@ private fun VideoEditorPreview(
                     )
                 }
 
-                if (isPlaying) {
+                if (trackWidthPx > 0f) {
                     Box(
                         modifier = Modifier
-                            .offset { IntOffset((playheadFraction * trackWidthPx).roundToInt(), 0) }
+                            .absoluteOffset { IntOffset((playheadFraction * trackWidthPx).roundToInt(), 0) }
                             .width(2.dp)
                             .height(trackHeight)
                             .background(Color.White)
@@ -3633,7 +3640,8 @@ private fun VideoEditorPreview(
                         label = "Batas awal potongan, ${formatSeconds(startMs)}",
                         onDragStart = { pauseIfPlaying() },
                         onFractionChange = { newStart ->
-                            onTrimRangeChange(newStart..trimRange.endInclusive)
+                            onTrimRangeChange(newStart..latestTrimRange.value.endInclusive)
+                            seekPreview((newStart * durationMs).toLong())
                         }
                     )
                     TrimHandle(
@@ -3647,15 +3655,18 @@ private fun VideoEditorPreview(
                         label = "Batas akhir potongan, ${formatSeconds(endMs)}",
                         onDragStart = { pauseIfPlaying() },
                         onFractionChange = { newEnd ->
-                            onTrimRangeChange(trimRange.start..newEnd)
+                            onTrimRangeChange(latestTrimRange.value.start..newEnd)
+                            seekPreview(((newEnd * durationMs).toLong() - 150L).coerceAtLeast(0L))
                         }
                     )
                 }
             }
 
+            // Batch 99: teks info WAJIB berbobot. Tanpa weight, teks panjang memakan seluruh lebar baris; "Ganti video" terhimpit ke
+            // lebar ~0 sehingga hurufnya turun satu-satu (~220dp tinggi): celah raksasa di bawah linimasa + tombol tak terlihat.
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 val details = buildList {
@@ -3665,9 +3676,159 @@ private fun VideoEditorPreview(
                 Text(
                     details.joinToString(" • "),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
+                    modifier = Modifier.weight(1f)
                 )
-                TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPickDifferent() }) { Text("Ganti video") }
+                TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onPickDifferent() }) {
+                    Text("Ganti video", maxLines = 1, softWrap = false)
+                }
+            }
+        }
+    }
+}
+
+private tailrec fun android.content.Context.findHostActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findHostActivity()
+    else -> null
+}
+
+/**
+ * Batch 99: layar penuh SUNGGUHAN utk pratinjau: dialog tanpa tepi + bilah sistem disembunyikan + Activity dikunci landscape bila
+ * videonya lebar (Activity menangani configChanges, jadi tak dibuat ulang) + kontrol (keluar, play/pause, slider dalam rentang trim)
+ * yang memudar sendiri. Player yang sama dipindahkan ke PlayerView dialog lalu dikembalikan ke kotak saat ditutup.
+ */
+@androidx.annotation.OptIn(UnstableApi::class)
+@Composable
+private fun VideoFullscreenDialog(
+    exoPlayer: ExoPlayer,
+    inlineView: PlayerView?,
+    landscape: Boolean,
+    isPlaying: Boolean,
+    startMs: Long,
+    endMs: Long,
+    onTogglePlay: () -> Unit,
+    onSeek: (Long) -> Unit,
+    onDismiss: () -> Unit
+) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val activity = remember(context) { context.findHostActivity() }
+    DisposableEffect(activity, landscape) {
+        val previous = activity?.requestedOrientation
+        if (landscape) activity?.requestedOrientation = android.content.pm.ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
+        onDispose {
+            if (activity != null && previous != null) activity.requestedOrientation = previous
+        }
+    }
+    val latestInline = rememberUpdatedState(inlineView)
+    var fullView by remember { mutableStateOf<PlayerView?>(null) }
+    DisposableEffect(exoPlayer) {
+        onDispose { PlayerView.switchTargetView(exoPlayer, fullView, latestInline.value) }
+    }
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false, decorFitsSystemWindows = false)
+    ) {
+        val dialogView = androidx.compose.ui.platform.LocalView.current
+        DisposableEffect(dialogView) {
+            val window = (dialogView.parent as? androidx.compose.ui.window.DialogWindowProvider)?.window
+            val controller = window?.let { androidx.core.view.WindowCompat.getInsetsController(it, dialogView) }
+            window?.setLayout(android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT)
+            window?.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.BLACK))
+            if (window != null) {
+                val lp = window.attributes
+                lp.layoutInDisplayCutoutMode = android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+                window.attributes = lp
+            }
+            controller?.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            controller?.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+            onDispose { controller?.show(androidx.core.view.WindowInsetsCompat.Type.systemBars()) }
+        }
+
+        var controlsVisible by remember { mutableStateOf(true) }
+        var posMs by remember { mutableLongStateOf(exoPlayer.currentPosition.coerceAtLeast(0L)) }
+        LaunchedEffect(exoPlayer) {
+            while (true) {
+                posMs = exoPlayer.currentPosition.coerceAtLeast(0L)
+                kotlinx.coroutines.delay(100)
+            }
+        }
+        LaunchedEffect(isPlaying, controlsVisible) {
+            if (isPlaying && controlsVisible) {
+                kotlinx.coroutines.delay(2500)
+                controlsVisible = false
+            }
+        }
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .clickable(
+                    indication = null,
+                    interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+                ) { controlsVisible = !controlsVisible }
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        useController = false
+                        PlayerView.switchTargetView(exoPlayer, inlineView, this)
+                        fullView = this
+                    }
+                },
+                modifier = Modifier.fillMaxSize()
+            )
+            androidx.compose.animation.AnimatedVisibility(
+                visible = controlsVisible,
+                enter = fadeIn(),
+                exit = fadeOut(),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)).safeDrawingPadding()) {
+                    IconButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .align(Alignment.TopStart)
+                            .padding(8.dp)
+                            .size(44.dp)
+                            .background(Color.Black.copy(alpha = 0.45f), shape = androidx.compose.foundation.shape.CircleShape)
+                    ) {
+                        Icon(Icons.Filled.FullscreenExit, contentDescription = "Keluar layar penuh", tint = Color.White)
+                    }
+                    IconButton(
+                        onClick = onTogglePlay,
+                        modifier = Modifier
+                            .align(Alignment.Center)
+                            .size(64.dp)
+                            .background(Color.Black.copy(alpha = 0.45f), shape = androidx.compose.foundation.shape.CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = if (isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (isPlaying) "Pause" else "Play",
+                            tint = Color.White,
+                            modifier = Modifier.size(32.dp)
+                        )
+                    }
+                    if (endMs > startMs) {
+                        Column(
+                            modifier = Modifier
+                                .align(Alignment.BottomCenter)
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 8.dp)
+                        ) {
+                            androidx.compose.material3.Slider(
+                                value = posMs.coerceIn(startMs, endMs).toFloat(),
+                                onValueChange = { onSeek(it.toLong()); controlsVisible = true },
+                                valueRange = startMs.toFloat()..endMs.toFloat()
+                            )
+                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                                Text(formatSeconds(posMs.coerceIn(startMs, endMs)), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                                Text(formatSeconds(endMs), color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -3730,6 +3891,13 @@ private fun TrimHandle(
     // defect this also closes off.
     val latestTrackWidthPx = rememberUpdatedState(trackWidthPx)
     val latestValidRange = rememberUpdatedState(validRange)
+    // Batch 99 (user: posisi/trim video "selalu ke-reset"): `pointerInput(Unit)` menjalankan SATU korutin lama; lambda
+    // `onFractionChange` yang ditangkapnya adalah milik komposisi PERTAMA, jadi `trimRange.endInclusive` di dalamnya basi:
+    // menggeser handle awal mengembalikan handle akhir ke nilai lama (dan sebaliknya). Semua callback/nilai kini dibaca lewat
+    // rememberUpdatedState.
+    val latestFraction = rememberUpdatedState(fraction)
+    val latestOnDragStart = rememberUpdatedState(onDragStart)
+    val latestOnFractionChange = rememberUpdatedState(onFractionChange)
 
     // BUG FIX: touch target used to be exactly the visible bar's width
     // (16dp) — well under Android's 48dp minimum recommended touch target,
@@ -3779,15 +3947,15 @@ private fun TrimHandle(
             .pointerInput(Unit) {
                 detectDragGestures(
                     onDragStart = {
-                        currentFraction = fraction
-                        onDragStart()
+                        currentFraction = latestFraction.value
+                        latestOnDragStart.value()
                     },
                     onDrag = { change, dragAmount ->
                         change.consume()
                         val range = latestValidRange.value
                         currentFraction = (currentFraction + dragAmount.x / latestTrackWidthPx.value)
                             .coerceIn(range.start, range.endInclusive)
-                        onFractionChange(currentFraction)
+                        latestOnFractionChange.value(currentFraction)
                     }
                 )
             },
@@ -4231,7 +4399,8 @@ private fun SettingsTabBar(
             val isSelected = tab == selected
             Box(
                 modifier = Modifier
-                    .weight(1f)
+                    // Batch 99: lebar sebanding panjang label (bukan sama rata) supaya "Kualitas"/"Overlay" tak terpotong jadi "Kualit…".
+                    .weight((tab.label.length + 2).toFloat())
                     .then(if (isSelected) Modifier.depthRaised(spec, tabShape, DepthSize.SMALL) else Modifier)
                     .clip(tabShape)
                     // Batch 74 (Prioritas 7): `selectable` + Role.Tab memberi TalkBack status terpilih/tidak ("tab, terpilih");
@@ -4244,16 +4413,17 @@ private fun SettingsTabBar(
                             onSelect(tab)
                         }
                     )
-                    .padding(vertical = 10.dp),
+                    .padding(vertical = 10.dp, horizontal = 2.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     tab.label,
-                    style = MaterialTheme.typography.labelMedium,
+                    style = MaterialTheme.typography.labelMedium.copy(letterSpacing = 0.sp),
                     fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal,
                     color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    softWrap = false,
+                    overflow = TextOverflow.Visible
                 )
             }
         }
@@ -4272,8 +4442,8 @@ private fun <T> OptionSection(
     val haptic = LocalHapticFeedback.current
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(title, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-        LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-            items(options) { option ->
+        DepthChipFlow(spacing = 10.dp) {
+            options.forEach { option ->
                 val isSelected = option == selected
                 DepthChip(
                     selected = isSelected,
@@ -5196,8 +5366,8 @@ private fun GifScreen(
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Frame rate GIF", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                        items(listOf(5, 10, 15)) { f ->
+                    DepthChipFlow(spacing = 10.dp) {
+                        listOf(5, 10, 15).forEach { f ->
                             DepthChip(
                                 selected = fps == f,
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); fps = f },
@@ -5209,8 +5379,8 @@ private fun GifScreen(
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Lebar GIF", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                        items(listOf(240, 360, 480)) { w ->
+                    DepthChipFlow(spacing = 10.dp) {
+                        listOf(240, 360, 480).forEach { w ->
                             DepthChip(
                                 selected = targetWidth == w,
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); targetWidth = w },
@@ -5633,8 +5803,8 @@ private fun CompressorScreen(onBack: () -> Unit) {
 
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Tingkat kompresi", fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onBackground)
-                    LazyRow(horizontalArrangement = Arrangement.spacedBy(10.dp), contentPadding = depthRowPadding()) {
-                        items(CompressionLevel.ENTRIES) { opt ->
+                    DepthChipFlow(spacing = 10.dp) {
+                        CompressionLevel.ENTRIES.forEach { opt ->
                             DepthChip(
                                 selected = level == opt,
                                 onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); level = opt },

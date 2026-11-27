@@ -1,5 +1,22 @@
 # Changelog
 
+## Batch 99: perbaikan cacat dari video rekaman layar "Resize / Edit Video" (fullscreen, trim ke-reset, celah teks, pill terpotong)
+
+User: "perbaiki seluruh kecacatan yang tampil dalam video. contohnya mode Fullscreen yang useless, reposisi video yang selalu ke-reset, gap diantara text, pil yang tidak memuat full text, dll!!" (video 21 d, 720x1624, tema Cosmic Orange).
+
+### CACAT DI VIDEO -> AKAR -> PERBAIKAN (`MainActivity.kt`, `ui/theme/Depth.kt`; BELUM diverifikasi di HP)
+1. **Fullscreen useless**: tombol hanya menukar tinggi kotak 220dp <-> lebar/rasio (= 191dp utk video 16:9), jadi "memperbesar" malah MENGECILKAN. -> Layar penuh SUNGGUHAN (`VideoFullscreenDialog`): dialog tanpa tepi, bilah sistem disembunyikan, Activity dikunci landscape utk video lebar (manifest sudah `configChanges` orientasi -> tak dibuat ulang), kontrol keluar/play-pause/slider (dalam rentang trim) memudar sendiri, back = keluar; player dipindah ke PlayerView dialog lalu dikembalikan (`PlayerView.switchTargetView`). Kotak pratinjau kini setinggi rasio video asli (160..380dp), tanpa pita hitam.
+2. **Reposisi/trim selalu ke-reset**: `TrimHandle` memakai `pointerInput(Unit)` yang menangkap `onFractionChange` BASI milik komposisi pertama (`trimRange.endInclusive` lama) -> menggeser handle awal mengembalikan handle akhir ke nilai lama, dan sebaliknya. -> semua callback/nilai dibaca lewat `rememberUpdatedState`. Tambahan: menggeser handle kini memindahkan pratinjau ke titik itu (seek keyframe terdekat), ketuk/geser linimasa = scrub dalam rentang trim, kepala-putar putih selalu tampak (dulu hanya saat memutar), pemutaran berhenti otomatis di akhir potongan (dulu lewat trim sampai video habis), tombol play tak lagi mengulang dari awal kecuali posisi di luar rentang.
+3. **Celah raksasa antar-teks + tombol "Ganti video" hilang**: Row info = `Text` tanpa weight + `TextButton`; teks panjang memakan seluruh lebar, tombol terhimpit lebar ~0 sehingga hurufnya turun satu-satu (~220dp) -> kartu meregang dan teks info jauh di bawah linimasa. -> `Text.weight(1f)`, tombol `maxLines = 1, softWrap = false`.
+4. **Pill tab "Kualit…" / "Overl…"**: 5 tab berlebar sama + `Ellipsis` + letterSpacing tema. -> lebar sebanding panjang label, letterSpacing 0, tanpa elipsis.
+5. **Chip terpotong ("Vert", "1:1", "10", "YouTub")**: 14 `LazyRow` memotong keras di batas padding layar. -> `DepthChipFlow` (FlowRow, padding sama dgn `depthRowPadding`): semua pilihan tampil utuh, membungkus ke baris berikutnya. Seluruh 14 titik dikonversi (Resizer: preset sosial, rasio, resolusi, FPS, rotasi, flip, dst; layar lain ikut).
+
+### VERIFIED / NOT VERIFIED
+VERIFIED statis: kurung seimbang; kotlinc 1.9.24 0 galat SINTAKS; galat non-"unresolved" sama dgn v98 kecuali 2 artefak pustaka (`this` di `PlayerView(...).apply`, `@OptIn(ExperimentalLayoutApi)`).
+NOT VERIFIED: Gradle/Compose, lint, SpotBugs, ArchUnit, tes, dan perilaku di HP: fullscreen (rotasi, bilah sistem, kembalinya frame di kotak setelah keluar), scrub/seek, tab/chip pada font besar, layar lain yang memakai `DepthChipFlow`. Tidak diaudit: `pointerInput(Unit)` basi serupa di tempat lain (Depth/slider).
+### Bila MERAH
+Baca `e:` pertama; kandidat `MainActivity.kt` (`VideoFullscreenDialog`: `DialogWindowProvider`, `WindowCompat`, `PlayerView.switchTargetView`, `Slider`; `VideoEditorPreview`: `seekPreview`/`togglePlay`/`scrubTo`), `Depth.kt` (`DepthChipFlow`: `FlowRow`/`@OptIn(ExperimentalLayoutApi)`). Jalan balik = `Vidsize_v98.zip`.
+
 ## Batch 98: Tema baru "Cosmic Orange" (ungu antariksa + oranye surya, ornamen peta bintang/astrolab)
 
 User: "bikin tema baru yaitu cosmic orange dengan ornamen khas dan unik!!"

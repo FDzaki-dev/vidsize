@@ -511,6 +511,7 @@ the GitHub Actions route above is much faster in practice.
   project's Media3 version is ever bumped. If a build error appears around the watermark
   specifically, `createStaticBitmapOverlay`'s parameter order/types are the next thing
   to check — Android Studio's error will name the exact expected signature.
+- **Batch 100:** memperbaiki build Batch 99 yang gagal kompilasi (opt-in eksperimental `FlowRowScope`, `item {}` sisa, impor hilang); tanpa perubahan perilaku. NOT VERIFIED di CI; detail di CHANGELOG Batch 100.
 - **Batch 99:** perbaikan cacat dari video rekaman layar Resize/Edit Video: layar penuh sungguhan, trim tidak lagi ke-reset, celah teks + tombol "Ganti video" pulih, pill tab tanpa elipsis, semua chip membungkus utuh (tak terpotong). NOT VERIFIED di CI/HP; detail di CHANGELOG Batch 99.
 - **Batch 98:** tema baru "Cosmic Orange" (tema ke-7) — ungu antariksa + oranye surya + amber, ornamen peta bintang (nebula, bintang, astrolab berskala derajat, orbit berplanet, komet, gerhana), hero planet bercincin, judul sans tebal + label monospace. NOT VERIFIED di CI/HP; detail di CHANGELOG Batch 98.
 - **Batch 97:** ubin hero "Resize / Edit Video" kini ikut punya efek cekung saat ditekan (lapisan cekung digambar di atas gradien opaknya, `DepthCard(pressOverlay = true)`), bukan hanya riak. NOT VERIFIED di CI/HP; detail di CHANGELOG Batch 97.

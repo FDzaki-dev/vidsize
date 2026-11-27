@@ -1,5 +1,14 @@
 # Changelog
 
+## Batch 100: perbaikan KEGAGALAN BUILD Batch 99 (`:app:compileReleaseKotlin`)
+
+User mengunggah `log_fail_1_127_127.zip` (build-output.log + manifest-merger report) tanpa teks: build v99 gagal kompilasi. Tiga akar (semua dari kode Batch 99, bukan kode lama):
+1. **"The API of this layout is experimental" (14 pemanggil `DepthChipFlow`)**: parameter `content: @Composable FlowRowScope.() -> Unit` membocorkan tipe `ExperimentalLayoutApi` ke setiap pemanggil. -> `DepthChipFlow(content: @Composable () -> Unit)` (tanpa receiver; `FlowRow { content() }`), OptIn tetap hanya di `Depth.kt`.
+2. **"Unresolved reference: item" + "@Composable invocations ..." (2 titik: chip "Ukuran target (MB)" di ResizerScreen & BatchScreen)**: konversi `LazyRow` -> `DepthChipFlow` Batch 99 hanya menangani `items(...)` pertama, sedangkan dua baris punya `item { ... }` tambahan. -> `item { }` dibuka (chip dipanggil langsung). Tak ada sisa `item {`/`items(` di dalam `DepthChipFlow`.
+3. **`detectTapGestures`/`detectHorizontalDragGestures` unresolved + `Dialog`/`DialogProperties` unresolved**: ekstensi `PointerInputScope` tak bisa dipanggil lewat nama paket lengkap, dan `Dialog` belum diimpor. -> tambah impor `foundation.gestures.detectTapGestures`, `detectHorizontalDragGestures`, `ui.window.Dialog`, `ui.window.DialogProperties`; pemanggilan memakai nama pendek. (Galat "@Composable invocations" di blok `VideoFullscreenDialog` adalah akibat `Dialog` tak terselesaikan.)
+
+Tidak ada perubahan perilaku dari Batch 99. VERIFIED statis: kurung seimbang, kotlinc 0 galat sintaks, semua galat di log sudah dipetakan. NOT VERIFIED: kompilasi Gradle ulang (log hanya memuat galat tahap kompilasi Kotlin; galat tahap berikutnya, bila ada, baru terlihat setelah ini hijau), lint, SpotBugs, ArchUnit, tes, perilaku HP. Jalan balik = `Vidsize_v98.zip` (v99 TIDAK dapat dibangun).
+
 ## Batch 99: perbaikan cacat dari video rekaman layar "Resize / Edit Video" (fullscreen, trim ke-reset, celah teks, pill terpotong)
 
 User: "perbaiki seluruh kecacatan yang tampil dalam video. contohnya mode Fullscreen yang useless, reposisi video yang selalu ke-reset, gap diantara text, pil yang tidak memuat full text, dll!!" (video 21 d, 720x1624, tema Cosmic Orange).

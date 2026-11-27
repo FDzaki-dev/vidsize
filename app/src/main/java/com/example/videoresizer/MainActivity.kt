@@ -33,6 +33,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -99,6 +101,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.FileProvider
 import androidx.media3.common.MediaItem
@@ -2265,16 +2269,14 @@ private fun ResizerScreen(
                                 // customBitrateKbps state as the chips above, just
                                 // driven by a target file size instead of a bitrate
                                 // number. See TargetSizeDialog / requiredBitrateKbpsForTargetSize.
-                                item {
-                                    DepthChip(
-                                        selected = false,
-                                        onClick = {
-                                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
-                                            showTargetSizeDialog = true
-                                        },
-                                        label = { Text("Ukuran target (MB)") }
-                                    )
-                                }
+                                DepthChip(
+                                    selected = false,
+                                    onClick = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                     selectedSocialPreset = null
+                                        showTargetSizeDialog = true
+                                    },
+                                    label = { Text("Ukuran target (MB)") }
+                                )
                             }
                             // UX: gives a novice user a concrete before-you-commit
                             // number instead of an abstract "Rendah/Sedang/Tinggi"
@@ -3110,16 +3112,14 @@ private fun BatchScreen(onBack: () -> Unit) {
                         // point into CUSTOM" idea as ResizerScreen's identical
                         // chip — see targetSizeMb's doc comment above for how
                         // batch resolves this per item instead of once.
-                        item {
-                            DepthChip(
-                                selected = targetSizeMb != null,
-                                onClick = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
-                                    showTargetSizeDialog = true
-                                },
-                                label = { Text(targetSizeMb?.let { "${it} MB" } ?: "Ukuran target (MB)") }
-                            )
-                        }
+                        DepthChip(
+                            selected = targetSizeMb != null,
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove);                                 selectedSocialPreset = null
+                                showTargetSizeDialog = true
+                            },
+                            label = { Text(targetSizeMb?.let { "${it} MB" } ?: "Ukuran target (MB)") }
+                        )
                     }
                     if (targetSizeMb != null) {
                         Text(
@@ -3548,10 +3548,10 @@ private fun VideoEditorPreview(
                     .clip(RoundedCornerShape(10.dp))
                     // Batch 99: ketuk/geser di linimasa memindahkan pratinjau (di dalam rentang trim); posisi TETAP, tak lagi ke-reset.
                     .pointerInput(uri, durationMs) {
-                        androidx.compose.foundation.gestures.detectTapGestures(onTap = { offset -> scrubTo(offset.x) })
+                        detectTapGestures(onTap = { offset -> scrubTo(offset.x) })
                     }
                     .pointerInput(uri, durationMs) {
-                        androidx.compose.foundation.gestures.detectHorizontalDragGestures(
+                        detectHorizontalDragGestures(
                             onDragStart = { offset -> pauseIfPlaying(); scrubTo(offset.x) },
                             onHorizontalDrag = { change, _ -> change.consume(); scrubTo(change.position.x) }
                         )

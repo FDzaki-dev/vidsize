@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.FlowRowScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.absoluteOffset
@@ -158,14 +157,15 @@ fun depthRowPadding(): PaddingValues = PaddingValues(start = 6.dp, end = 16.dp, 
 fun DepthChipFlow(
     modifier: Modifier = Modifier,
     spacing: Dp = 10.dp,
-    content: @Composable FlowRowScope.() -> Unit
+    content: @Composable () -> Unit
 ) {
+    // Parameter `content` sengaja TANPA receiver FlowRowScope: tipe itu ExperimentalLayoutApi dan membuat setiap pemanggil gagal
+    // kompilasi ("The API of this layout is experimental") kecuali ikut OptIn.
     FlowRow(
         modifier = modifier.fillMaxWidth().padding(start = 6.dp, end = 6.dp, top = 8.dp, bottom = 14.dp),
         horizontalArrangement = Arrangement.spacedBy(spacing),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        content = content
-    )
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) { content() }
 }
 
 // Batch 85: ukuran DepthSize ~+35% dan alfa bayangan/sorot dinaikkan (user: "not enough"); jumlah lapisan gambar TIDAK ditambah (kinerja 90/120Hz).

@@ -20,7 +20,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
+import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -46,8 +48,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.automirrored.filled.BrandingWatermark
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Close
@@ -800,6 +804,7 @@ private fun ToolTopBar(title: String, onBack: () -> Unit, backDescription: Strin
  * Batch 82: Beranda bergaya "app premium" — judul besar + aksi bulat di kanan, SATU kartu hero (alat utama, lebar
  * penuh, gradien aksen app), lalu grid 2x2 alat lain dgn identitas warna sendiri (dulu 5 kartu sama rata -> baris
  * terakhir pincang 1 kartu). Update + Tema tetap di header (Batch 81).
+ * Batch 93: grid kini 1 baris (Kompres + Riwayat); Video ke GIF + Ekspor Batch pindah ke [HomeHiddenGems] (baris lipat).
  */
 @Composable
 private fun HomeScreen(
@@ -892,24 +897,6 @@ private fun HomeScreen(
                     modifier = Modifier.weight(1f)
                 )
                 HomeToolCard(
-                    icon = Icons.Filled.Gif,
-                    label = "Video ke GIF",
-                    desc = "Ekspor jadi GIF",
-                    accent = Color(0xFFFF6FA5),
-                    onClick = onOpenGif,
-                    modifier = Modifier.weight(1f)
-                )
-            }
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                HomeToolCard(
-                    icon = Icons.Filled.Layers,
-                    label = "Ekspor Batch",
-                    desc = "Proses banyak video sekaligus",
-                    accent = Color(0xFF3DD6C0),
-                    onClick = onOpenBatch,
-                    modifier = Modifier.weight(1f)
-                )
-                HomeToolCard(
                     icon = Icons.Filled.PhotoLibrary,
                     label = "Riwayat",
                     desc = "Lihat hasil ekspor sebelumnya",
@@ -918,7 +905,153 @@ private fun HomeScreen(
                     modifier = Modifier.weight(1f)
                 )
             }
+            // Batch 93: Video ke GIF + Ekspor Batch jarang dipakai -> bukan kartu besar lagi, melainkan "permata tersembunyi" berlipat.
+            HomeHiddenGems(onOpenGif = onOpenGif, onOpenBatch = onOpenBatch)
         }
+    }
+}
+
+/**
+ * Batch 93: "permata tersembunyi" — alat yang jarang dipakai (Video ke GIF, Ekspor Batch) tidak lagi jadi kartu besar di grid
+ * Beranda, melainkan satu baris tipis berlipat (tertutup default; [expanded] `rememberSaveable` -> tahan rotasi) yang membuka dua
+ * baris ringkas. Tujuan jalur utama Beranda bersih, alatnya tetap sekali-ketuk-dua dari Beranda. Sengaja datar (tanpa
+ * [DepthCard]/bayangan) agar murah digambar dan terbaca sebagai sekunder. Rute `Screen.GIF`/`Screen.BATCH` tak berubah.
+ */
+@Composable
+private fun HomeHiddenGems(onOpenGif: () -> Unit, onOpenBatch: () -> Unit) {
+    val haptic = LocalHapticFeedback.current
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    val chevronRotation by animateFloatAsState(if (expanded) 180f else 0f, animationSpec = tween(220), label = "gemChevron")
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    val shape = RoundedCornerShape(18.dp)
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(shape)
+            .border(BorderStroke(1.dp, muted.copy(alpha = 0.18f)), shape)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(
+                    onClickLabel = if (expanded) "Tutup permata tersembunyi" else "Buka permata tersembunyi",
+                    role = Role.Button
+                ) {
+                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                    expanded = !expanded
+                }
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(Icons.Filled.AutoAwesome, contentDescription = null, tint = muted, modifier = Modifier.size(20.dp))
+            Spacer(modifier = Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    "Permata tersembunyi",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    "Alat yang jarang dipakai",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = muted,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+            Icon(
+                Icons.Filled.ExpandMore,
+                contentDescription = null,
+                tint = muted,
+                modifier = Modifier.graphicsLayer { rotationZ = chevronRotation }
+            )
+        }
+        AnimatedVisibility(
+            visible = expanded,
+            enter = expandVertically(tween(220)) + fadeIn(tween(220)),
+            exit = shrinkVertically(tween(180)) + fadeOut(tween(180))
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                HomeGemRow(
+                    icon = Icons.Filled.Gif,
+                    label = "Video ke GIF",
+                    desc = "Ekspor potongan video jadi GIF",
+                    accent = Color(0xFFFF6FA5),
+                    onClick = onOpenGif
+                )
+                HomeGemRow(
+                    icon = Icons.Filled.Layers,
+                    label = "Ekspor Batch",
+                    desc = "Proses banyak video sekaligus",
+                    accent = Color(0xFF3DD6C0),
+                    onClick = onOpenBatch
+                )
+            }
+        }
+    }
+}
+
+/** Baris ringkas satu "permata tersembunyi" (ubin ikon beraksen tipis + judul + deskripsi + panah); tinggi >= 56dp (target sentuh aman). */
+@Composable
+private fun HomeGemRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    desc: String,
+    accent: Color,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    // Aksen dipekatkan di tema terang (sama dgn HomeToolCard) supaya ikon tetap terbaca.
+    val tint = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) lerp(accent, Color.Black, 0.30f) else accent
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(role = Role.Button) {
+                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                onClick()
+            }
+            .padding(horizontal = 8.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .clip(RoundedCornerShape(11.dp))
+                .background(tint.copy(alpha = 0.14f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(20.dp))
+        }
+        Spacer(modifier = Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                label,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            Text(
+                desc,
+                style = MaterialTheme.typography.bodySmall,
+                color = muted,
+                maxLines = 2,
+                overflow = TextOverflow.Ellipsis
+            )
+        }
+        Icon(
+            Icons.AutoMirrored.Filled.ArrowForward,
+            contentDescription = null,
+            tint = muted,
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 

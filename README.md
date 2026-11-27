@@ -511,6 +511,7 @@ the GitHub Actions route above is much faster in practice.
   project's Media3 version is ever bumped. If a build error appears around the watermark
   specifically, `createStaticBitmapOverlay`'s parameter order/types are the next thing
   to check — Android Studio's error will name the exact expected signature.
+- **Batch 93:** Video ke GIF + Ekspor Batch jadi "permata tersembunyi" — baris lipat di Beranda (`HomeHiddenGems`, tertutup default); grid Beranda tinggal Kompres + Riwayat. Rute & isi layar kedua alat tak berubah. NOT VERIFIED di HP.
 - **Batch 91:** isi alat langsung terlihat saat meluncur (batalkan penundaan Batch 90, terbukti dari video user), jam animasi terbatas; exclude.xml diperbaiki. NOT VERIFIED di HP.
 - **Batch 90:** transisi alat tanpa jeda awal — cangkang ringan meluncur dulu (jam animasi dibatasi per frame), isi berat dikomposisi setelah tiba; filter SpotBugs DepthBakery. NOT VERIFIED di HP.
 - **Batch 89:** fix "bingkai" persegi di ubin (bake memakai `inset`), kartu besar ikut di-bake. NOT VERIFIED di HP.

@@ -1,5 +1,31 @@
 # Changelog
 
+## Batch 93: Ekspor Batch + Video ke GIF jadi "permata tersembunyi" di Beranda
+
+User (setelah v92): "thumbnail riwayat udah balik, tapi masalah stuttering pada ekspor batch masih ada. jadi saya maunya tab ekspor batch & gif dibuat ala-ala "hidden gem" karena jarang saya sentuh juga!!"
+
+### TEMUAN
+1. Thumbnail Riwayat sudah pulih di HP (konfirmasi user) -> perbaikan Batch 92 butir 1 berhasil.
+2. Stutter transisi/komposisi Ekspor Batch BELUM hilang walau komposisi bertahap Batch 92. Keputusan user: bukan dioptimasi lagi, melainkan diturunkan dari jalur utama Beranda (alat jarang dipakai).
+3. Titik masuk ke dua alat ini hanya `HomeScreen` (kartu "Video ke GIF" + "Ekspor Batch") dan `StudioScreen.onEditAgain` untuk entri GIF -> `Screen.GIF` (yang terakhir TIDAK diubah).
+
+### PERUBAHAN (1 berkas kode `MainActivity.kt`)
+- Grid Beranda dari 2x2 jadi 1 baris: Kompres Video + Riwayat.
+- `HomeHiddenGems` (baru): satu baris tipis berlipat "Permata tersembunyi / Alat yang jarang dipakai", TERTUTUP secara default, state `rememberSaveable` (tahan rotasi), chevron berputar, isi membuka dengan `AnimatedVisibility` (expand 220ms / shrink 180ms). Isi = 2 `HomeGemRow` (Video ke GIF, Ekspor Batch), tinggi >= 56dp, datar tanpa `DepthCard`/bayangan (murah digambar, terbaca sekunder); aksen warna lama dipertahankan (dipekatkan di tema terang). `onClickLabel` berubah sesuai status (Buka/Tutup) utk TalkBack.
+- Impor baru: `expandVertically`, `shrinkVertically`, `Icons.Filled.AutoAwesome`, `Icons.Filled.ExpandMore`.
+
+### TIDAK DISENTUH
+`BatchScreen`, `GifScreen`, `PushScreen`, rute `Screen.BATCH`/`Screen.GIF`, `onEditAgain` GIF di Riwayat, persistence, izin, signing, CI/workflow, `exclude.xml`.
+
+### VERIFIED
+Statis: kurung seimbang ({} 1230, () 2537, [] 11, kedalaman 0); kotlinc 2.0.21 (`-language-version 1.9`) 0 galat SINTAKS pada `MainActivity.kt` (hanya `unresolved reference` karena tanpa classpath Android); detekt 1.23.8 lokal dgn `config/detekt/detekt.yml` proyek: exit 0, 0 temuan. Call site: `HomeHiddenGems`/`HomeGemRow` masing-masing didefinisikan 1x dan dipanggil dari `HomeScreen`; `onOpenGif`/`onOpenBatch` tetap diteruskan dari `VideoResizerApp` tanpa perubahan.
+### NOT VERIFIED
+Kompilasi Gradle/Compose, lint, SpotBugs, ArchUnit, tes (tak ada AGP/SDK di sandbox); keberadaan ikon `AutoAwesome` + `ExpandMore` di material-icons-extended 1.6.8 (BOM 2024.06.00) — jar tak terjangkau dari sandbox (ikon lama di set extended, risiko rendah, kompilasi CI yang memastikan); di HP: lipat-buka halus, kontras di tema terang/gelap/5 gaya, font-scale besar, target sentuh.
+### Bila MERAH
+Baca `e:` pertama. Kandidat: `unresolved reference: AutoAwesome/ExpandMore` (ganti `Icons.Filled.Layers` / `Icons.Filled.KeyboardArrowDown`), `AnimatedVisibility` di dalam `ColumnScope` (`HomeHiddenGems`), `clickable(onClickLabel, role)`. Jalan balik = `Vidsize_v92.zip`.
+### Catatan
+Stutter Ekspor Batch hanya DITURUNKAN dari jalur utama, bukan dihilangkan: bila layarnya dibuka tetap berat. Opsi bila kelak ingin diperbaiki: `Row`+`horizontalScroll` utk chip kecil, pra-bake ukuran chip umum (sudah tercatat di Batch 92).
+
 ## Batch 92: thumbnail Riwayat tak lagi jatuh ke placeholder + komposisi bertahap layar Ekspor Batch
 
 User (setelah v91; screenshot Riwayat): "1. tab ekspor batch masih berat transisi nya 2. kenapa hasil riwayat bingkai nya fall back ke placeholder?!!"

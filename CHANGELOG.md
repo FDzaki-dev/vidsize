@@ -1,5 +1,31 @@
 # Changelog
 
+## Batch 95: efek CEKUNG kini tampil juga pada ketukan biasa (bukan hanya saat ditahan)
+
+User (setelah v94): "mengapa efek cekung hanya berlaku jika seluruh ubin itu di hold sedangkan di tap biasa itu gak kelihatan cekungan nya?!!"
+
+### AKAR MASALAH (dari kode `Depth.kt`; BELUM diverifikasi di HP)
+1. Sinyal tekan terlambat/hilang: `DepthCard`/`DepthChip`/`DepthIconButton`/`DepthSwitch` memakai `collectIsPressedAsState()`. Di kontainer yang bisa digulir (Beranda = `verticalScroll`) Compose menunda emisi Press ~40 md; pada ketukan cepat Press dan Release datang nyaris bersamaan, jadi komposisi bisa tak pernah melihat `isPressed = true` -> cekung tak tergambar sama sekali.
+2. Waktu tak cukup: `tween(90)` baru ~penuh setelah jari biasanya sudah terangkat; Release langsung membalik animasi, dan `onClick` (navigasi) berjalan saat itu juga. Puncak p hanya ~0.3-0.6.
+3. Keadaan setengah (0 < p < 1) = badan timbul + lekuk digambar setengah-setengah (keruh); cekung baru jelas di p ~ 1, yang hanya tercapai bila ditahan >150 md.
+4. Bonus: bake bitmap keadaan tertekan baru diminta saat p >= 0.99 -> tekan pertama pada tiap ubin menggambar langsung (berat) saat dibutuhkan.
+
+### PERBAIKAN (1 berkas kode `ui/theme/Depth.kt`)
+- `rememberDepthPress(source, label)` (baru, privat): membaca `source.interactions` LANGSUNG (`collectLatest`, tak lewat state komposisi) -> Press+Release berdempetan tetap terlihat; keadaan tertekan di-LATCH minimal 150 md sejak Press; masuk cepat (55 md), keluar pelan (170 md).
+- Dipakai di `DepthCard` (ubin/hero/picker), `DepthChip`, `DepthIconButton`, `DepthSwitch` (kenop). Gagang slider (`dragging`) TIDAK diubah.
+- `depthRaised`: bake keadaan tertekan diminta sejak frame tekan pertama (`p > 0.01`), tampilan identik dgn gambar langsung.
+- Impor: +`SystemClock`, `InteractionSource`, `PressInteraction`, `LaunchedEffect`, `State`, `delay`, `collectLatest`; -`collectIsPressedAsState`.
+
+### TIDAK DISENTUH
+Skala tekan pegas di `HomeToolCard`/`HomeHeroCard`/`VideoPickerCard` (MainActivity) memakai `collectIsPressedAsState` sendiri -> pada ketukan super cepat skalanya mungkin tetap tak terlihat (lihat RESUME POINT). Navigasi, haptic, tema, persistence.
+
+### VERIFIED
+Statis: kurung seimbang; kotlinc 2.0.21 0 galat SINTAKS di `Depth.kt`; detekt 1.23.8 lokal (config proyek) exit 0, 0 temuan; tak ada sisa `collectIsPressedAsState`/`isPressed` selain komentar.
+### NOT VERIFIED
+Kompilasi Gradle/Compose, lint, SpotBugs, ArchUnit, tes (tak ada AGP/SDK di sandbox); perilaku di HP: apakah cekung kini tampak pada ketukan cepat, apakah 150 md terasa pas (tidak "lengket"), dan analisis (1) bersifat deduksi dari perilaku Compose, bukan hasil log di perangkat.
+### Bila MERAH
+Baca `e:` pertama; kandidat: `Depth.kt` `rememberDepthPress` (`collectLatest` pada `InteractionSource.interactions`, `State<Float>` utk delegasi `by`). Jalan balik = `Vidsize_v94.zip`.
+
 ## Batch 94: Tema baru "Burgundy Old Money" (burgundy + emas antik, ornamen megah)
 
 User: "bikin new theme burgundy, dipadukan dengan warna sekunder yang matching sehingga menciptakan vibes old money yang kuat. ditambah dengan ornamen yang khas dan sangat megah!!"

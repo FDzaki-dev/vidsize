@@ -25,13 +25,16 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
+import kotlin.math.cos
 import kotlin.math.roundToInt
+import kotlin.math.sin
 import kotlin.random.Random
 
 /*
  * Batch 83: ornamen khas tiap tema. Semua digambar dengan Canvas (tanpa aset/PNG), deterministik (Random berbenih tetap,
  * jadi posisi tak "berkedip" saat rekomposisi) dan statis (tanpa animasi -> tanpa biaya baterai).
- *  - Latar layar penuh   : [themeBackdrop]   (aurora kaca / grid synthwave / kertas bergaris / rasi bintang / blob pastel)
+ *  - Latar layar penuh   : [themeBackdrop]   (aurora kaca / grid synthwave / kertas bergaris / rasi bintang / blob pastel /
+ *                          damask emas + bingkai berukir di atas burgundy [Batch 94])
  *  - Motif di tiap kartu : [drawCardOrnament] (dipanggil otomatis oleh DepthCard & permukaan timbul bergaya)
  *  - Seni kartu hero     : [drawHeroArt]
  */
@@ -107,6 +110,7 @@ private fun DrawScope.drawThemeBackdrop(b: ThemeBackdrop) {
         AppThemeStyle.WARM_PAPER -> paperBackdrop(b.accent, b.accent2)
         AppThemeStyle.DARK -> darkBackdrop(b.accent, b.accent2)
         AppThemeStyle.LIGHT -> lightBackdrop(b.accent)
+        AppThemeStyle.BURGUNDY_OLD_MONEY -> burgundyBackdrop()
     }
 }
 
@@ -305,6 +309,241 @@ private fun DrawScope.lightBackdrop(accent: Color) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
+// ---------------------------------------------------------------------------------------------------------------------
+// Batch 94 — Burgundy Old Money: kemewahan "perpustakaan tua". Semua vektor Canvas (tanpa aset), statis, deterministik.
+//  - Latar    : gradien anggur + cahaya lilin emas + damask berlian (kisi + bintang emas) + vignette + medali tanda air +
+//               bingkai emas ganda dengan ukiran sudut/tepi + debu emas.
+//  - Kartu    : bingkai emas ganda + permata sudut + fleur-de-lis mini.
+//  - Hero     : bingkai tinta ganda + permata sudut + medali heraldik (sinar, karangan laurel, mutiara, fleur-de-lis).
+// Geometri bersama (kelopak, sinar, berlian, bintang) dibangun ke SATU Path per elemen -> 1 panggilan gambar per motif.
+// Winding semua sub-path sama (searah jarum jam) supaya isi NonZero menyatu (tanpa lubang di titik tumpang tindih).
+
+private val BurgundyGold = Color(0xFFD9B66A)
+private val BurgundyGoldBright = Color(0xFFF3DDA0)
+private const val DEG_TO_RAD = 0.017453292f
+private const val TWO_PI = 6.2831855f
+
+private fun Path.addDiamond(c: Offset, rx: Float, ry: Float) {
+    moveTo(c.x, c.y - ry)
+    lineTo(c.x + rx, c.y)
+    lineTo(c.x, c.y + ry)
+    lineTo(c.x - rx, c.y)
+    close()
+}
+
+private fun Path.addStar4(c: Offset, r: Float) {
+    moveTo(c.x, c.y - r)
+    quadraticBezierTo(c.x, c.y, c.x + r, c.y)
+    quadraticBezierTo(c.x, c.y, c.x, c.y + r)
+    quadraticBezierTo(c.x, c.y, c.x - r, c.y)
+    quadraticBezierTo(c.x, c.y, c.x, c.y - r)
+    close()
+}
+
+private fun Path.addBox(x: Float, y: Float, w: Float, h: Float) {
+    moveTo(x, y)
+    lineTo(x + w, y)
+    lineTo(x + w, y + h)
+    lineTo(x, y + h)
+    close()
+}
+
+/** Kelopak tetesan: pangkal di [base], menunjuk ke atas lalu diputar [angleDeg] derajat searah jarum jam di sekitar [base]. */
+private fun Path.addPetal(base: Offset, length: Float, width: Float, angleDeg: Float) {
+    val a = angleDeg * DEG_TO_RAD
+    val ca = cos(a)
+    val sa = sin(a)
+    fun pt(x: Float, y: Float) = Offset(base.x + x * ca - y * sa, base.y + x * sa + y * ca)
+    val tip = pt(0f, -length)
+    val r1 = pt(width, -length * 0.62f)
+    val r2 = pt(width * 0.9f, -length * 0.16f)
+    val l1 = pt(-width * 0.9f, -length * 0.16f)
+    val l2 = pt(-width, -length * 0.62f)
+    moveTo(tip.x, tip.y)
+    cubicTo(r1.x, r1.y, r2.x, r2.y, base.x, base.y)
+    cubicTo(l1.x, l1.y, l2.x, l2.y, tip.x, tip.y)
+    close()
+}
+
+/** Sinar segitiga dari radius [r0] ke [r1] pada sudut [angleDeg] (0 = kanan, searah jarum jam), lebar dasar 2 * [half]. */
+private fun Path.addRay(c: Offset, angleDeg: Float, r0: Float, r1: Float, half: Float) {
+    val a = angleDeg * DEG_TO_RAD
+    val dx = cos(a)
+    val dy = sin(a)
+    moveTo(c.x + dx * r0 - dy * half, c.y + dy * r0 + dx * half)
+    lineTo(c.x + dx * r1, c.y + dy * r1)
+    lineTo(c.x + dx * r0 + dy * half, c.y + dy * r0 - dx * half)
+    close()
+}
+
+/** Fleur-de-lis (lambang bunga lili): 3 kelopak + pita pengikat + 3 ekor; [s] = setengah tinggi total. */
+private fun DrawScope.fleurDeLis(center: Offset, s: Float, color: Color) {
+    val y0 = center.y + 0.28f * s
+    val base = Offset(center.x, y0)
+    val p = Path()
+    p.addPetal(base, 1.28f * s, 0.26f * s, 0f)
+    p.addPetal(base, 0.92f * s, 0.34f * s, -74f)
+    p.addPetal(base, 0.92f * s, 0.34f * s, 74f)
+    p.addBox(center.x - 0.52f * s, y0 - 0.02f * s, 1.04f * s, 0.17f * s)
+    val tail = Offset(center.x, y0 + 0.15f * s)
+    p.addPetal(tail, 0.56f * s, 0.18f * s, 180f)
+    p.addPetal(tail, 0.52f * s, 0.17f * s, 128f)
+    p.addPetal(tail, 0.52f * s, 0.17f * s, -128f)
+    drawPath(p, color, style = Fill)
+}
+
+/**
+ * Medali heraldik berjari-jari [r] di [c]: mahkota sinar, cincin, karangan laurel (2 cabang, daun berpasangan), permata atas-bawah,
+ * cincin mutiara, cincin dalam, fleur-de-lis. [k] = pengali alfa seluruh motif (hero ~0.8, tanda air latar ~0.13).
+ */
+private fun DrawScope.heraldicMedallion(c: Offset, r: Float, color: Color, k: Float) {
+    val u = 1.dp.toPx()
+    val rays = Path()
+    for (i in 0 until 32) rays.addRay(c, i * 11.25f, r * 0.88f, r * (if (i % 2 == 0) 1.0f else 0.94f), r * 0.028f)
+    drawPath(rays, color.copy(alpha = 0.30f * k), style = Fill)
+    drawCircle(color.copy(alpha = 0.55f * k), r * 0.84f, c, style = Stroke(width = 1.2f * u))
+    val laurel = Path()
+    val lr = r * 0.66f
+    val n = 9
+    for (i in 0 until n) {
+        val t = i / (n - 1f)
+        val sc = 1f - 0.25f * t
+        val len = r * 0.16f * sc
+        val wid = r * 0.055f * sc
+        val thR = 88f - 150f * t
+        val pR = Offset(c.x + lr * cos(thR * DEG_TO_RAD), c.y + lr * sin(thR * DEG_TO_RAD))
+        laurel.addPetal(pR, len, wid, thR + 38f)
+        laurel.addPetal(pR, len, wid, thR - 38f)
+        val thL = 92f + 150f * t
+        val pL = Offset(c.x + lr * cos(thL * DEG_TO_RAD), c.y + lr * sin(thL * DEG_TO_RAD))
+        laurel.addPetal(pL, len, wid, thL + 142f)
+        laurel.addPetal(pL, len, wid, thL + 218f)
+    }
+    drawPath(laurel, color.copy(alpha = 0.50f * k), style = Fill)
+    val gems = Path()
+    gems.addDiamond(Offset(c.x, c.y + lr), r * 0.06f, r * 0.085f)
+    gems.addDiamond(Offset(c.x, c.y - lr), r * 0.045f, r * 0.06f)
+    drawPath(gems, color.copy(alpha = 0.60f * k), style = Fill)
+    val pearls = List(22) { i ->
+        val a = i * TWO_PI / 22f
+        Offset(c.x + r * 0.47f * cos(a), c.y + r * 0.47f * sin(a))
+    }
+    roundDots(pearls, color.copy(alpha = 0.50f * k), r * 0.05f)
+    drawCircle(color.copy(alpha = 0.40f * k), r * 0.40f, c, style = Stroke(width = u))
+    fleurDeLis(c, r * 0.30f, color.copy(alpha = 0.62f * k))
+}
+
+/** Satu gulungan (ikal) ukiran sudut; [pt] memetakan koordinat satuan (0..1) ke piksel — dipanggil normal & ditukar (x,y) utk cermin diagonal. */
+private fun scrollCurl(pt: (Float, Float) -> Offset): Path = Path().apply {
+    val p0 = pt(0.34f, 0.14f)
+    moveTo(p0.x, p0.y)
+    val a1 = pt(0.66f, 0.10f)
+    val a2 = pt(0.86f, 0.30f)
+    val a3 = pt(0.70f, 0.50f)
+    cubicTo(a1.x, a1.y, a2.x, a2.y, a3.x, a3.y)
+    val b1 = pt(0.58f, 0.64f)
+    val b2 = pt(0.38f, 0.54f)
+    val b3 = pt(0.46f, 0.40f)
+    cubicTo(b1.x, b1.y, b2.x, b2.y, b3.x, b3.y)
+}
+
+/** Ukiran sudut bingkai: dua garis tepi, permata berlian, dan dua gulungan simetris diagonal. [sx]/[sy] = arah ke dalam (+1/-1). */
+private fun DrawScope.cornerFlourish(o: Offset, sx: Float, sy: Float, size: Float, color: Color, u: Float) {
+    fun pt(x: Float, y: Float) = Offset(o.x + sx * size * x, o.y + sy * size * y)
+    drawLine(color, pt(0f, 0f), pt(1f, 0f), 1.4f * u, StrokeCap.Round)
+    drawLine(color, pt(0f, 0f), pt(0f, 1f), 1.4f * u, StrokeCap.Round)
+    val curlStroke = Stroke(width = 1.15f * u, cap = StrokeCap.Round)
+    drawPath(scrollCurl { x, y -> pt(x, y) }, color, style = curlStroke)
+    drawPath(scrollCurl { x, y -> pt(y, x) }, color, style = curlStroke)
+    val gem = Path().apply { addDiamond(pt(0.17f, 0.17f), size * 0.085f, size * 0.085f) }
+    drawPath(gem, color, style = Fill)
+}
+
+/** Gulungan horizontal simetris di tengah sisi bingkai; [dy] = +1 (tepi atas, melengkung ke bawah) atau -1 (tepi bawah). */
+private fun DrawScope.edgeFlourish(cx: Float, y: Float, dy: Float, color: Color, u: Float) {
+    for (sx in floatArrayOf(-1f, 1f)) {
+        fun px(v: Float) = cx + sx * v * u
+        fun py(v: Float) = y + dy * v * u
+        val p = Path().apply {
+            moveTo(px(10f), py(0f))
+            lineTo(px(36f), py(0f))
+            cubicTo(px(50f), py(0f), px(56f), py(12f), px(46f), py(15f))
+            cubicTo(px(38f), py(17f), px(34f), py(8f), px(40f), py(6f))
+        }
+        drawPath(p, color, style = Stroke(width = 1.1f * u, cap = StrokeCap.Round))
+        roundDots(listOf(Offset(px(60f), py(0f)), Offset(px(70f), py(0f))), color, 2.2f * u)
+    }
+    val gem = Path().apply { addDiamond(Offset(cx, y), 4.2f * u, 4.2f * u) }
+    drawPath(gem, color.copy(alpha = 0.65f), style = Fill)
+}
+
+private fun DrawScope.burgundyBackdrop() {
+    val w = size.width
+    val h = size.height
+    val u = 1.dp.toPx()
+    val gold = BurgundyGold
+    drawRect(
+        Brush.verticalGradient(0f to Color(0xFF55182B), 0.45f to Color(0xFF3A0F1B), 1f to Color(0xFF260811))
+    )
+    orb(Offset(w * 0.5f, -h * 0.02f), w * 1.05f, Color(0xFFE6B965), 0.20f)
+    orb(Offset(w * 0.95f, h * 0.62f), w * 0.70f, Color(0xFF8C1E34), 0.30f)
+    // Damask: kisi berlian (lereng dx/dy = 2/3) + bintang empat-arah di pusat tiap berlian (pola half-drop).
+    val cell = 52f * u
+    val slope = 2f / 3f
+    val trellis = Path()
+    var x0 = -slope * h
+    while (x0 <= w) {
+        trellis.moveTo(x0, 0f)
+        trellis.lineTo(x0 + slope * h, h)
+        x0 += cell
+    }
+    x0 = 0f
+    while (x0 <= w + slope * h) {
+        trellis.moveTo(x0, 0f)
+        trellis.lineTo(x0 - slope * h, h)
+        x0 += cell
+    }
+    drawPath(trellis, gold.copy(alpha = 0.09f), style = Stroke(width = u))
+    val stars = Path()
+    var q = 0
+    while (q * 0.75f * cell < h + cell) {
+        val y = 0.75f * cell * q
+        val shift = 0.5f * cell * (q - 1)
+        var x = (shift % cell) - cell
+        while (x <= w + cell) {
+            if (x >= -cell) stars.addStar4(Offset(x, y), 5.5f * u)
+            x += cell
+        }
+        q++
+    }
+    drawPath(stars, gold.copy(alpha = 0.16f), style = Fill)
+    drawRect(
+        Brush.radialGradient(
+            0f to Color.Transparent,
+            0.30f to Color.Transparent,
+            1f to Color(0xFF12030A).copy(alpha = 0.60f),
+            center = Offset(w / 2f, h * 0.38f),
+            radius = maxOf(w, h) * 0.85f
+        )
+    )
+    heraldicMedallion(Offset(w * 0.5f, h * 0.95f), w * 0.38f, gold, 0.13f)
+    // Bingkai emas ganda + ukiran.
+    val inset = 9f * u
+    drawRect(gold.copy(alpha = 0.34f), Offset(inset, inset), Size(w - 2f * inset, h - 2f * inset), style = Stroke(width = 1.2f * u))
+    drawRect(
+        gold.copy(alpha = 0.16f), Offset(inset + 4f * u, inset + 4f * u),
+        Size(w - 2f * inset - 8f * u, h - 2f * inset - 8f * u), style = Stroke(width = 0.7f * u)
+    )
+    val corner = gold.copy(alpha = 0.62f)
+    cornerFlourish(Offset(inset, inset), 1f, 1f, 40f * u, corner, u)
+    cornerFlourish(Offset(w - inset, inset), -1f, 1f, 40f * u, corner, u)
+    cornerFlourish(Offset(inset, h - inset), 1f, -1f, 40f * u, corner, u)
+    cornerFlourish(Offset(w - inset, h - inset), -1f, -1f, 40f * u, corner, u)
+    edgeFlourish(w / 2f, inset, 1f, gold.copy(alpha = 0.55f), u)
+    edgeFlourish(w / 2f, h - inset, -1f, gold.copy(alpha = 0.55f), u)
+    roundDots(scatter(Random(13), 34, w, h * 0.70f), BurgundyGoldBright.copy(alpha = 0.30f), 1.5f * u)
+}
+
 /**
  * Motif kecil di permukaan kartu timbul (dipotong ke bentuk kartu): kilau kaca / braket neon / jahitan kertas /
  * titik bintang / cincin pastel.
@@ -362,6 +601,28 @@ internal fun DrawScope.drawCardOrnament(style: AppThemeStyle, accent: Color, r: 
                 drawCircle(accent.copy(alpha = 0.14f), 2.5f * u, Offset(w - 22f * u, h - 16f * u))
                 drawCircle(accent.copy(alpha = 0.10f), 2.5f * u, Offset(w - 34f * u, h - 16f * u))
             }
+            AppThemeStyle.BURGUNDY_OLD_MONEY -> {
+                // Bingkai emas ganda + permata di tengah busur tiap sudut + fleur-de-lis mini kanan-atas.
+                val gold = if (accent == Color.Unspecified) BurgundyGold else accent
+                val i1 = 5.5f * u
+                drawRoundRect(
+                    gold.copy(alpha = 0.50f), Offset(i1, i1), Size(w - 2f * i1, h - 2f * i1),
+                    CornerRadius((r - i1).coerceAtLeast(2f * u)), style = Stroke(width = 0.9f * u)
+                )
+                val i2 = 8.5f * u
+                drawRoundRect(
+                    gold.copy(alpha = 0.22f), Offset(i2, i2), Size(w - 2f * i2, h - 2f * i2),
+                    CornerRadius((r - i2).coerceAtLeast(2f * u)), style = Stroke(width = 0.6f * u)
+                )
+                val k = (r - i1).coerceAtLeast(0f) * 0.7071f
+                val gems = Path()
+                gems.addDiamond(Offset(r - k, r - k), 2.8f * u, 2.8f * u)
+                gems.addDiamond(Offset(w - r + k, r - k), 2.8f * u, 2.8f * u)
+                gems.addDiamond(Offset(r - k, h - r + k), 2.8f * u, 2.8f * u)
+                gems.addDiamond(Offset(w - r + k, h - r + k), 2.8f * u, 2.8f * u)
+                drawPath(gems, gold.copy(alpha = 0.80f), style = Fill)
+                fleurDeLis(Offset(w - 26f * u, 28f * u), 8f * u, gold.copy(alpha = 0.40f))
+            }
         }
     }
 }
@@ -411,6 +672,30 @@ fun DrawScope.drawHeroArt(style: AppThemeStyle) {
             val dots = ArrayList<Offset>()
             for (i in 0..4) for (j in 0..3) dots.add(Offset(w * 0.60f + i * 14f * u, h * 0.62f + j * 14f * u))
             roundDots(dots, c.copy(alpha = 0.35f), 2.4f * u)
+        }
+        AppThemeStyle.BURGUNDY_OLD_MONEY -> {
+            // Hero = emas (gradien aksen) -> seni digambar dgn TINTA burgundy (bukan putih): bingkai ganda, permata sudut, medali heraldik.
+            val ink = BurgundyInk
+            drawRoundRect(
+                ink.copy(alpha = 0.34f), Offset(8f * u, 8f * u), Size(w - 16f * u, h - 16f * u),
+                CornerRadius(18f * u), style = Stroke(width = 1.2f * u)
+            )
+            drawRoundRect(
+                ink.copy(alpha = 0.18f), Offset(12f * u, 12f * u), Size(w - 24f * u, h - 24f * u),
+                CornerRadius(14f * u), style = Stroke(width = 0.7f * u)
+            )
+            val k = 18f * u * 0.7071f
+            val gems = Path()
+            gems.addDiamond(Offset(26f * u - k, 26f * u - k), 3f * u, 3f * u)
+            gems.addDiamond(Offset(w - 26f * u + k, 26f * u - k), 3f * u, 3f * u)
+            gems.addDiamond(Offset(26f * u - k, h - 26f * u + k), 3f * u, 3f * u)
+            gems.addDiamond(Offset(w - 26f * u + k, h - 26f * u + k), 3f * u, 3f * u)
+            drawPath(gems, ink.copy(alpha = 0.45f), style = Fill)
+            heraldicMedallion(Offset(w - 66f * u, 66f * u), 50f * u, ink, 0.80f)
+            val glints = Path()
+            glints.addStar4(Offset(w - 24f * u, h - 40f * u), 7f * u)
+            glints.addStar4(Offset(w * 0.60f, 26f * u), 5f * u)
+            drawPath(glints, ink.copy(alpha = 0.40f), style = Fill)
         }
     }
 }

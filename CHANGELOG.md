@@ -1,5 +1,27 @@
 # Changelog
 
+## Batch 94: Tema baru "Burgundy Old Money" (burgundy + emas antik, ornamen megah)
+
+User: "bikin new theme burgundy, dipadukan dengan warna sekunder yang matching sehingga menciptakan vibes old money yang kuat. ditambah dengan ornamen yang khas dan sangat megah!!"
+
+### DESAIN
+- Palet: burgundy/oxblood pekat (latar `#3A0F1B`, kartu `#6E2336`->`#431120`) + EMAS ANTIK primer (`#D4AF63`) + champagne sekunder (`#E9D3A3`) + teks gading hangat (`#F6EBD9`, muted `#D9BFA5`; kontras >= 8:1). `onPrimary` = tinta burgundy `#3E0D1B` (kartu hero = emas bertinta burgundy).
+- Dasar tetap bernada-tengah (aturan Batch 83) supaya neumorfik terlihat; sorot kedalaman = emas champagne hangat (bukan putih), bayangan = anggur nyaris-hitam.
+- Tipografi: judul/label kartu `FontFamily.Serif` berjarak lega; label kecil kapital berjarak; teks isi tetap sans. Bentuk: radius sedang formal (4/8/12/18/24dp).
+- Ornamen (semua vektor Canvas, statis, deterministik, tanpa aset): LATAR = gradien anggur + cahaya lilin emas + damask berlian (kisi + bintang emas, half-drop) + vignette + medali heraldik tanda air + bingkai emas ganda + ukiran sudut berulir + gulungan tengah sisi + debu emas (dibake 1x seperti latar lain). KARTU = bingkai emas ganda + permata sudut + fleur-de-lis mini. HERO = bingkai tinta ganda + permata sudut + medali heraldik (sinar 32, karangan laurel 2 cabang, cincin mutiara, fleur-de-lis).
+- Ikon alat Beranda (Kompres/Riwayat/GIF/Batch) seragam EMAS tema pada Burgundy (aksen pink/teal/ungu per-alat merusak kesan klasik); tema lain tak berubah.
+- Prototipe geometri dirender dulu lewat kanvas HTML (matematika identik) lalu disetel: siluet fleur-de-lis, gulungan sudut disederhanakan, medali tanda air dijauhkan dari konten.
+
+### PERUBAHAN (6 berkas kode)
+`ui/theme/Color.kt` (palet), `ui/theme/Type.kt` (`BurgundyTypography`), `ui/theme/Theme.kt` (enum `AppThemeStyle.BURGUNDY_OLD_MONEY`, `BurgundyColors`, `BurgundyShapes`, cabang isDark/warna/bentuk/tipografi), `ui/theme/Depth.kt` (`BurgundyDepth` + `depthSpecFor`), `ui/theme/Ornaments.kt` (latar/kartu/hero + helper Path), `MainActivity.kt` (`ThemePreference.BURGUNDY_OLD_MONEY`, label "Burgundy Old Money", pemetaan gaya, tint ikon alat). Persistensi pilihan tema tak berubah (nama enum tersimpan di `video_resizer_prefs`).
+
+### VERIFIED
+Statis: kurung seimbang di 6 berkas; kotlinc 2.0.21 0 galat SINTAKS (sisanya noise tanpa classpath Android, kelas sama dgn baseline v93); detekt 1.23.8 lokal dgn config proyek: lihat status di PROJECT_STATE. Prototipe visual kanvas HTML (Chromium) = geometri identik dgn Kotlin.
+### NOT VERIFIED
+Kompilasi Gradle/Compose, lint, SpotBugs, ArchUnit, tes (tak ada AGP/SDK di sandbox); tampilan SEBENARNYA di HP (render Compose, bukan kanvas HTML): keterbacaan teks di atas emas/burgundy, kepadatan ornamen, kinerja gulir Beranda dgn hero medali; apakah `Brush.verticalGradient(vararg Pair)` / `drawRect(Brush)` dsb. dikompilasi apa adanya (API standar, tetapi tak dikompilasi di sini).
+### Bila MERAH
+Baca `e:` pertama; kandidat: `Ornaments.kt` (helper `addPetal/addRay/scrollCurl`, `Brush.*Gradient(0f to ...)`, `drawRect(Brush)`), `Theme.kt` (`withContainers` 5 argumen Long). Jalan balik = `Vidsize_v93.zip`.
+
 ## Batch 93: Ekspor Batch + Video ke GIF jadi "permata tersembunyi" di Beranda
 
 User (setelah v92): "thumbnail riwayat udah balik, tapi masalah stuttering pada ekspor batch masih ada. jadi saya maunya tab ekspor batch & gif dibuat ala-ala "hidden gem" karena jarang saya sentuh juga!!"

@@ -108,6 +108,7 @@ import androidx.media3.common.util.UnstableApi
 import kotlin.math.roundToInt
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.ui.PlayerView
+import com.example.videoresizer.ui.theme.AppThemeStyle
 import com.example.videoresizer.ui.theme.DepthCard
 import com.example.videoresizer.ui.theme.DepthChip
 import com.example.videoresizer.ui.theme.DepthIconButton
@@ -136,7 +137,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-private enum class ThemePreference { SYSTEM, LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS }
+private enum class ThemePreference { SYSTEM, LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS, BURGUNDY_OLD_MONEY }
 private enum class Screen { HOME, MAIN, STUDIO, BATCH, GIF, COMPRESSOR }
 
 private const val FRAME_STEP_CAP_NS = 24_000_000L
@@ -229,6 +230,7 @@ private fun themeLabel(pref: ThemePreference): String = when (pref) {
     ThemePreference.MIDNIGHT_NEON -> "Midnight Neon"
     ThemePreference.WARM_PAPER -> "Warm Paper"
     ThemePreference.MIDNIGHT_BLUE_GLASS -> "Midnight Blue Glass"
+    ThemePreference.BURGUNDY_OLD_MONEY -> "Burgundy Old Money"
 }
 
 // Kategorisasi panel setting ResizerScreen jadi tab (diminta user: "kategorikan
@@ -286,6 +288,7 @@ class MainActivity : ComponentActivity() {
                 ThemePreference.MIDNIGHT_NEON -> com.example.videoresizer.ui.theme.AppThemeStyle.MIDNIGHT_NEON
                 ThemePreference.WARM_PAPER -> com.example.videoresizer.ui.theme.AppThemeStyle.WARM_PAPER
                 ThemePreference.MIDNIGHT_BLUE_GLASS -> com.example.videoresizer.ui.theme.AppThemeStyle.MIDNIGHT_BLUE_GLASS
+                ThemePreference.BURGUNDY_OLD_MONEY -> com.example.videoresizer.ui.theme.AppThemeStyle.BURGUNDY_OLD_MONEY
             }
 
             // Batch 61: haptic bawaan Compose (TextHandleMove) terlalu tipis di HP; ganti SEKALI di akar supaya
@@ -1008,7 +1011,12 @@ private fun HomeGemRow(
     val haptic = LocalHapticFeedback.current
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     // Aksen dipekatkan di tema terang (sama dgn HomeToolCard) supaya ikon tetap terbaca.
-    val tint = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) lerp(accent, Color.Black, 0.30f) else accent
+    // Batch 94: tema Burgundy Old Money = ikon alat seragam emas tema (aksen pink/teal/ungu per-alat merusak kesan klasik).
+    val tint = when {
+        LocalThemeStyle.current == AppThemeStyle.BURGUNDY_OLD_MONEY -> MaterialTheme.colorScheme.primary
+        MaterialTheme.colorScheme.background.luminance() > 0.5f -> lerp(accent, Color.Black, 0.30f)
+        else -> accent
+    }
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1264,7 +1272,12 @@ private fun HomeToolCard(
     val pressed by interaction.collectIsPressedAsState()
     val scale by animateFloatAsState(if (pressed) 0.97f else 1f, animationSpec = spring(), label = "toolCardScale")
     // Aksen alat dipekatkan di tema terang supaya ikon tetap terbaca di atas badan kartu yang terang.
-    val tint = if (MaterialTheme.colorScheme.background.luminance() > 0.5f) lerp(accent, Color.Black, 0.30f) else accent
+    // Batch 94: tema Burgundy Old Money = ikon alat seragam emas tema (aksen pink/teal/ungu per-alat merusak kesan klasik).
+    val tint = when {
+        LocalThemeStyle.current == AppThemeStyle.BURGUNDY_OLD_MONEY -> MaterialTheme.colorScheme.primary
+        MaterialTheme.colorScheme.background.luminance() > 0.5f -> lerp(accent, Color.Black, 0.30f)
+        else -> accent
+    }
     // Batch 83: kartu TIMBUL; ubin ikon = lekuk CEKUNG di dalam kartu (timbul > cekung = hierarki kedalaman).
     DepthCard(
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onClick() },

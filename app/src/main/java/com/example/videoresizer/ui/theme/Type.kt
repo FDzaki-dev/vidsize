@@ -48,6 +48,25 @@ val PaperTypography = Typography(
 )
 
 /**
+ * Batch 94: Burgundy Old Money — judul/kartu memakai `FontFamily.Serif` (generik bawaan, tanpa berkas font -> tak bisa jadi
+ * kegagalan resource) dengan jarak huruf lega seperti kop surat/mahkota percetakan klasik; label kecil dilebarkan (kapital
+ * berjarak). Teks isi tetap sans supaya paragraf pengaturan mudah dibaca. Ukuran `headlineMedium`/`titleSmall` WAJIB eksplisit
+ * (judul Beranda & label kartu memakainya; `TextStyle` tanpa `fontSize` jatuh ke 14sp).
+ */
+val BurgundyTypography = Typography(
+    headlineMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 28.sp, fontFamily = FontFamily.Serif, letterSpacing = 0.4.sp),
+    headlineSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 24.sp, fontFamily = FontFamily.Serif, letterSpacing = 0.3.sp),
+    titleLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 23.sp, fontFamily = FontFamily.Serif, letterSpacing = 0.3.sp),
+    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 18.sp, fontFamily = FontFamily.Serif, letterSpacing = 0.2.sp),
+    titleSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, fontFamily = FontFamily.Serif, letterSpacing = 0.2.sp),
+    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp),
+    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 14.sp),
+    labelLarge = TextStyle(fontWeight = FontWeight.Medium, fontSize = 14.sp, letterSpacing = 0.5.sp),
+    labelMedium = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, letterSpacing = 0.5.sp),
+    labelSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 11.sp, letterSpacing = 1.4.sp)
+)
+
+/**
  * Midnight Blue Glass's type scale: tighter (slightly negative) letter
  * spacing and bolder titles for the dense, tracked-in look of iOS system
  * type, using the platform's default sans family (no bundled font files,

@@ -178,6 +178,17 @@ private val GlassDepth = DepthSpec(
     sheenAlpha = 0.12f, rimLightAlpha = 0.38f, rimDarkAlpha = 0.46f, lipDarkAlpha = 0.56f, lipLightAlpha = 0.20f
 )
 
+// Batch 94: Burgundy Old Money — badan burgundy kaya (lebih terang dari latar), sorot = emas champagne hangat (bukan putih/biru)
+// supaya tepi atas-kiri terkesan disepuh; bayangan = anggur nyaris-hitam.
+private val BurgundyDepth = DepthSpec(
+    bodyHi = Color(0xFF6E2336), bodyLo = Color(0xFF431120),
+    wellDark = Color(0xFF260915), wellLight = Color(0xFF55192B),
+    shadow = Color(0xFF14030A), shadowAlpha = 0.86f,
+    highlight = Color(0xFFF2D49A), highlightAlpha = 0.24f,
+    insetShadowAlpha = 0.86f, insetHighlightAlpha = 0.20f,
+    sheenAlpha = 0.11f, rimLightAlpha = 0.36f, rimDarkAlpha = 0.46f, lipDarkAlpha = 0.56f, lipLightAlpha = 0.18f
+)
+
 /** Spesifikasi kedalaman per gaya tema (tetap, TIDAK bergantung warna dinamis wallpaper -> kontras sorot/bayangan terjamin). */
 fun depthSpecFor(style: AppThemeStyle): DepthSpec = when (style) {
     AppThemeStyle.LIGHT -> LightDepth
@@ -185,6 +196,7 @@ fun depthSpecFor(style: AppThemeStyle): DepthSpec = when (style) {
     AppThemeStyle.MIDNIGHT_NEON -> NeonDepth
     AppThemeStyle.WARM_PAPER -> PaperDepth
     AppThemeStyle.MIDNIGHT_BLUE_GLASS -> GlassDepth
+    AppThemeStyle.BURGUNDY_OLD_MONEY -> BurgundyDepth
 }
 
 /** Gaya tema aktif (diisi `VideoResizerTheme`); dibaca komponen kedalaman & ornamen. */

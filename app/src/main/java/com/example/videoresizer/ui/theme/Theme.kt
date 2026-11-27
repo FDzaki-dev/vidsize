@@ -120,6 +120,36 @@ private val GlassColors = darkColorScheme(
     error = GlassError
 ).withContainers(0xFF18214F, 0xFF202C69, 0xFF253376, 0xFF2A397F, 0xFF304188)
 
+// Batch 94: Burgundy Old Money. Palet gelap (burgundy pekat + emas antik); wadah Material opak, makin ke "tinggi" makin terang.
+// primaryContainer/secondaryContainer diisi eksplisit supaya komponen Material yang memakainya tak jatuh ke ungu bawaan.
+private val BurgundyColors = darkColorScheme(
+    primary = BurgundyPrimary,
+    onPrimary = BurgundyInk,
+    primaryContainer = Color(0xFF6B2338),
+    onPrimaryContainer = BurgundySecondary,
+    secondary = BurgundySecondary,
+    onSecondary = BurgundyInk,
+    secondaryContainer = Color(0xFF58202F),
+    onSecondaryContainer = BurgundyOnBackground,
+    background = BurgundyBackground,
+    onBackground = BurgundyOnBackground,
+    surface = BurgundySurface,
+    onSurface = BurgundyOnBackground,
+    surfaceVariant = BurgundySurfaceVariant,
+    onSurfaceVariant = BurgundyOnSurfaceMuted,
+    outline = BurgundyOutline,
+    error = BurgundyError
+).withContainers(0xFF35101C, 0xFF401422, 0xFF4A1727, 0xFF561D2F, 0xFF632439)
+
+// Formal & terstruktur (radius sedang, bukan "pil"): kesan klasik, bukan gelembung modern.
+private val BurgundyShapes = Shapes(
+    extraSmall = RoundedCornerShape(4.dp),
+    small = RoundedCornerShape(8.dp),
+    medium = RoundedCornerShape(12.dp),
+    large = RoundedCornerShape(18.dp),
+    extraLarge = RoundedCornerShape(24.dp)
+)
+
 // Sharper, tighter corners than Material3's default (4/8/12/16/28dp) — part
 // of what makes Midnight Neon read as a genuinely different theme rather
 // than a recolor: every card/button/chip in the app is a bit more angular.
@@ -154,7 +184,7 @@ private val GlassShapes = Shapes(
 )
 
 /**
- * The five selectable visual identities. LIGHT/DARK are the original
+ * The six selectable visual identities (BURGUNDY_OLD_MONEY added in Batch 94). LIGHT/DARK are the original
  * Material-default-shaped themes (SYSTEM resolves to one of these two
  * before reaching this function — see MainActivity's theme picker).
  * MIDNIGHT_NEON, WARM_PAPER, and MIDNIGHT_BLUE_GLASS are full alternate
@@ -162,7 +192,7 @@ private val GlassShapes = Shapes(
  * (for titles) different type style, not just a palette swap over the same
  * component shapes. MIDNIGHT_BLUE_GLASS is the app's default look.
  */
-enum class AppThemeStyle { LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS }
+enum class AppThemeStyle { LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS, BURGUNDY_OLD_MONEY }
 
 /**
  * App theme. Defaults to following the system setting, but the caller
@@ -176,7 +206,8 @@ fun VideoResizerTheme(
     content: @Composable () -> Unit
 ) {
     val context = LocalContext.current
-    val isDark = style == AppThemeStyle.DARK || style == AppThemeStyle.MIDNIGHT_NEON || style == AppThemeStyle.MIDNIGHT_BLUE_GLASS
+    val isDark = style == AppThemeStyle.DARK || style == AppThemeStyle.MIDNIGHT_NEON || style == AppThemeStyle.MIDNIGHT_BLUE_GLASS ||
+        style == AppThemeStyle.BURGUNDY_OLD_MONEY
     val colorScheme = when {
         // Batch 83: warna dinamis wallpaper hanya untuk AKSEN; netral (latar/permukaan/teks) tetap dari palet tema supaya
         // kontras sorot & bayangan neumorfik terjamin (netral dinamis bisa nyaris putih/hitam -> bayangan "nyatu").
@@ -199,18 +230,21 @@ fun VideoResizerTheme(
         style == AppThemeStyle.MIDNIGHT_NEON -> NeonColors
         style == AppThemeStyle.WARM_PAPER -> PaperColors
         style == AppThemeStyle.MIDNIGHT_BLUE_GLASS -> GlassColors
+        style == AppThemeStyle.BURGUNDY_OLD_MONEY -> BurgundyColors
         else -> DarkColors
     }
     val shapes = when (style) {
         AppThemeStyle.MIDNIGHT_NEON -> NeonShapes
         AppThemeStyle.WARM_PAPER -> PaperShapes
         AppThemeStyle.MIDNIGHT_BLUE_GLASS -> GlassShapes
+        AppThemeStyle.BURGUNDY_OLD_MONEY -> BurgundyShapes
         else -> Shapes() // Material3 defaults for LIGHT/DARK — unchanged from before this feature.
     }
     val typography = when (style) {
         AppThemeStyle.MIDNIGHT_NEON -> NeonTypography
         AppThemeStyle.WARM_PAPER -> PaperTypography
         AppThemeStyle.MIDNIGHT_BLUE_GLASS -> GlassTypography
+        AppThemeStyle.BURGUNDY_OLD_MONEY -> BurgundyTypography
         else -> Typography // unchanged from before this feature.
     }
 

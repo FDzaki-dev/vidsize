@@ -84,6 +84,20 @@ val GlassSecondary = Color(0xFF64D2FF)
 val GlassError = Color(0xFFFF6B6B)
 val GlassBorder = Color(0x40FFFFFF)
 
+// "Burgundy Old Money" (Batch 94) — oxblood/burgundy pekat berpadu emas antik + gading champagne: kesan "old money"
+// (wallpaper damask di ruang perpustakaan, bingkai emas, huruf serif). Dasar tetap bernada-tengah (aturan Batch 83)
+// supaya kedalaman neumorfik terlihat; kartu = burgundy lebih terang dari latar, teks = gading hangat (kontras >= 8:1).
+val BurgundyBackground = Color(0xFF3A0F1B)
+val BurgundySurface = Color(0xFF4A1727)
+val BurgundySurfaceVariant = Color(0xFF330C17)
+val BurgundyOnBackground = Color(0xFFF6EBD9)
+val BurgundyOnSurfaceMuted = Color(0xFFD9BFA5)
+val BurgundyPrimary = Color(0xFFD4AF63)
+val BurgundySecondary = Color(0xFFE9D3A3)
+val BurgundyInk = Color(0xFF3E0D1B)
+val BurgundyError = Color(0xFFFF9E8F)
+val BurgundyOutline = Color(0xFF7A3548)
+
 /** The gradient painted behind every screen when Midnight Blue Glass is active. */
 val MidnightBlueGlassGradient = Brush.verticalGradient(
     listOf(GlassGradientTop, GlassGradientMid, GlassGradientBottom)

@@ -511,6 +511,7 @@ the GitHub Actions route above is much faster in practice.
   project's Media3 version is ever bumped. If a build error appears around the watermark
   specifically, `createStaticBitmapOverlay`'s parameter order/types are the next thing
   to check — Android Studio's error will name the exact expected signature.
+- **Batch 97:** ubin hero "Resize / Edit Video" kini ikut punya efek cekung saat ditekan (lapisan cekung digambar di atas gradien opaknya, `DepthCard(pressOverlay = true)`), bukan hanya riak. NOT VERIFIED di CI/HP; detail di CHANGELOG Batch 97.
 - **Batch 96:** efek cekung saat ditekan disamakan kecepatannya dengan tekan langsung: sentuhan dibaca langsung (tanpa tunda 40 md `clickable`), animasi tanpa rekomposisi, peralihan timbul<->cekung = lebur dua bitmap bake (bake tertekan disiapkan di muka utk ubin/tombol ikon/saklar). NOT VERIFIED di CI/HP; detail di CHANGELOG Batch 96.
 - **Batch 95:** efek cekung saat ditekan kini tampil juga pada ketukan biasa (tekan di-latch min 150 md, event dibaca langsung) untuk ubin, chip, tombol ikon, dan saklar. NOT VERIFIED di HP.
 - **Batch 94:** tema baru "Burgundy Old Money" (tema ke-6) — burgundy pekat + emas antik + champagne, huruf serif, ornamen megah (damask & bingkai emas berukir, medali heraldik, fleur-de-lis). Dipilih dari menu tema Beranda. NOT VERIFIED di HP.

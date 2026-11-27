@@ -1202,6 +1202,7 @@ private fun HomeHeroCard(onClick: () -> Unit) {
     DepthCard(
         onClick = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onClick() },
         interactionSource = interaction,
+        pressOverlay = true,
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer { scaleX = scale; scaleY = scale },

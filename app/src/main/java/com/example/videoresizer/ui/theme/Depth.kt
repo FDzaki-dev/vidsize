@@ -441,10 +441,11 @@ private class WellKit(
         n.restore()
     }
 
-    fun draw(scope: DrawScope, intensity: Float) {
+    /** `fill = false` -> hanya bayangan dalam + bibir (tanpa badan sumur), untuk dilapiskan di atas isi yang sudah punya latar sendiri. */
+    fun draw(scope: DrawScope, intensity: Float, fill: Boolean = true) {
         with(scope) {
             clipPath(clip) {
-                drawRoundRect(brush = brush, cornerRadius = CornerRadius(r, r), alpha = intensity)
+                if (fill) drawRoundRect(brush = brush, cornerRadius = CornerRadius(r, r), alpha = intensity)
                 drawIntoCanvas { c ->
                     val n = c.nativeCanvas
                     innerLayer(n, dark, spec.shadow, spec.insetShadowAlpha * 0.80f * intensity, d)
@@ -666,6 +667,50 @@ fun Modifier.depthRaised(
     }
 }
 
+/** Batch 97: pudar gelap tipis di atas isi saat tertekan (kartu bergradien tampak masuk meski bayangan timbulnya tertutup isi). */
+private const val OVERLAY_WASH_ALPHA = 0.14f
+
+private fun DrawScope.drawPressOverlay(kit: WellKit, spec: DepthSpec, r: Float, intensity: Float) {
+    kit.draw(this, intensity, fill = false)
+    drawRoundRect(color = spec.shadow.copy(alpha = OVERLAY_WASH_ALPHA * intensity), cornerRadius = CornerRadius(r, r))
+}
+
+/**
+ * Batch 97: lapisan CEKUNG di ATAS isi. Kartu yang isinya menutup penuh badan timbul (hero Beranda: gradien aksen opak) tak
+ * memperlihatkan cekung yang digambar di BELAKANG isi -> hanya riak. Di sini bayangan dalam + bibir + pudar gelap digambar SETELAH
+ * isi, intensitas = progres tekan. Dibake sekali (bitmap seukuran elemen), diminta sejak gambar pertama supaya siap saat ditekan.
+ */
+private fun Modifier.depthPressOverlay(spec: DepthSpec, shape: Shape, depth: DepthSize, pressed: () -> Float): Modifier = this.drawWithCache {
+    val w = this.size.width
+    val h = this.size.height
+    val r = cornerRadiusPx(shape, this.size, this)
+    val d = depth.distance.toPx()
+    val blur = depth.blur.toPx()
+    val lip = 1.5.dp.toPx()
+    val kit = WellKit(spec, w, h, r, d, blur, lip, ::blurPaint)
+    val wi = w.roundToInt()
+    val hi = h.roundToInt()
+    val bytes = wi.toLong() * hi * 4L
+    val snapshot = Density(this.density, this.fontScale)
+    val slot = if (wi > 0 && hi > 0 && bytes <= BAKE_MAX_BYTES) {
+        DepthBakery.request(BakeKey(spec, 2, 0, wi, hi, r.roundToInt(), depth, null, 0L, snapshot.density), bytes) {
+            bakeBitmap(wi, hi, 0, snapshot) {
+                drawPressOverlay(WellKit(spec, w, h, r, d, blur, lip, ::newBlurPaint), spec, r, 1f)
+            }
+        }
+    } else {
+        null
+    }
+    onDrawWithContent {
+        drawContent()
+        val baked = slot?.image
+        val p = pressed().coerceIn(0f, 1f)
+        if (p > 0.01f) {
+            if (baked != null) drawImage(baked, alpha = p) else drawPressOverlay(kit, spec, r, p)
+        }
+    }
+}
+
 /** Permukaan CEKUNG (lekuk): jalur tab, ubin ikon, bak progres, keadaan terpilih. Dibake seperti [depthRaised]. */
 fun Modifier.depthInset(
     spec: DepthSpec,
@@ -718,7 +763,10 @@ fun DepthCard(
     )
 }
 
-/** Kartu neumorfik yang bisa diketuk: saat ditekan tampak MASUK ke dalam (timbul -> cekung). */
+/**
+ * Kartu neumorfik yang bisa diketuk: saat ditekan tampak MASUK ke dalam (timbul -> cekung). `pressOverlay = true` utk kartu yang isinya
+ * menutup penuh badan timbul (mis. gradien hero): cekung digambar juga DI ATAS isi.
+ */
 @Composable
 fun DepthCard(
     onClick: () -> Unit,
@@ -726,6 +774,7 @@ fun DepthCard(
     shape: Shape = MaterialTheme.shapes.large,
     depth: DepthSize = DepthSize.LARGE,
     interactionSource: MutableInteractionSource? = null,
+    pressOverlay: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
     val spec = LocalDepthSpec.current
@@ -737,7 +786,8 @@ fun DepthCard(
         onClick = onClick,
         modifier = modifier
             .depthPressInput(press)
-            .depthRaised(spec, shape, depth, pressed = { press.value }, style = style, accent = accent, prewarmPress = true),
+            .depthRaised(spec, shape, depth, pressed = { press.value }, style = style, accent = accent, prewarmPress = true)
+            .then(if (pressOverlay) Modifier.depthPressOverlay(spec, shape, depth) { press.value } else Modifier),
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),

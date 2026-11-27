@@ -1,5 +1,18 @@
 # Changelog
 
+## Batch 97: ubin hero "Resize / Edit Video" kini juga punya efek CEKUNG (bukan hanya riak)
+
+User (setelah v96): "mantap. tapi kok ubin resize/edit video gak punya efek cekungan. cuman efek ripple biasa doang?!!"
+
+### AKAR MASALAH (dari kode `MainActivity.kt` `HomeHeroCard` + `Depth.kt`; BELUM diverifikasi di HP)
+- `DepthCard` menggambar badan timbul/cekung di BELAKANG isi (`depthRaised` = `onDrawBehind`). Isi hero memakai `Box.background(accentGradient())` OPAK yang menutup seluruh kartu, jadi cekung (dan hilangnya bayangan luar) tak pernah terlihat; yang tampak hanya riak + skala pegas. Ubin alat lain (`HomeToolCard`, `VideoPickerCard`) berisi transparan sehingga cekung terlihat. Hanya hero yang berlatar opak.
+
+### PERBAIKAN (2 berkas kode: `ui/theme/Depth.kt`, `MainActivity.kt`)
+- `Depth.kt`: `Modifier.depthPressOverlay` (privat) menggambar lapisan CEKUNG DI ATAS isi lewat `onDrawWithContent` setelah `drawContent()`: bayangan dalam + bibir (`WellKit.draw(fill = false)`, tanpa badan sumur) + pudar gelap tipis (`OVERLAY_WASH_ALPHA` = 0,14), intensitas = progres tekan yang SAMA dgn kartu (`DepthPressState`, jadi secepat Batch 96). Dibake sekali (kind 2, seukuran elemen) dan diminta sejak gambar pertama supaya siap saat ditekan; sebelum siap jatuh ke gambar langsung.
+- `DepthCard` (versi bisa diketuk) + parameter `pressOverlay: Boolean = false`; kartu lain tidak berubah. `WellKit.draw` + parameter `fill` (bawaan true = perilaku lama).
+- `MainActivity.kt`: `HomeHeroCard` memakai `pressOverlay = true` (satu baris).
+- NOT VERIFIED: Gradle/Compose, lint, SpotBugs, ArchUnit, tes, dan tampilan di HP. kotlinc lokal: 0 galat sintaks; himpunan galat "unresolved reference" identik dgn berkas v96.
+
 ## Batch 96: efek CEKUNG disamakan kecepatannya dengan tekan langsung (skala pegas)
 
 User (setelah v95): "efek cekung masih kalah cepat dengan press langsung!!"

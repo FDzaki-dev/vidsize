@@ -1,5 +1,22 @@
 # Changelog
 
+## Batch 96: efek CEKUNG disamakan kecepatannya dengan tekan langsung (skala pegas)
+
+User (setelah v95): "efek cekung masih kalah cepat dengan press langsung!!"
+
+### AKAR MASALAH (dari kode `Depth.kt`; BELUM diverifikasi di HP)
+1. Tunda sinyal: cekung menunggu Press dari `clickable`, yang di kontainer gulir (Beranda) ditunda ~40 md; sentuhan itu sendiri sudah terbaca jauh lebih awal.
+2. Rantai hop: Flow -> `latched` (state) -> rekomposisi -> `animateFloatAsState` baru mulai = 2-3 frame sebelum p mulai naik.
+3. Frame peralihan (0 < p < 1) digambar LANGSUNG: 4 lapis blur timbul + 4 lapis lekuk di GPU kelas menengah -> frame jatuh tepat saat cekung harusnya muncul; bake tertekan pun baru diminta saat tekan pertama.
+4. Kurva: `tween(55)` FastOutSlowIn (awal landai di keadaan keruh), cekung jelas baru di p ~ 1.
+
+### PERBAIKAN (1 berkas kode: `ui/theme/Depth.kt`)
+- `DepthPressState` (`Animatable` dijalankan LANGSUNG dari event, dibaca saat menggambar -> tanpa rekomposisi) + `Modifier.depthPressInput`: sentuhan dibaca di pass Initial (tanpa tunda 40 md, tanpa konsumsi). Geser > touchSlop / pointer lenyap = lepas TANPA tahan; hanya ketukan berhasil yang ditahan min `PRESS_MIN_HOLD_MS` (150). Jalur Flow `InteractionSource` tetap sebagai cadangan (papan ketik/D-pad); Press yang datang <400 md setelah sentuhan langsung diabaikan (tak menahan dua kali).
+- Masuk: `tween(40)` + `LinearOutSlowInEasing` (lonjakan awal cepat), animasi dimulai `CoroutineStart.UNDISPATCHED`.
+- `depthRaised(prewarmPress)`: peralihan antar-keadaan = LEBUR dua bitmap bake (diam alfa 1-p, tertekan alfa p), bukan gambar langsung; bake tertekan disiapkan di muka setelah bake diam siap untuk `DepthCard`/`DepthIconButton`/kenop `DepthSwitch` bila bitmap <= 2,5 MB (`PRESS_PREWARM_MAX_BYTES`). Chip TIDAK disiapkan di muka (puluhan chip x2 bitmap mengancam anggaran 48 MB -> evakuasi LRU -> gambar langsung saat gulir); chip tetap lazy.
+- Dipakai di `DepthCard`, `DepthChip`, `DepthIconButton`, `DepthSwitch`. `DepthSlider` tak disentuh.
+- NOT VERIFIED: Gradle/Compose, lint, SpotBugs, ArchUnit, tes, dan perilaku di HP. kotlinc lokal: 0 galat sintaks (galat tersisa hanya "unresolved reference" karena pustaka Android/Compose tak ada di kotlinc mandiri; himpunan galat sama dgn berkas v95).
+
 ## Batch 95: efek CEKUNG kini tampil juga pada ketukan biasa (bukan hanya saat ditahan)
 
 User (setelah v94): "mengapa efek cekung hanya berlaku jika seluruh ubin itu di hold sedangkan di tap biasa itu gak kelihatan cekungan nya?!!"

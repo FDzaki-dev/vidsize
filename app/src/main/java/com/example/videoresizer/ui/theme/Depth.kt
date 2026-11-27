@@ -2,6 +2,8 @@ package com.example.videoresizer.ui.theme
 
 import android.graphics.BlurMaskFilter
 import android.os.SystemClock
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.LinearOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
@@ -38,11 +40,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
@@ -72,6 +74,7 @@ import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
@@ -89,6 +92,8 @@ import java.util.concurrent.Executors
 import kotlin.math.ceil
 import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.delay
@@ -213,44 +218,111 @@ val LocalDepthSpec = staticCompositionLocalOf { DarkDepth }
 
 private val NoPress: () -> Float = { 0f }
 
-// Batch 95: umpan balik TEKAN. Akar "cekung hanya tampak kalau ditahan": (1) di kontainer yang bisa digulir (Beranda) Compose menunda
-// sinyal tekan ~40 md; ketukan cepat (30-100 md) menghasilkan Press lalu Release nyaris bersamaan, sehingga komposisi bisa tak pernah
-// melihat `isPressed = true`; (2) tween 90 md baru sampai ~penuh setelah jari biasanya sudah terangkat, lalu langsung berbalik;
-// (3) di p antara 0 dan 1 badan timbul + lekuk digambar setengah-setengah (keruh), cekung baru jelas di p ~ 1.
-// Solusi: dengarkan Press/Release LANGSUNG (tak lewat state komposisi), tahan keadaan tertekan minimal PRESS_MIN_HOLD_MS dari saat
-// Press, masuk cepat (PRESS_ATTACK_MS) dan keluar pelan (PRESS_RELEASE_MS).
+// Batch 96: umpan balik TEKAN dibuat SECEPAT tekan langsung (skala pegas). Sisa lambat Batch 95 ada di empat tempat:
+// (1) sinyal tekan `clickable` di kontainer gulir ditunda ~40 md -> kini jari yang MENYENTUH dibaca langsung di pass Initial
+//     (tanpa tunda, tanpa konsumsi; geser melewati touchSlop = batal, dilepas tanpa tahan);
+// (2) jalur lama Flow -> state -> rekomposisi -> animateFloatAsState memakan 2-3 frame -> kini Animatable dijalankan langsung dari
+//     event & dibaca saat MENGGAMBAR (tanpa rekomposisi);
+// (3) frame peralihan 0<p<1 digambar langsung (4 lapis blur timbul + 4 lapis lekuk) -> berat di GPU Mali, frame jatuh tepat saat
+//     cekung mestinya muncul -> kini dua bitmap bake (diam & tertekan) dilebur murah, bake tertekan disiapkan di muka;
+// (4) tween 55 md FastOutSlowIn -> kini LinearOutSlowIn 40 md (lonjakan awal cepat).
+// Tahan minimal PRESS_MIN_HOLD_MS HANYA untuk ketukan yang berhasil (Release); batal/geser dilepas langsung.
 private const val PRESS_MIN_HOLD_MS = 150L
-private const val PRESS_ATTACK_MS = 55
+private const val PRESS_ATTACK_MS = 40
 private const val PRESS_RELEASE_MS = 170
 
+/** Event Press dari `InteractionSource` yang datang dalam jendela ini setelah sentuhan langsung dianggap SUDAH ditangani jalur langsung. */
+private const val PRESS_FLOW_IGNORE_MS = 400L
+
 /**
- * Progres tekan 0..1 untuk permukaan timbul: 1 = cekung penuh. Keadaan "tertekan" di-latch minimal [PRESS_MIN_HOLD_MS] sejak Press
- * (ketukan cepat tetap menampakkan cekung penuh), dan Press+Release yang datang berdempetan tetap terlihat (event dibaca langsung).
+ * Progres tekan 0..1 untuk permukaan timbul: 1 = cekung penuh. Dua sumber: [setPointer] (sentuhan langsung, tanpa tunda) dan
+ * [setFlow] (Press/Release `InteractionSource`: papan ketik/D-pad). Hanya dipakai dari utas utama.
  */
-@Composable
-private fun rememberDepthPress(source: InteractionSource, label: String): State<Float> {
-    var latched by remember(source) { mutableStateOf(false) }
-    LaunchedEffect(source) {
-        var downAt = 0L
-        source.interactions.collectLatest { interaction ->
-            when (interaction) {
-                is PressInteraction.Press -> {
-                    downAt = SystemClock.uptimeMillis()
-                    latched = true
-                }
-                is PressInteraction.Release, is PressInteraction.Cancel -> {
-                    val remain = PRESS_MIN_HOLD_MS - (SystemClock.uptimeMillis() - downAt)
-                    if (remain > 0L) delay(remain)
-                    latched = false
-                }
+private class DepthPressState(private val scope: CoroutineScope) {
+    private val anim = Animatable(0f)
+    private var pointerDown = false
+    private var flowDown = false
+    private var active = false
+    private var downAt = 0L
+    private var pointerAt = 0L
+    private var job: Job? = null
+
+    /** Dibaca di fase gambar (state Compose di balik Animatable) -> hanya menggambar ulang, tanpa rekomposisi. */
+    val value: Float get() = anim.value
+
+    fun setPointer(down: Boolean, hold: Boolean) {
+        pointerAt = SystemClock.uptimeMillis()
+        pointerDown = down
+        update(hold)
+    }
+
+    fun setFlow(down: Boolean, hold: Boolean) {
+        if (down && SystemClock.uptimeMillis() - pointerAt < PRESS_FLOW_IGNORE_MS) return
+        flowDown = down
+        update(hold)
+    }
+
+    private fun update(hold: Boolean) {
+        val down = pointerDown || flowDown
+        if (down == active) return
+        active = down
+        job?.cancel()
+        if (down) {
+            downAt = SystemClock.uptimeMillis()
+            job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                anim.animateTo(1f, tween(PRESS_ATTACK_MS, easing = LinearOutSlowInEasing))
+            }
+        } else {
+            val remain = if (hold) PRESS_MIN_HOLD_MS - (SystemClock.uptimeMillis() - downAt) else 0L
+            job = scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                if (remain > 0L) delay(remain)
+                anim.animateTo(0f, tween(PRESS_RELEASE_MS))
             }
         }
     }
-    return animateFloatAsState(
-        targetValue = if (latched) 1f else 0f,
-        animationSpec = tween(if (latched) PRESS_ATTACK_MS else PRESS_RELEASE_MS),
-        label = label
-    )
+}
+
+@Composable
+private fun rememberDepthPress(source: InteractionSource): DepthPressState {
+    val scope = rememberCoroutineScope()
+    val state = remember(source) { DepthPressState(scope) }
+    LaunchedEffect(source, state) {
+        source.interactions.collectLatest { interaction ->
+            when (interaction) {
+                is PressInteraction.Press -> state.setFlow(down = true, hold = false)
+                is PressInteraction.Release -> state.setFlow(down = false, hold = true)
+                is PressInteraction.Cancel -> state.setFlow(down = false, hold = false)
+                else -> Unit
+            }
+        }
+    }
+    return state
+}
+
+/**
+ * Baca sentuhan LANGSUNG di pass Initial (sebelum `clickable`, yang menunda sinyal tekan ~40 md di kontainer gulir) tanpa
+ * mengonsumsi apa pun. Dilepas tanpa tahan bila jari bergeser melewati touchSlop (gulir/seret) atau pointer lenyap.
+ */
+private fun Modifier.depthPressInput(state: DepthPressState): Modifier = this.pointerInput(state) {
+    awaitEachGesture {
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val slop = viewConfiguration.touchSlop
+        state.setPointer(down = true, hold = false)
+        var tap = false
+        try {
+            while (true) {
+                val event = awaitPointerEvent(PointerEventPass.Final)
+                val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed) {
+                    tap = true
+                    break
+                }
+                if ((change.position - down.position).getDistance() > slop) break
+            }
+        } finally {
+            state.setPointer(down = false, hold = tap)
+        }
+    }
 }
 
 /** Skala jarak/radius lapisan KONTAK (bayangan rapat dekat tepi) relatif terhadap lapisan ambient. */
@@ -473,6 +545,9 @@ private class RaisedKit(
 private const val BAKE_MAX_BYTES = 6_000_000L
 private const val BAKE_BUDGET_BYTES = 48L * 1024L * 1024L
 
+/** Batch 96: batas ukuran bitmap agar bake tertekan disiapkan di muka (ubin/tombol ikon/kenop; bukan kartu raksasa). */
+private const val PRESS_PREWARM_MAX_BYTES = 2_500_000L
+
 internal data class BakeKey(
     val spec: DepthSpec,
     val kind: Int,
@@ -543,7 +618,8 @@ fun Modifier.depthRaised(
     depth: DepthSize = DepthSize.LARGE,
     pressed: () -> Float = NoPress,
     style: AppThemeStyle? = null,
-    accent: Color = Color.Unspecified
+    accent: Color = Color.Unspecified,
+    prewarmPress: Boolean = false
 ): Modifier = this.drawWithCache {
     val w = this.size.width
     val h = this.size.height
@@ -565,18 +641,28 @@ fun Modifier.depthRaised(
     }
     val restSlot by lazy(LazyThreadSafetyMode.NONE) { slotFor(0, 0f) }
     val pressSlot by lazy(LazyThreadSafetyMode.NONE) { slotFor(1, 1f) }
+    // Batch 96: bake tertekan disiapkan di muka (hanya setelah bake diam siap, jadi antreannya di belakang semua bake diam layar ini)
+    // untuk elemen tak-terlalu-besar yang sering diketuk; chip (puluhan, ringan) cukup lazy agar anggaran memori tak jebol.
+    val prewarm = prewarmPress && bytes <= PRESS_PREWARM_MAX_BYTES
     onDrawBehind {
         val p = pressed().coerceIn(0f, 1f)
-        // Batch 95: bake keadaan tertekan dimulai di frame tekan PERTAMA (bukan baru saat p >= 0.99) supaya cekung penuh sudah berupa
-        // bitmap (murah) selagi ditahan; tampilannya identik dgn gambar langsung sehingga tak ada lompatan visual saat bitmap siap.
-        val pressImage = if (bakeable && p > 0.01f) pressSlot.image else null
-        val baked = when {
-            !bakeable -> null
-            p <= 0.01f -> restSlot.image
-            p >= 0.99f -> pressImage
-            else -> null
+        if (!bakeable) {
+            kit.draw(this, p)
+        } else {
+            val restImage = restSlot.image
+            val pressImage = if (p > 0.01f || (prewarm && restImage != null)) pressSlot.image else null
+            val at = Offset(-margin.toFloat(), -margin.toFloat())
+            when {
+                p <= 0.01f && restImage != null -> drawImage(restImage, at)
+                p >= 0.99f && pressImage != null -> drawImage(pressImage, at)
+                // Peralihan MURAH: lebur dua bitmap (bukan 8 lapis blur langsung) -> tak ada frame jatuh saat cekung muncul.
+                restImage != null && pressImage != null -> {
+                    drawImage(restImage, at, alpha = 1f - p)
+                    drawImage(pressImage, at, alpha = p)
+                }
+                else -> kit.draw(this, p)
+            }
         }
-        if (baked != null) drawImage(baked, Offset(-margin.toFloat(), -margin.toFloat())) else kit.draw(this, p)
     }
 }
 
@@ -646,10 +732,12 @@ fun DepthCard(
     val style = LocalThemeStyle.current
     val accent = MaterialTheme.colorScheme.primary
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    val press by rememberDepthPress(source, "depthCardPress")
+    val press = rememberDepthPress(source)
     Card(
         onClick = onClick,
-        modifier = modifier.depthRaised(spec, shape, depth, pressed = { press }, style = style, accent = accent),
+        modifier = modifier
+            .depthPressInput(press)
+            .depthRaised(spec, shape, depth, pressed = { press.value }, style = style, accent = accent, prewarmPress = true),
         shape = shape,
         colors = CardDefaults.cardColors(containerColor = Color.Transparent),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -673,12 +761,13 @@ fun DepthChip(
     val spec = LocalDepthSpec.current
     val shape = RoundedCornerShape(50)
     val source = remember { MutableInteractionSource() }
-    val press by rememberDepthPress(source, "depthChipPress")
+    val press = rememberDepthPress(source)
     val sel by animateFloatAsState(if (selected) 1f else 0f, animationSpec = tween(160), label = "depthChipSel")
     val textColor = if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
     Box(
         modifier = modifier
-            .depthRaised(spec, shape, DepthSize.SMALL, pressed = { maxOf(press, sel) })
+            .depthPressInput(press)
+            .depthRaised(spec, shape, DepthSize.SMALL, pressed = { maxOf(press.value, sel) })
             .clip(shape)
             .selectable(
                 selected = selected,
@@ -714,11 +803,12 @@ fun DepthIconButton(
 ) {
     val spec = LocalDepthSpec.current
     val source = remember { MutableInteractionSource() }
-    val press by rememberDepthPress(source, "depthIconPress")
+    val press = rememberDepthPress(source)
     Box(
         modifier = modifier
             .size(size)
-            .depthRaised(spec, CircleShape, DepthSize.SMALL, pressed = { press })
+            .depthPressInput(press)
+            .depthRaised(spec, CircleShape, DepthSize.SMALL, pressed = { press.value }, prewarmPress = true)
             .clip(CircleShape)
             .clickable(interactionSource = source, indication = LocalIndication.current, role = Role.Button, onClick = onClick),
         contentAlignment = Alignment.Center
@@ -796,13 +886,14 @@ fun DepthSwitch(
     val travelPx = with(density) { (trackWidth - knob - pad * 2).toPx() }
     val knobPx = with(density) { knob.toPx() }
     val source = remember { MutableInteractionSource() }
-    val press = rememberDepthPress(source, "depthSwitchPress")
+    val press = rememberDepthPress(source)
     val position = animateFloatAsState(if (checked) 1f else 0f, animationSpec = tween(180), label = "depthSwitchPos")
     Box(
         modifier = modifier
             .then(if (enabled) Modifier else Modifier.alpha(0.45f))
             .size(trackWidth, knob + pad * 2)
             .depthInset(spec, RoundedCornerShape(50), DepthSize.SMALL)
+            .depthPressInput(press)
             .toggleable(
                 value = checked,
                 interactionSource = source,
@@ -831,7 +922,7 @@ fun DepthSwitch(
                 .padding(pad)
                 .absoluteOffset { IntOffset((travelPx * position.value).roundToInt(), 0) }
                 .size(knob)
-                .depthRaised(spec, CircleShape, DepthSize.SMALL, pressed = { press.value })
+                .depthRaised(spec, CircleShape, DepthSize.SMALL, pressed = { press.value }, prewarmPress = true)
         )
     }
 }

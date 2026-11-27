@@ -274,7 +274,7 @@ private const val PRESS_FLOW_IGNORE_MS = 400L
  * Progres tekan 0..1 untuk permukaan timbul: 1 = cekung penuh. Dua sumber: [setPointer] (sentuhan langsung, tanpa tunda) dan
  * [setFlow] (Press/Release `InteractionSource`: papan ketik/D-pad). Hanya dipakai dari utas utama.
  */
-private class DepthPressState(private val scope: CoroutineScope) {
+internal class DepthPressState(private val scope: CoroutineScope) {
     private val anim = Animatable(0f)
     private var pointerDown = false
     private var flowDown = false
@@ -319,7 +319,7 @@ private class DepthPressState(private val scope: CoroutineScope) {
 }
 
 @Composable
-private fun rememberDepthPress(source: InteractionSource): DepthPressState {
+internal fun rememberDepthPress(source: InteractionSource): DepthPressState {
     val scope = rememberCoroutineScope()
     val state = remember(source) { DepthPressState(scope) }
     LaunchedEffect(source, state) {
@@ -339,7 +339,7 @@ private fun rememberDepthPress(source: InteractionSource): DepthPressState {
  * Baca sentuhan LANGSUNG di pass Initial (sebelum `clickable`, yang menunda sinyal tekan ~40 md di kontainer gulir) tanpa
  * mengonsumsi apa pun. Dilepas tanpa tahan bila jari bergeser melewati touchSlop (gulir/seret) atau pointer lenyap.
  */
-private fun Modifier.depthPressInput(state: DepthPressState): Modifier = this.pointerInput(state) {
+internal fun Modifier.depthPressInput(state: DepthPressState): Modifier = this.pointerInput(state) {
     awaitEachGesture {
         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
         val slop = viewConfiguration.touchSlop
@@ -716,7 +716,7 @@ private fun DrawScope.drawPressOverlay(kit: WellKit, spec: DepthSpec, r: Float, 
  * memperlihatkan cekung yang digambar di BELAKANG isi -> hanya riak. Di sini bayangan dalam + bibir + pudar gelap digambar SETELAH
  * isi, intensitas = progres tekan. Dibake sekali (bitmap seukuran elemen), diminta sejak gambar pertama supaya siap saat ditekan.
  */
-private fun Modifier.depthPressOverlay(spec: DepthSpec, shape: Shape, depth: DepthSize, pressed: () -> Float): Modifier = this.drawWithCache {
+internal fun Modifier.depthPressOverlay(spec: DepthSpec, shape: Shape, depth: DepthSize, pressed: () -> Float): Modifier = this.drawWithCache {
     val w = this.size.width
     val h = this.size.height
     val r = cornerRadiusPx(shape, this.size, this)

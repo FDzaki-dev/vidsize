@@ -32,9 +32,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.scrollable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
@@ -125,7 +127,10 @@ import com.example.videoresizer.ui.theme.VideoResizerTheme
 import com.example.videoresizer.ui.theme.accentContent
 import com.example.videoresizer.ui.theme.accentGradient
 import com.example.videoresizer.ui.theme.depthInset
+import com.example.videoresizer.ui.theme.depthPressInput
+import com.example.videoresizer.ui.theme.depthPressOverlay
 import com.example.videoresizer.ui.theme.depthRaised
+import com.example.videoresizer.ui.theme.rememberDepthPress
 import com.example.videoresizer.ui.theme.DepthChipFlow
 import com.example.videoresizer.ui.theme.drawHeroArt
 import com.example.videoresizer.ui.theme.rememberThemeBackdrop
@@ -1827,7 +1832,11 @@ private fun ResizerScreen(
     Scaffold(
         modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
-            ToolTopBar(title = "Resize / Edit Video", onBack = onOpenHome, backDescription = "Kembali ke beranda")
+            // Batch 101 (user: "scroll hanya bisa diakses di area tertentu"): menyeret di HEADER dan DOK ikut menggulir halaman
+            // (state yang sama dgn kolom isi), bukan hanya di pita tengah di antara keduanya.
+            Box(modifier = Modifier.scrollable(resizerScrollState, Orientation.Vertical)) {
+                ToolTopBar(title = "Resize / Edit Video", onBack = onOpenHome, backDescription = "Kembali ke beranda")
+            }
         },
         // Batch 82: aksi utama (Resize / progres) kini DOK TETAP di bawah — dulu ujung kolom gulir sehingga harus
         // menggulir lewat semua pengaturan untuk mengekspor, dan progres hilang dari layar saat menggulir ke atas.
@@ -1839,6 +1848,7 @@ private fun ResizerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .scrollable(resizerScrollState, Orientation.Vertical)
                         .navigationBarsPadding()
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                         .depthRaised(LocalDepthSpec.current, RoundedCornerShape(26.dp), DepthSize.MEDIUM)
@@ -1884,17 +1894,32 @@ private fun ResizerScreen(
                             // Batch 83: aktif = tombol TIMBUL bergradien aksen; nonaktif = LEKUK cekung (tak bisa ditekan).
                             val ctaBrush = if (canResize) accentGradient() else Brush.horizontalGradient(listOf(Color.Transparent, Color.Transparent))
                             val ctaContentColor = if (canResize) accentContent() else MaterialTheme.colorScheme.onSurfaceVariant
+                            // Batch 101 (user: tombol "Resize video" hanya riak, tanpa cekung saat ditekan/ditahan): gradien aksen OPAK
+                            // menutup badan timbul yang digambar di belakangnya dan `pressed` tak pernah dipasang. Kini progres tekan
+                            // (sentuhan langsung, secepat skala tekan) menarik bayangan dalam + bibir + pudar gelap DI ATAS gradien.
+                            val ctaSource = remember { MutableInteractionSource() }
+                            val ctaPress = rememberDepthPress(ctaSource)
                             Button(
                                 colors = ButtonDefaults.buttonColors(containerColor = Color.Transparent, disabledContainerColor = Color.Transparent),
                                 elevation = null,
+                                interactionSource = ctaSource,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(52.dp)
                                     .then(
-                                        if (canResize) Modifier.depthRaised(ctaSpec, ctaShape, DepthSize.SMALL)
-                                        else Modifier.depthInset(ctaSpec, ctaShape)
+                                        if (canResize) {
+                                            Modifier
+                                                .depthPressInput(ctaPress)
+                                                .depthRaised(ctaSpec, ctaShape, DepthSize.SMALL, pressed = { ctaPress.value }, prewarmPress = true)
+                                        } else {
+                                            Modifier.depthInset(ctaSpec, ctaShape)
+                                        }
                                     )
-                                    .background(brush = ctaBrush, shape = ctaShape),
+                                    .background(brush = ctaBrush, shape = ctaShape)
+                                    .then(
+                                        if (canResize) Modifier.depthPressOverlay(ctaSpec, ctaShape, DepthSize.SMALL) { ctaPress.value }
+                                        else Modifier
+                                    ),
                                 shape = RoundedCornerShape(14.dp),
                                 enabled = canResize,
                                 onClick = {

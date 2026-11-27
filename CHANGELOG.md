@@ -1,5 +1,18 @@
 # Changelog
 
+## Batch 101: tombol "Resize video" kini cekung saat ditekan/ditahan + scroll bisa dimulai dari header & dok
+
+User (setelah v100, cacat Batch 99 dinyatakan beres): "1. button resize video murni ripple. gak punya efek cekungan saat hold maupun press 2. scroll yang hanya bisa diakses diarea tertentu!!"
+
+### 1. Tombol CTA "Resize video" (`MainActivity.kt`, `ui/theme/Depth.kt`)
+Akar sama dgn hero (Batch 97): `Button` dilapisi `background(accentGradient())` OPAK yang menutup badan timbul `depthRaised` (digambar di belakang) dan `pressed` tak pernah dipasang -> hanya riak Material. Perbaikan: `MutableInteractionSource` + `rememberDepthPress` (sentuhan langsung, secepat skala tekan, Batch 96) -> `depthPressInput` + `depthRaised(pressed, prewarmPress)` + `depthPressOverlay` (bayangan dalam + bibir + pudar gelap DI ATAS gradien, bitmap dibake) diletakkan SETELAH `.background(...)`. Keadaan nonaktif (cekung permanen) tak berubah. Helper `DepthPressState`/`rememberDepthPress`/`depthPressInput`/`depthPressOverlay` di `Depth.kt` dari `private` menjadi `internal`.
+### 2. Scroll "hanya di area tertentu" (ResizerScreen)
+ASUMSI (user tak menyebut layar/area; BELUM bisa dipastikan): halaman hanya bisa digulir di pita tengah antara header dan dok bawah; menyeret di header atau di dok (panel timbul + margin) mati. Perbaikan: `Modifier.scrollable(resizerScrollState, Orientation.Vertical)` pada pembungkus header (`topBar`) dan pada Box dok -> seretan vertikal di sana menggulir halaman (state yang sama dgn kolom isi; ketukan tombol tetap jalan). Layar lain tak punya dok. Bila yang dimaksud area lain (mis. di atas pratinjau video/slider/tab), kirim layar + area + video singkat.
+### VERIFIED / NOT VERIFIED
+VERIFIED statis: kurung seimbang; kotlinc 0 galat sintaks. NOT VERIFIED: kompilasi Gradle (build v100 belum terkonfirmasi hijau di sesi ini), lint, SpotBugs, ArchUnit, tes, tampilan/perilaku di HP (cekung tombol di tema terang & gelap; seretan di header/dok; apakah tombol masih bisa diketuk saat dok `scrollable`).
+### Bila MERAH
+Baca `e:` pertama; kandidat `MainActivity.kt` (impor `Orientation`/`scrollable`/`rememberDepthPress`/`depthPressInput`/`depthPressOverlay`; parameter `interactionSource` pada `Button`), `Depth.kt` (visibilitas `internal`). Jalan balik = `Vidsize_v100.zip`.
+
 ## Batch 100: perbaikan KEGAGALAN BUILD Batch 99 (`:app:compileReleaseKotlin`)
 
 User mengunggah `log_fail_1_127_127.zip` (build-output.log + manifest-merger report) tanpa teks: build v99 gagal kompilasi. Tiga akar (semua dari kode Batch 99, bukan kode lama):

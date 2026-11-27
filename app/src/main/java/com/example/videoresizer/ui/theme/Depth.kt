@@ -200,6 +200,17 @@ private val BurgundyDepth = DepthSpec(
     sheenAlpha = 0.11f, rimLightAlpha = 0.36f, rimDarkAlpha = 0.46f, lipDarkAlpha = 0.56f, lipLightAlpha = 0.18f
 )
 
+// Batch 98: Cosmic Orange — badan ungu antariksa (lebih terang dari latar), sorot = cahaya bintang oranye-amber hangat (bukan
+// putih/biru) supaya tepi atas-kiri terkesan tersinari matahari; bayangan = ungu nyaris-hitam.
+private val CosmicDepth = DepthSpec(
+    bodyHi = Color(0xFF47336A), bodyLo = Color(0xFF2B1E47),
+    wellDark = Color(0xFF150D26), wellLight = Color(0xFF30234F),
+    shadow = Color(0xFF06020E), shadowAlpha = 0.86f,
+    highlight = Color(0xFFFFB674), highlightAlpha = 0.22f,
+    insetShadowAlpha = 0.88f, insetHighlightAlpha = 0.20f,
+    sheenAlpha = 0.11f, rimLightAlpha = 0.36f, rimDarkAlpha = 0.46f, lipDarkAlpha = 0.56f, lipLightAlpha = 0.18f
+)
+
 /** Spesifikasi kedalaman per gaya tema (tetap, TIDAK bergantung warna dinamis wallpaper -> kontras sorot/bayangan terjamin). */
 fun depthSpecFor(style: AppThemeStyle): DepthSpec = when (style) {
     AppThemeStyle.LIGHT -> LightDepth
@@ -208,6 +219,7 @@ fun depthSpecFor(style: AppThemeStyle): DepthSpec = when (style) {
     AppThemeStyle.WARM_PAPER -> PaperDepth
     AppThemeStyle.MIDNIGHT_BLUE_GLASS -> GlassDepth
     AppThemeStyle.BURGUNDY_OLD_MONEY -> BurgundyDepth
+    AppThemeStyle.COSMIC_ORANGE -> CosmicDepth
 }
 
 /** Gaya tema aktif (diisi `VideoResizerTheme`); dibaca komponen kedalaman & ornamen. */

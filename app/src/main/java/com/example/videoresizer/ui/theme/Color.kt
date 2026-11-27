@@ -98,6 +98,20 @@ val BurgundyInk = Color(0xFF3E0D1B)
 val BurgundyError = Color(0xFFFF9E8F)
 val BurgundyOutline = Color(0xFF7A3548)
 
+// "Cosmic Orange" (Batch 98) — ungu-indigo antariksa pekat berpadu oranye surya + amber: nebula, gerhana, astrolab. Dasar tetap
+// bernada-tengah (aturan Batch 83) supaya kedalaman neumorfik terlihat; kartu = ungu lebih terang dari latar, teks = putih
+// hangat (kontras >= 9:1), `onPrimary` = tinta cokelat-ungu pekat (hero oranye bertinta gelap, kontras ~ 6,8:1).
+val CosmicBackground = Color(0xFF1E1433)
+val CosmicSurface = Color(0xFF2B1F46)
+val CosmicSurfaceVariant = Color(0xFF191027)
+val CosmicOnBackground = Color(0xFFFFF1E2)
+val CosmicOnSurfaceMuted = Color(0xFFD3C2DE)
+val CosmicPrimary = Color(0xFFFF8A2A)
+val CosmicSecondary = Color(0xFFFFC56E)
+val CosmicInk = Color(0xFF2A1205)
+val CosmicError = Color(0xFFFF7B9C)
+val CosmicOutline = Color(0xFF5B4580)
+
 /** The gradient painted behind every screen when Midnight Blue Glass is active. */
 val MidnightBlueGlassGradient = Brush.verticalGradient(
     listOf(GlassGradientTop, GlassGradientMid, GlassGradientBottom)

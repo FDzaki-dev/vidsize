@@ -153,6 +153,36 @@ private val BurgundyShapes = Shapes(
 // Sharper, tighter corners than Material3's default (4/8/12/16/28dp) — part
 // of what makes Midnight Neon read as a genuinely different theme rather
 // than a recolor: every card/button/chip in the app is a bit more angular.
+// Batch 98: Cosmic Orange. Palet gelap (ungu antariksa + oranye surya); wadah Material opak, makin ke "tinggi" makin terang.
+// primaryContainer = oranye terbakar (teks amber di atasnya), secondaryContainer = ungu nebula.
+private val CosmicColors = darkColorScheme(
+    primary = CosmicPrimary,
+    onPrimary = CosmicInk,
+    primaryContainer = Color(0xFF6A3110),
+    onPrimaryContainer = CosmicSecondary,
+    secondary = CosmicSecondary,
+    onSecondary = CosmicInk,
+    secondaryContainer = Color(0xFF3B2B5E),
+    onSecondaryContainer = CosmicOnBackground,
+    background = CosmicBackground,
+    onBackground = CosmicOnBackground,
+    surface = CosmicSurface,
+    onSurface = CosmicOnBackground,
+    surfaceVariant = CosmicSurfaceVariant,
+    onSurfaceVariant = CosmicOnSurfaceMuted,
+    outline = CosmicOutline,
+    error = CosmicError
+).withContainers(0xFF1A1129, 0xFF231838, 0xFF2B1F46, 0xFF352757, 0xFF403068)
+
+// Lembut seperti planet (radius besar, seragam: gambar kedalaman memakai satu radius per elemen).
+private val CosmicShapes = Shapes(
+    extraSmall = RoundedCornerShape(8.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(20.dp),
+    large = RoundedCornerShape(28.dp),
+    extraLarge = RoundedCornerShape(36.dp)
+)
+
 private val NeonShapes = Shapes(
     extraSmall = RoundedCornerShape(2.dp),
     small = RoundedCornerShape(4.dp),
@@ -184,7 +214,7 @@ private val GlassShapes = Shapes(
 )
 
 /**
- * The six selectable visual identities (BURGUNDY_OLD_MONEY added in Batch 94). LIGHT/DARK are the original
+ * The seven selectable visual identities (BURGUNDY_OLD_MONEY added in Batch 94, COSMIC_ORANGE in Batch 98). LIGHT/DARK are the original
  * Material-default-shaped themes (SYSTEM resolves to one of these two
  * before reaching this function — see MainActivity's theme picker).
  * MIDNIGHT_NEON, WARM_PAPER, and MIDNIGHT_BLUE_GLASS are full alternate
@@ -192,7 +222,7 @@ private val GlassShapes = Shapes(
  * (for titles) different type style, not just a palette swap over the same
  * component shapes. MIDNIGHT_BLUE_GLASS is the app's default look.
  */
-enum class AppThemeStyle { LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS, BURGUNDY_OLD_MONEY }
+enum class AppThemeStyle { LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS, BURGUNDY_OLD_MONEY, COSMIC_ORANGE }
 
 /**
  * App theme. Defaults to following the system setting, but the caller
@@ -207,7 +237,7 @@ fun VideoResizerTheme(
 ) {
     val context = LocalContext.current
     val isDark = style == AppThemeStyle.DARK || style == AppThemeStyle.MIDNIGHT_NEON || style == AppThemeStyle.MIDNIGHT_BLUE_GLASS ||
-        style == AppThemeStyle.BURGUNDY_OLD_MONEY
+        style == AppThemeStyle.BURGUNDY_OLD_MONEY || style == AppThemeStyle.COSMIC_ORANGE
     val colorScheme = when {
         // Batch 83: warna dinamis wallpaper hanya untuk AKSEN; netral (latar/permukaan/teks) tetap dari palet tema supaya
         // kontras sorot & bayangan neumorfik terjamin (netral dinamis bisa nyaris putih/hitam -> bayangan "nyatu").
@@ -231,6 +261,7 @@ fun VideoResizerTheme(
         style == AppThemeStyle.WARM_PAPER -> PaperColors
         style == AppThemeStyle.MIDNIGHT_BLUE_GLASS -> GlassColors
         style == AppThemeStyle.BURGUNDY_OLD_MONEY -> BurgundyColors
+        style == AppThemeStyle.COSMIC_ORANGE -> CosmicColors
         else -> DarkColors
     }
     val shapes = when (style) {
@@ -238,6 +269,7 @@ fun VideoResizerTheme(
         AppThemeStyle.WARM_PAPER -> PaperShapes
         AppThemeStyle.MIDNIGHT_BLUE_GLASS -> GlassShapes
         AppThemeStyle.BURGUNDY_OLD_MONEY -> BurgundyShapes
+        AppThemeStyle.COSMIC_ORANGE -> CosmicShapes
         else -> Shapes() // Material3 defaults for LIGHT/DARK — unchanged from before this feature.
     }
     val typography = when (style) {
@@ -245,6 +277,7 @@ fun VideoResizerTheme(
         AppThemeStyle.WARM_PAPER -> PaperTypography
         AppThemeStyle.MIDNIGHT_BLUE_GLASS -> GlassTypography
         AppThemeStyle.BURGUNDY_OLD_MONEY -> BurgundyTypography
+        AppThemeStyle.COSMIC_ORANGE -> CosmicTypography
         else -> Typography // unchanged from before this feature.
     }
 

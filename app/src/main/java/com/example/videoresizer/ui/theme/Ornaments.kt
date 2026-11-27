@@ -8,6 +8,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -34,7 +35,7 @@ import kotlin.random.Random
  * Batch 83: ornamen khas tiap tema. Semua digambar dengan Canvas (tanpa aset/PNG), deterministik (Random berbenih tetap,
  * jadi posisi tak "berkedip" saat rekomposisi) dan statis (tanpa animasi -> tanpa biaya baterai).
  *  - Latar layar penuh   : [themeBackdrop]   (aurora kaca / grid synthwave / kertas bergaris / rasi bintang / blob pastel /
- *                          damask emas + bingkai berukir di atas burgundy [Batch 94])
+ *                          damask emas + bingkai berukir di atas burgundy [Batch 94] / peta bintang astrolab + nebula + gerhana [Batch 98])
  *  - Motif di tiap kartu : [drawCardOrnament] (dipanggil otomatis oleh DepthCard & permukaan timbul bergaya)
  *  - Seni kartu hero     : [drawHeroArt]
  */
@@ -111,6 +112,7 @@ private fun DrawScope.drawThemeBackdrop(b: ThemeBackdrop) {
         AppThemeStyle.DARK -> darkBackdrop(b.accent, b.accent2)
         AppThemeStyle.LIGHT -> lightBackdrop(b.accent)
         AppThemeStyle.BURGUNDY_OLD_MONEY -> burgundyBackdrop()
+        AppThemeStyle.COSMIC_ORANGE -> cosmicBackdrop()
     }
 }
 
@@ -544,6 +546,108 @@ private fun DrawScope.burgundyBackdrop() {
     roundDots(scatter(Random(13), 34, w, h * 0.70f), BurgundyGoldBright.copy(alpha = 0.30f), 1.5f * u)
 }
 
+// ---------------------------------------------------------------------------------------------------------------------
+// Batch 98 — Cosmic Orange: "peta bintang & astrolab". Semua vektor Canvas (tanpa aset), statis, deterministik (Random berbenih).
+//  - Latar : gradien antariksa + tiga kabut nebula (oranye surya, ungu, bara) + medan bintang berkilau + astrolab (cincin
+//            konsentris dengan skala derajat) + orbit miring berplanet/berbulan + komet + cincin gerhana + penggaris peta bintang.
+//  - Kartu : orbit dua busur dengan satelit di sudut kanan-bawah + kilau bintang kanan-atas.
+//  - Hero  : planet garis-tinta bercincin (cincin belakang/depan), orbit putus-putus dengan bulan, kilau bintang.
+
+private val CosmicOrange = Color(0xFFFF8A2A)
+private val CosmicAmber = Color(0xFFFFC56E)
+private val CosmicStar = Color(0xFFFFE9CF)
+
+/** Astrolab: lingkaran konsentris [radii] di sekitar [c] + skala derajat (tik tiap 6 derajat, tik panjang tiap 30 derajat) pada cincin [tickRing]. */
+private fun DrawScope.astrolabe(c: Offset, radii: FloatArray, tickRing: Int, color: Color, u: Float) {
+    for (i in radii.indices) {
+        drawCircle(color.copy(alpha = 0.20f - i * 0.04f), radii[i], c, style = Stroke(width = u))
+    }
+    val ring = radii[tickRing]
+    val ticks = Path()
+    for (i in 0 until 60) {
+        val a = i * 6f * DEG_TO_RAD
+        val len = if (i % 5 == 0) 9f * u else 4.5f * u
+        ticks.moveTo(c.x + cos(a) * ring, c.y + sin(a) * ring)
+        ticks.lineTo(c.x + cos(a) * (ring + len), c.y + sin(a) * (ring + len))
+    }
+    drawPath(ticks, color.copy(alpha = 0.24f), style = Stroke(width = u))
+}
+
+private fun DrawScope.cosmicBackdrop() {
+    val w = size.width
+    val h = size.height
+    val u = 1.dp.toPx()
+    drawRect(Brush.verticalGradient(0f to Color(0xFF2E1B4D), 0.45f to Color(0xFF1E1433), 1f to Color(0xFF0E0720)))
+    // Nebula: oranye surya kanan-atas, ungu kiri-tengah, bara oranye kanan-bawah.
+    orb(Offset(w * 0.86f, h * 0.06f), w * 0.95f, CosmicOrange, 0.24f)
+    orb(Offset(w * 0.02f, h * 0.44f), w * 0.75f, Color(0xFFA24DFF), 0.20f)
+    orb(Offset(w * 0.90f, h * 0.94f), w * 0.95f, Color(0xFFFF5A1F), 0.26f)
+    // Medan bintang: titik redup/terang/amber + kilau empat-arah (satu Path).
+    val rnd = Random(21)
+    roundDots(scatter(rnd, 70, w, h), CosmicStar.copy(alpha = 0.34f), 1.3f * u)
+    roundDots(scatter(rnd, 26, w, h), CosmicStar.copy(alpha = 0.62f), 2f * u)
+    roundDots(scatter(rnd, 16, w, h), CosmicAmber.copy(alpha = 0.55f), 2.2f * u)
+    val glints = Path()
+    repeat(9) { glints.addStar4(Offset(rnd.nextFloat() * w, rnd.nextFloat() * h * 0.85f), (4f + rnd.nextFloat() * 4f) * u) }
+    drawPath(glints, CosmicStar.copy(alpha = 0.55f), style = Fill)
+    // Gerhana (hanya cincin + sabit terang, tanpa piringan gelap supaya tombol header tetap jelas) di kanan-atas.
+    val ec = Offset(w * 0.90f, h * 0.05f)
+    val er = w * 0.13f
+    orb(ec, er * 2.4f, CosmicOrange, 0.20f)
+    drawCircle(CosmicOrange.copy(alpha = 0.40f), er, ec, style = Stroke(width = 1.2f * u))
+    drawCircle(CosmicOrange.copy(alpha = 0.14f), er * 1.35f, ec, style = Stroke(width = u))
+    drawArc(
+        CosmicAmber.copy(alpha = 0.85f), -155f, 95f, false, Offset(ec.x - er, ec.y - er), Size(2f * er, 2f * er),
+        style = Stroke(width = 3f * u, cap = StrokeCap.Round)
+    )
+    // Astrolab raksasa di kanan-bawah + orbit miring berplanet dan berbulan.
+    val ac = Offset(w * 0.88f, h * 0.90f)
+    astrolabe(ac, floatArrayOf(w * 0.22f, w * 0.34f, w * 0.50f, w * 0.70f), 2, CosmicOrange, u)
+    rotate(-24f, pivot = ac) {
+        val orx = w * 0.62f
+        val ory = w * 0.20f
+        drawOval(CosmicOrange.copy(alpha = 0.26f), Offset(ac.x - orx, ac.y - ory), Size(2f * orx, 2f * ory), style = Stroke(width = u))
+        val t1 = 215f * DEG_TO_RAD
+        val planet = Offset(ac.x + orx * cos(t1), ac.y + ory * sin(t1))
+        orb(planet, 18f * u, CosmicOrange, 0.55f)
+        drawCircle(CosmicOrange, 5f * u, planet)
+        val t2 = 250f * DEG_TO_RAD
+        drawCircle(CosmicStar.copy(alpha = 0.85f), 2.4f * u, Offset(ac.x + orx * cos(t2), ac.y + ory * sin(t2)))
+    }
+    // Komet: ekor memudar ke kepala amber di kiri-bawah.
+    val tail = Offset(w * 0.05f, h * 0.70f)
+    val head = Offset(w * 0.34f, h * 0.79f)
+    drawLine(
+        Brush.linearGradient(listOf(Color.Transparent, CosmicAmber.copy(alpha = 0.75f)), start = tail, end = head),
+        tail, head, 2f * u, StrokeCap.Round
+    )
+    orb(head, 14f * u, CosmicAmber, 0.50f)
+    drawCircle(CosmicStar, 2.6f * u, head)
+    drawRect(
+        Brush.radialGradient(
+            0f to Color.Transparent,
+            0.35f to Color.Transparent,
+            1f to Color(0xFF07030F).copy(alpha = 0.55f),
+            center = Offset(w / 2f, h * 0.40f),
+            radius = maxOf(w, h) * 0.85f
+        )
+    )
+    // Penggaris peta bintang di tepi atas/bawah (tik panjang tiap 5).
+    val ruler = Path()
+    var px = 0f
+    var i = 0
+    while (px <= w) {
+        val len = if (i % 5 == 0) 7f * u else 3.5f * u
+        ruler.moveTo(px, 6f * u)
+        ruler.lineTo(px, 6f * u + len)
+        ruler.moveTo(px, h - 6f * u)
+        ruler.lineTo(px, h - 6f * u - len)
+        px += 12f * u
+        i++
+    }
+    drawPath(ruler, CosmicOrange.copy(alpha = 0.16f), style = Stroke(width = u))
+}
+
 /**
  * Motif kecil di permukaan kartu timbul (dipotong ke bentuk kartu): kilau kaca / braket neon / jahitan kertas /
  * titik bintang / cincin pastel.
@@ -623,6 +727,22 @@ internal fun DrawScope.drawCardOrnament(style: AppThemeStyle, accent: Color, r: 
                 drawPath(gems, gold.copy(alpha = 0.80f), style = Fill)
                 fleurDeLis(Offset(w - 26f * u, 28f * u), 8f * u, gold.copy(alpha = 0.40f))
             }
+            AppThemeStyle.COSMIC_ORANGE -> {
+                // Orbit dua busur + satelit di sudut kanan-bawah; kilau bintang kecil di kanan-atas.
+                val orange = if (accent == Color.Unspecified) CosmicOrange else accent
+                val oc = Offset(w, h)
+                drawCircle(orange.copy(alpha = 0.18f), 26f * u, oc, style = Stroke(width = u))
+                drawCircle(orange.copy(alpha = 0.11f), 44f * u, oc, style = Stroke(width = u))
+                val sa = -132f * DEG_TO_RAD
+                val sat = Offset(oc.x + cos(sa) * 44f * u, oc.y + sin(sa) * 44f * u)
+                drawCircle(orange.copy(alpha = 0.22f), 6f * u, sat)
+                drawCircle(orange.copy(alpha = 0.85f), 2.4f * u, sat)
+                val glints = Path()
+                glints.addStar4(Offset(w - 22f * u, 22f * u), 6f * u)
+                glints.addStar4(Offset(w - 40f * u, 36f * u), 3f * u)
+                drawPath(glints, CosmicStar.copy(alpha = 0.55f), style = Fill)
+                roundDots(listOf(Offset(w - 14f * u, 40f * u), Offset(w - 52f * u, 18f * u)), CosmicStar.copy(alpha = 0.35f), 1.6f * u)
+            }
         }
     }
 }
@@ -696,6 +816,34 @@ fun DrawScope.drawHeroArt(style: AppThemeStyle) {
             glints.addStar4(Offset(w - 24f * u, h - 40f * u), 7f * u)
             glints.addStar4(Offset(w * 0.60f, 26f * u), 5f * u)
             drawPath(glints, ink.copy(alpha = 0.40f), style = Fill)
+        }
+        AppThemeStyle.COSMIC_ORANGE -> {
+            // Hero = oranye (gradien aksen) -> seni garis dgn TINTA cokelat-ungu: planet bercincin, orbit putus-putus + bulan, kilau bintang.
+            val ink = CosmicInk
+            val pc = Offset(w - 64f * u, 54f * u)
+            val pr = 24f * u
+            rotate(-22f, pivot = pc) {
+                drawOval(
+                    ink.copy(alpha = 0.28f), Offset(pc.x - 66f * u, pc.y - 20f * u), Size(132f * u, 40f * u),
+                    style = Stroke(width = u, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f * u, 4f * u)))
+                )
+                val moon = 20f * DEG_TO_RAD
+                drawCircle(ink.copy(alpha = 0.75f), 3.6f * u, Offset(pc.x + 66f * u * cos(moon), pc.y + 20f * u * sin(moon)))
+                // Cincin belakang (setengah atas), lalu planet, lalu cincin depan (setengah bawah).
+                drawArc(ink.copy(alpha = 0.80f), 180f, 180f, false, Offset(pc.x - 46f * u, pc.y - 11f * u), Size(92f * u, 22f * u), style = Stroke(width = 2.4f * u))
+                drawCircle(ink.copy(alpha = 0.16f), pr, pc)
+                clipPath(Path().apply { addOval(Rect(pc, pr)) }) {
+                    for (k in -2..2) drawLine(ink.copy(alpha = 0.26f), Offset(pc.x - pr, pc.y + k * 8f * u), Offset(pc.x + pr, pc.y + k * 8f * u), 1.2f * u)
+                }
+                drawCircle(ink.copy(alpha = 0.85f), pr, pc, style = Stroke(width = 1.6f * u))
+                drawArc(ink.copy(alpha = 0.85f), 0f, 180f, false, Offset(pc.x - 46f * u, pc.y - 11f * u), Size(92f * u, 22f * u), style = Stroke(width = 2.4f * u))
+            }
+            val glints = Path()
+            glints.addStar4(Offset(w * 0.58f, 26f * u), 5f * u)
+            glints.addStar4(Offset(w - 22f * u, h - 38f * u), 7f * u)
+            glints.addStar4(Offset(w * 0.46f, h - 30f * u), 4f * u)
+            drawPath(glints, ink.copy(alpha = 0.42f), style = Fill)
+            roundDots(listOf(Offset(w * 0.70f, h - 24f * u), Offset(w - 52f * u, h - 56f * u), Offset(w * 0.52f, 46f * u)), ink.copy(alpha = 0.40f), 2f * u)
         }
     }
 }

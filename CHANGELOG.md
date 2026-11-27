@@ -1,5 +1,25 @@
 # Changelog
 
+## Batch 98: Tema baru "Cosmic Orange" (ungu antariksa + oranye surya, ornamen peta bintang/astrolab)
+
+User: "bikin tema baru yaitu cosmic orange dengan ornamen khas dan unik!!"
+
+### DESAIN
+- Palet: latar ungu-indigo antariksa `#1E1433` (kartu `#47336A`->`#2B1E47`) + ORANYE SURYA primer `#FF8A2A` + amber sekunder `#FFC56E` + teks putih hangat `#FFF1E2` (muted `#D3C2DE`; kontras >= 9:1). `onPrimary` = tinta cokelat-ungu `#2A1205` (hero = oranye bertinta gelap, ~6,8:1). Error = rose `#FF7B9C` (bukan oranye, agar tak tertukar dgn aksen). Dasar bernada-tengah (aturan Batch 83); sorot kedalaman = cahaya bintang oranye-amber hangat, bayangan = ungu nyaris-hitam.
+- Tipografi: judul sans TEBAL berjarak lega (kesan panel instrumen) + label kecil `FontFamily.Monospace` berjarak (keterangan peta bintang). Bentuk: radius besar lembut seperti planet (8/14/20/28/36dp, seragam).
+- Ornamen (semua vektor Canvas, statis, deterministik, tanpa aset): LATAR = gradien antariksa + 3 kabut nebula (oranye surya, ungu, bara) + medan bintang (titik redup/terang/amber + 9 kilau empat-arah) + cincin gerhana kanan-atas (hanya cincin + sabit terang, tanpa piringan gelap) + ASTROLAB raksasa kanan-bawah (4 cincin konsentris + skala derajat tiap 6 derajat, tik panjang tiap 30) + orbit miring berplanet dan berbulan + komet berekor memudar + vignette + penggaris peta bintang di tepi atas/bawah (dibake 1x seperti latar lain). KARTU = orbit dua busur + satelit di sudut kanan-bawah + kilau bintang kanan-atas. HERO = planet garis-tinta bercincin (cincin belakang/planet berpita/cincin depan) + orbit putus-putus berbulan + kilau bintang.
+- Ikon alat Beranda seragam ORANYE tema pada Cosmic Orange (seperti Burgundy); tema lain tak berubah.
+
+### PERUBAHAN (6 berkas kode)
+`ui/theme/Color.kt` (palet), `ui/theme/Type.kt` (`CosmicTypography`), `ui/theme/Theme.kt` (enum `AppThemeStyle.COSMIC_ORANGE`, `CosmicColors`, `CosmicShapes`, cabang isDark/warna/bentuk/tipografi), `ui/theme/Depth.kt` (`CosmicDepth` + `depthSpecFor`), `ui/theme/Ornaments.kt` (latar/kartu/hero + `astrolabe`), `MainActivity.kt` (`ThemePreference.COSMIC_ORANGE`, label "Cosmic Orange", pemetaan gaya, tint ikon alat). Pemilih tema memakai `ThemePreference.entries` -> opsi baru muncul otomatis. Persistensi pilihan tema tak berubah (nama enum tersimpan di `video_resizer_prefs`).
+
+### VERIFIED
+Statis: kurung seimbang di 6 berkas; kotlinc 1.9.24 0 galat SINTAKS; himpunan jenis galat non-"unresolved" sama dgn v97 (hanya jumlah noise naik karena kode bertambah).
+### NOT VERIFIED
+Kompilasi Gradle/Compose, lint, SpotBugs, ArchUnit, tes; TAMPILAN SEBENARNYA di HP (tak ada prototipe visual kali ini: posisi planet/komet/astrolab dihitung dari proporsi layar, belum dilihat): keterbacaan teks di atas nebula/cincin, kepadatan ornamen, planet hero menimpa ujung judul, kinerja gulir Beranda; apakah `drawArc`/`drawLine(brush)`/`Rect(center, radius)` dikompilasi apa adanya (API standar, tak dikompilasi di sini).
+### Bila MERAH
+Baca `e:` pertama; kandidat `Ornaments.kt` (`astrolabe`, `cosmicBackdrop`: `drawArc(..., Offset, Size, style = Stroke(cap))`, `drawLine(Brush, start, end, strokeWidth, cap)`, `clipPath(Path().apply { addOval(Rect(pc, pr)) })`), `Theme.kt` (`withContainers` 5 argumen Long). Jalan balik = `Vidsize_v97.zip`.
+
 ## Batch 97: ubin hero "Resize / Edit Video" kini juga punya efek CEKUNG (bukan hanya riak)
 
 User (setelah v96): "mantap. tapi kok ubin resize/edit video gak punya efek cekungan. cuman efek ripple biasa doang?!!"

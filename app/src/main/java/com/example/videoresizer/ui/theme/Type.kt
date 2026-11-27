@@ -67,6 +67,24 @@ val BurgundyTypography = Typography(
 )
 
 /**
+ * Batch 98: Cosmic Orange — judul sans tebal berjarak lega (kesan panel instrumen antariksa) dan label kecil `Monospace`
+ * berjarak (seperti keterangan peta bintang). Generik bawaan tanpa berkas font -> tak bisa jadi kegagalan resource. Ukuran
+ * `headlineMedium`/`titleSmall` WAJIB eksplisit (judul Beranda & label kartu memakainya; tanpa `fontSize` jatuh ke 14sp).
+ */
+val CosmicTypography = Typography(
+    headlineMedium = TextStyle(fontWeight = FontWeight.Bold, fontSize = 28.sp, letterSpacing = 0.8.sp),
+    headlineSmall = TextStyle(fontWeight = FontWeight.Bold, fontSize = 24.sp, letterSpacing = 0.6.sp),
+    titleLarge = TextStyle(fontWeight = FontWeight.Bold, fontSize = 23.sp, letterSpacing = 0.6.sp),
+    titleMedium = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 18.sp, letterSpacing = 0.4.sp),
+    titleSmall = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, letterSpacing = 0.4.sp),
+    bodyLarge = TextStyle(fontWeight = FontWeight.Normal, fontSize = 16.sp),
+    bodyMedium = TextStyle(fontWeight = FontWeight.Normal, fontSize = 14.sp),
+    labelLarge = TextStyle(fontWeight = FontWeight.SemiBold, fontSize = 14.sp, letterSpacing = 0.6.sp),
+    labelMedium = TextStyle(fontWeight = FontWeight.Medium, fontSize = 12.sp, letterSpacing = 0.8.sp),
+    labelSmall = TextStyle(fontWeight = FontWeight.Medium, fontSize = 11.sp, fontFamily = FontFamily.Monospace, letterSpacing = 1.6.sp)
+)
+
+/**
  * Midnight Blue Glass's type scale: tighter (slightly negative) letter
  * spacing and bolder titles for the dense, tracked-in look of iOS system
  * type, using the platform's default sans family (no bundled font files,

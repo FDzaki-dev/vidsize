@@ -137,7 +137,7 @@ import java.io.File
 import java.util.Locale
 import java.util.UUID
 
-private enum class ThemePreference { SYSTEM, LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS, BURGUNDY_OLD_MONEY }
+private enum class ThemePreference { SYSTEM, LIGHT, DARK, MIDNIGHT_NEON, WARM_PAPER, MIDNIGHT_BLUE_GLASS, BURGUNDY_OLD_MONEY, COSMIC_ORANGE }
 private enum class Screen { HOME, MAIN, STUDIO, BATCH, GIF, COMPRESSOR }
 
 private const val FRAME_STEP_CAP_NS = 24_000_000L
@@ -231,6 +231,7 @@ private fun themeLabel(pref: ThemePreference): String = when (pref) {
     ThemePreference.WARM_PAPER -> "Warm Paper"
     ThemePreference.MIDNIGHT_BLUE_GLASS -> "Midnight Blue Glass"
     ThemePreference.BURGUNDY_OLD_MONEY -> "Burgundy Old Money"
+    ThemePreference.COSMIC_ORANGE -> "Cosmic Orange"
 }
 
 // Kategorisasi panel setting ResizerScreen jadi tab (diminta user: "kategorikan
@@ -289,6 +290,7 @@ class MainActivity : ComponentActivity() {
                 ThemePreference.WARM_PAPER -> com.example.videoresizer.ui.theme.AppThemeStyle.WARM_PAPER
                 ThemePreference.MIDNIGHT_BLUE_GLASS -> com.example.videoresizer.ui.theme.AppThemeStyle.MIDNIGHT_BLUE_GLASS
                 ThemePreference.BURGUNDY_OLD_MONEY -> com.example.videoresizer.ui.theme.AppThemeStyle.BURGUNDY_OLD_MONEY
+                ThemePreference.COSMIC_ORANGE -> com.example.videoresizer.ui.theme.AppThemeStyle.COSMIC_ORANGE
             }
 
             // Batch 61: haptic bawaan Compose (TextHandleMove) terlalu tipis di HP; ganti SEKALI di akar supaya
@@ -1012,8 +1014,10 @@ private fun HomeGemRow(
     val muted = MaterialTheme.colorScheme.onSurfaceVariant
     // Aksen dipekatkan di tema terang (sama dgn HomeToolCard) supaya ikon tetap terbaca.
     // Batch 94: tema Burgundy Old Money = ikon alat seragam emas tema (aksen pink/teal/ungu per-alat merusak kesan klasik).
+    // Batch 98: Cosmic Orange juga seragam (oranye tema) supaya palet antariksa tetap padu.
     val tint = when {
-        LocalThemeStyle.current == AppThemeStyle.BURGUNDY_OLD_MONEY -> MaterialTheme.colorScheme.primary
+        LocalThemeStyle.current == AppThemeStyle.BURGUNDY_OLD_MONEY || LocalThemeStyle.current == AppThemeStyle.COSMIC_ORANGE ->
+            MaterialTheme.colorScheme.primary
         MaterialTheme.colorScheme.background.luminance() > 0.5f -> lerp(accent, Color.Black, 0.30f)
         else -> accent
     }
@@ -1275,7 +1279,8 @@ private fun HomeToolCard(
     // Aksen alat dipekatkan di tema terang supaya ikon tetap terbaca di atas badan kartu yang terang.
     // Batch 94: tema Burgundy Old Money = ikon alat seragam emas tema (aksen pink/teal/ungu per-alat merusak kesan klasik).
     val tint = when {
-        LocalThemeStyle.current == AppThemeStyle.BURGUNDY_OLD_MONEY -> MaterialTheme.colorScheme.primary
+        LocalThemeStyle.current == AppThemeStyle.BURGUNDY_OLD_MONEY || LocalThemeStyle.current == AppThemeStyle.COSMIC_ORANGE ->
+            MaterialTheme.colorScheme.primary
         MaterialTheme.colorScheme.background.luminance() > 0.5f -> lerp(accent, Color.Black, 0.30f)
         else -> accent
     }

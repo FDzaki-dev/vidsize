@@ -511,6 +511,7 @@ the GitHub Actions route above is much faster in practice.
   project's Media3 version is ever bumped. If a build error appears around the watermark
   specifically, `createStaticBitmapOverlay`'s parameter order/types are the next thing
   to check — Android Studio's error will name the exact expected signature.
+- **Batch 103:** Riwayat dirombak (kartu tak terpotong, aksi Buka/Bagikan/Edit ulang/Lainnya, Detail, Salin nama berkas, Bagikan terpilih, thumbnail ber-cache) dan upaya memperbaiki long screenshot. NOT VERIFIED di CI/HP; detail di CHANGELOG Batch 103.
 - **Batch 102:** gulir menyeluruh: seretan di header/dok kini menggulir searah jari (sebelumnya terbalik), handle potong & slider tak lagi menelan/membajak seretan vertikal, layar Batch/GIF/Kompres/Riwayat tak lagi membatalkan gulir pelan/ketukan, pita mati di tepi layar Batch & Riwayat dihapus, header semua layar alat ikut menggulir. NOT VERIFIED di CI/HP; detail di CHANGELOG Batch 102.
 - **Batch 101:** tombol "Resize video" kini cekung saat ditekan/ditahan (bukan hanya riak) dan halaman Resize bisa digulir dengan menyeret di header maupun dok bawah. NOT VERIFIED di CI/HP; detail di CHANGELOG Batch 101.
 - **Batch 100:** memperbaiki build Batch 99 yang gagal kompilasi (opt-in eksperimental `FlowRowScope`, `item {}` sisa, impor hilang); tanpa perubahan perilaku. NOT VERIFIED di CI; detail di CHANGELOG Batch 100.

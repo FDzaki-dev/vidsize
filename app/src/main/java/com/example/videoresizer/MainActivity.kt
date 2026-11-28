@@ -59,10 +59,13 @@ import androidx.compose.material.icons.outlined.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.ClosedCaption
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Compress
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Crop
 import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Gif
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Layers
 import androidx.compose.material.icons.filled.MoreVert
@@ -72,6 +75,7 @@ import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Public
+import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Fullscreen
 import androidx.compose.material.icons.filled.FullscreenExit
 import androidx.compose.material.icons.filled.SystemUpdate
@@ -87,6 +91,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -96,6 +101,7 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -627,7 +633,16 @@ private fun VideoResizerApp(
         maxOf(maxOf(batchShown.floatValue, gifShown.floatValue), maxOf(compressorShown.floatValue, studioShown.floatValue))
     }
     Box(modifier = Modifier.fillMaxSize()) {
-        Box(modifier = Modifier.fillMaxSize().drawWithContent { if (resizerDrawn) drawContent() }) {
+        // Batch 103 (user: "tidak bisa long screenshot"): layar yang tak digambar (di bawah overlay) tetap terkomposisi, jadi kolom
+        // gulirnya TETAP tampil di pohon semantics sebagai kandidat "scroll capture" Android (long screenshot) -> sistem bisa memilih
+        // kolom Resizer/Beranda yang tersembunyi (hasil kosong/gagal) alih-alih layar yang terlihat. `clearAndSetSemantics` mengosongkan
+        // semantics lapisan tersembunyi (kandidat hilang; TalkBack pun tak lagi membaca layar di balik overlay). State tak berubah.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .drawWithContent { if (resizerDrawn) drawContent() }
+                .then(if (resizerDrawn) Modifier else Modifier.clearAndSetSemantics {})
+        ) {
             ResizerScreen(
                 onOpenHome = { screen = Screen.HOME },
                 isForeground = screen == Screen.MAIN,
@@ -662,6 +677,8 @@ private fun VideoResizerApp(
                     .graphicsLayer {
                         translationX = -size.width * 0.28f * toolProgress()
                     }
+                    // Batch 103: Beranda yang tak digambar (tertutup alat) juga keluar dari semantics/kandidat scroll capture (lihat Resizer).
+                    .then(if (homeDrawn) Modifier else Modifier.clearAndSetSemantics {})
             ) {
                 HomeScreen(
                     themePref = themePref,
@@ -4590,6 +4607,10 @@ private fun StudioScreen(
         )
     }
 
+    // Batch 103: dialog detail entri (diminta dari ketuk kartu atau menu "Lainnya" -> "Detail").
+    var detailEntry by remember { mutableStateOf<VideoHistoryEntry?>(null) }
+    detailEntry?.let { entry -> HistoryDetailDialog(entry = entry, onDismiss = { detailEntry = null }) }
+
     // FIX: Broken System Back Navigation.
     // Screen.STUDIO has no real back-stack entry, so a system back gesture
     // falls through to the Activity and finishes it. This intercepts that
@@ -4631,6 +4652,16 @@ private fun StudioScreen(
                         }) {
                             Icon(Icons.Filled.CheckCircle, contentDescription = "Pilih semua")
                         }
+                        // Batch 103: bagikan semua entri terpilih sekaligus (ACTION_SEND_MULTIPLE).
+                        IconButton(
+                            enabled = selectedIds.isNotEmpty(),
+                            onClick = {
+                                haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                shareHistoryEntries(context, entries.filter { it.id in selectedIds })
+                            }
+                        ) {
+                            Icon(Icons.Filled.Share, contentDescription = "Bagikan yang dipilih")
+                        }
                         IconButton(
                             enabled = selectedIds.isNotEmpty(),
                             onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); pendingBulkDelete = true }
@@ -4665,7 +4696,8 @@ private fun StudioScreen(
                 contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                items(entries, key = { it.id }) { entry ->
+                // Batch 103: contentType seragam (kartu kini setinggi sama) -> Compose memakai ulang node kartu antar-entri saat menggulir.
+                items(entries, key = { it.id }, contentType = { "entry" }) { entry ->
                     StudioEntryCard(
                         entry = entry,
                         selectionMode = selectionMode,
@@ -4676,6 +4708,7 @@ private fun StudioScreen(
                             toggleSelected(entry.id)
                         },
                         onToggleSelect = { toggleSelected(entry.id) },
+                        onShowDetail = { detailEntry = entry },
                         onEditAgain = {
                             // PERF: setDataSource()/extractMetadata() are
                             // blocking I/O — hopping to Dispatchers.IO keeps
@@ -4719,11 +4752,78 @@ private fun StudioScreen(
                                 }
                             }
                         },
+                        onCopyName = { copyHistoryName(context, entry) },
                         onDelete = { pendingDeleteEntry = entry }
                     )
                 }
             }
         }
+    }
+}
+
+/** Batch 103: cache thumbnail Riwayat (LRU ~8MB, kunci = id entri). Tanpa ini tiap kartu yang masuk lagi saat menggulir mendecode ulang JPEG dari disk. */
+private val historyThumbCache = object : android.util.LruCache<String, Bitmap>(8 * 1024 * 1024) {
+    override fun sizeOf(key: String, value: Bitmap): Int = value.byteCount
+}
+
+/** Batch 103: tiga baris ringkas kartu Riwayat; semua `maxLines = 1` supaya tinggi kartu SERAGAM (satu bake kedalaman dipakai bersama). */
+private class HistoryLabels(val title: String, val subtitle: String, val detail: String)
+
+private fun historyEntryLabels(entry: VideoHistoryEntry): HistoryLabels {
+    val subtitle = "Durasi: ${formatSeconds(entry.trimEndMs - entry.trimStartMs)}" + if (entry.muteAudio) " • Tanpa audio" else ""
+    if (entry.kind == "GIF" || entry.kind == "GIF_COMPRESS") {
+        // GIF/GIF_COMPRESS tak punya bidang khusus resize (aspek/resolusi/rotasi/kualitas/watermark/caption/flip/fps): pipeline-nya
+        // lain (GifExporter/GifCompressor), jadi yang ditampilkan adalah pengaturan yang memang berlaku.
+        val title = listOfNotNull(
+            if (entry.kind == "GIF_COMPRESS") "GIF Terkompresi" else "GIF",
+            if (entry.gifFps > 0) "${entry.gifFps} fps" else null,
+            if (entry.gifWidthPx > 0) "${entry.gifWidthPx}px" else null
+        ).joinToString(" • ")
+        return HistoryLabels(title, subtitle, if (entry.kind == "GIF_COMPRESS") "Hasil kompres GIF" else "Dikonversi dari video")
+    }
+    val aspectLabel = AspectRatioOption.ENTRIES.firstOrNull { it.name == entry.aspectRatioName }?.label ?: entry.aspectRatioName
+    val resLabel = ResolutionOption.ENTRIES.firstOrNull { it.name == entry.resolutionName }?.label ?: entry.resolutionName
+    val rotLabel = RotationOption.ENTRIES.firstOrNull { it.name == entry.rotationName }?.label ?: entry.rotationName
+    val qualityOpt = QualityOption.ENTRIES.firstOrNull { it.name == entry.qualityName } ?: QualityOption.ORIGINAL
+    val flipOpt = FlipOption.ENTRIES.firstOrNull { it.name == entry.flipName } ?: FlipOption.NONE
+    val frameRateOpt = FrameRateOption.ENTRIES.firstOrNull { it.name == entry.frameRateName } ?: FrameRateOption.ORIGINAL
+    val detail = listOfNotNull(
+        if (qualityOpt != QualityOption.ORIGINAL) {
+            "Kualitas: " + if (qualityOpt == QualityOption.CUSTOM && entry.customBitrateKbps != null) "${entry.customBitrateKbps} kbps" else qualityOpt.label
+        } else {
+            null
+        },
+        if (!entry.watermarkUri.isNullOrEmpty()) "Watermark" else null,
+        if (!entry.captionText.isNullOrBlank()) "Caption" else null,
+        if (flipOpt != FlipOption.NONE) "Flip ${flipOpt.label}" else null,
+        if (frameRateOpt != FrameRateOption.ORIGINAL) frameRateOpt.label else null
+    ).joinToString(" • ").ifEmpty { "Pengaturan standar" }
+    return HistoryLabels("$aspectLabel • $resLabel" + if (rotLabel != "0°") " • $rotLabel" else "", subtitle, detail)
+}
+
+/**
+ * Batch 103: satu aksi kartu Riwayat (ikon di atas label). Dulu tiga `TextButton` di dalam `horizontalScroll` + ikon hapus di luarnya:
+ * pada layar sempit "Bagikan" terpotong ikon hapus. Kini keempat aksi berbagi lebar sama (`weight` oleh pemanggil) -> tak ada kliping.
+ */
+@Composable
+private fun HistoryAction(
+    icon: ImageVector,
+    label: String,
+    enabled: Boolean,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.primary
+) {
+    val color = if (enabled) tint else tint.copy(alpha = 0.38f)
+    Column(
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable(enabled = enabled, onClickLabel = label, role = Role.Button, onClick = onClick)
+            .padding(vertical = 6.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(22.dp))
+        Text(label, color = color, style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 
@@ -4735,29 +4835,29 @@ private fun StudioEntryCard(
     isSelected: Boolean,
     onLongPress: () -> Unit,
     onToggleSelect: () -> Unit,
+    onShowDetail: () -> Unit,
     onEditAgain: () -> Unit,
     onShare: () -> Unit,
     onOpenInGallery: (() -> Unit)?,
+    onCopyName: () -> Unit,
     onDelete: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
     val context = androidx.compose.ui.platform.LocalContext.current
-    var thumb by remember(entry.id) { mutableStateOf<Bitmap?>(null) }
-    // Batch 44 (Prioritas 5): was decodeFile() at FULL output resolution
-    // (up to ~8MB as an ARGB_8888 Bitmap for a 1080p export) for every
-    // single row, just to show it at 72dp — LazyColumn compounds this
-    // across however many rows are alive at once while scrolling. Now
-    // downsampled to what this thumbnail actually needs. Deliberately NOT
-    // adding a manual .recycle() on dispose here: with the decode already
-    // this small the memory-pressure problem is solved, and recycling a
-    // Bitmap Compose might still hold a lingering reference to during a
-    // LazyColumn item transition/ripple isn't a risk worth taking for the
-    // little it would still save.
+    // Batch 44: thumbnail didecode turun-sampel (bukan resolusi penuh). Batch 103: hasilnya di-cache (historyThumbCache) agar kartu yang
+    // masuk lagi saat menggulir langsung tampil tanpa decode ulang/kedip ikon. Sengaja tanpa `.recycle()` manual (lihat catatan Batch 44).
+    var thumb by remember(entry.id) { mutableStateOf<Bitmap?>(historyThumbCache.get(entry.id)) }
     LaunchedEffect(entry.id) {
-        thumb = withContext(Dispatchers.IO) {
-            runCatching { loadHistoryThumbnail(context, entry, 240) }.getOrNull()
+        if (thumb == null) {
+            val loaded = withContext(Dispatchers.IO) {
+                runCatching { loadHistoryThumbnail(context, entry, 240) }.getOrNull()
+            }
+            if (loaded != null) historyThumbCache.put(entry.id, loaded)
+            thumb = loaded
         }
     }
+    val labels = remember(entry) { historyEntryLabels(entry) }
+    var menuOpen by remember { mutableStateOf(false) }
 
     DepthCard(
         // Batch 83: entri terpilih = CEKUNG (tertekan), tak terpilih = TIMBUL.
@@ -4766,157 +4866,231 @@ private fun StudioEntryCard(
         modifier = Modifier
             .fillMaxWidth()
             .combinedClickable(
-                onClick = { if (selectionMode) onToggleSelect() },
+                onClick = { if (selectionMode) onToggleSelect() else onShowDetail() },
                 // Batch 74 (Prioritas 7): aksi tekan-lama (masuk mode pilih) kini terdengar di TalkBack.
                 onLongClickLabel = "Pilih beberapa",
                 onLongClick = onLongPress
             )
     ) {
-        Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
-            if (selectionMode) {
-                Icon(
-                    if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
-                    contentDescription = if (isSelected) "Terpilih" else "Belum dipilih",
-                    tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.size(24.dp)
-                )
-                Spacer(Modifier.width(12.dp))
-            }
-            Box(
-                modifier = Modifier
-                    .size(72.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(MaterialTheme.colorScheme.surfaceVariant),
-                contentAlignment = Alignment.Center
-            ) {
-                val bmp = thumb
-                if (bmp != null) {
-                    Image(
-                        bitmap = bmp.asImageBitmap(),
-                        contentDescription = null,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
+        Column(modifier = Modifier.padding(start = 12.dp, top = 12.dp, end = 12.dp, bottom = 6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (selectionMode) {
                     Icon(
-                        if (entry.kind == "GIF" || entry.kind == "GIF_COMPRESS") Icons.Filled.Gif else Icons.Filled.Movie,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        if (isSelected) Icons.Filled.CheckCircle else Icons.Outlined.RadioButtonUnchecked,
+                        contentDescription = if (isSelected) "Terpilih" else "Belum dipilih",
+                        tint = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(Modifier.width(12.dp))
+                }
+                Box(
+                    modifier = Modifier
+                        .size(72.dp)
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                    contentAlignment = Alignment.Center
+                ) {
+                    val bmp = thumb
+                    if (bmp != null) {
+                        Image(
+                            bitmap = remember(bmp) { bmp.asImageBitmap() },
+                            contentDescription = null,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    } else {
+                        Icon(
+                            if (entry.kind == "GIF" || entry.kind == "GIF_COMPRESS") Icons.Filled.Gif else Icons.Filled.Movie,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        labels.title,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        labels.subtitle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Text(
+                        labels.detail,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
             }
 
-            Spacer(Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                if (entry.kind == "GIF" || entry.kind == "GIF_COMPRESS") {
-                    // GIF/GIF_COMPRESS entries carry none of the resize-
-                    // specific fields above (aspect/resolution/rotation/
-                    // quality/watermark/caption/flip/frame-rate) — they're
-                    // completely different export pipelines (GifExporter /
-                    // GifCompressor, not VideoResizer/Transformer), so this
-                    // branch shows the settings that actually apply instead.
-                    // (Batch 55: GIF_COMPRESS added — same branch as GIF
-                    // since both produce a plain .gif file, just labeled
-                    // differently so the two don't look identical in Studio.)
-                    val gifDetails = listOfNotNull(
-                        if (entry.kind == "GIF_COMPRESS") "GIF Terkompresi" else "GIF",
-                        if (entry.gifFps > 0) "${entry.gifFps} fps" else null,
-                        if (entry.gifWidthPx > 0) "${entry.gifWidthPx}px" else null
-                    )
-                    Text(
-                        gifDetails.joinToString(" • "),
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                } else {
-                    val aspectLabel = AspectRatioOption.ENTRIES.firstOrNull { it.name == entry.aspectRatioName }?.label ?: entry.aspectRatioName
-                    val resLabel = ResolutionOption.ENTRIES.firstOrNull { it.name == entry.resolutionName }?.label ?: entry.resolutionName
-                    val rotLabel = RotationOption.ENTRIES.firstOrNull { it.name == entry.rotationName }?.label ?: entry.rotationName
-                    val qualityOpt = QualityOption.ENTRIES.firstOrNull { it.name == entry.qualityName } ?: QualityOption.ORIGINAL
-                    val qualityLabel = if (qualityOpt == QualityOption.CUSTOM && entry.customBitrateKbps != null) {
-                        "${entry.customBitrateKbps} kbps"
-                    } else {
-                        qualityOpt.label
-                    }
-                    Text(
-                        "$aspectLabel • $resLabel" + if (rotLabel != "0°") " • $rotLabel" else "",
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
-                    if (qualityOpt != QualityOption.ORIGINAL) {
-                        Text(
-                            "Kualitas: $qualityLabel",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    if (!entry.watermarkUri.isNullOrEmpty()) {
-                        Text(
-                            "Watermark aktif",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    if (!entry.captionText.isNullOrBlank()) {
-                        Text(
-                            "Caption aktif",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall
-                        )
-                    }
-                    run {
-                        // Polish (Batch 11): flip/frame-rate weren't shown anywhere
-                        // in this history card before, even though they're saved
-                        // per-entry since Batch 9 — matches how rotation/quality/
-                        // watermark/caption already surface here.
-                        val flipOpt = FlipOption.ENTRIES.firstOrNull { it.name == entry.flipName } ?: FlipOption.NONE
-                        val frameRateOpt = FrameRateOption.ENTRIES.firstOrNull { it.name == entry.frameRateName } ?: FrameRateOption.ORIGINAL
-                        val extras = listOfNotNull(
-                            if (flipOpt != FlipOption.NONE) "Flip ${flipOpt.label}" else null,
-                            if (frameRateOpt != FrameRateOption.ORIGINAL) frameRateOpt.label else null
-                        )
-                        if (extras.isNotEmpty()) {
-                            Text(
-                                extras.joinToString(" • "),
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall
-                            )
-                        }
-                    }
-                }
-                Text(
-                    "Durasi: ${formatSeconds(entry.trimEndMs - entry.trimStartMs)}" + if (entry.muteAudio) " • Tanpa audio" else "",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
+            // Batch 103: baris aksi selebar kartu, 4 slot sama lebar (Buka, Bagikan, Edit ulang, Lainnya). Dulu terpotong + opsi minim.
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                HistoryAction(
+                    icon = Icons.Filled.PlayArrow,
+                    label = "Buka",
+                    enabled = !selectionMode && onOpenInGallery != null,
+                    onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onOpenInGallery?.invoke() },
+                    modifier = Modifier.weight(1f)
                 )
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.weight(1f, fill = false).horizontalScroll(rememberScrollState())
-                    ) {
-                        TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onEditAgain() }, contentPadding = PaddingValues(horizontal = 8.dp), enabled = !selectionMode) { Text("Edit ulang") }
-                        if (onOpenInGallery != null) {
-                            TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onOpenInGallery() }, contentPadding = PaddingValues(horizontal = 8.dp), enabled = !selectionMode) { Text("Galeri") }
-                        }
-                        TextButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onShare() }, contentPadding = PaddingValues(horizontal = 8.dp), enabled = !selectionMode) { Text("Bagikan") }
-                    }
-                    // FIX (Batch 41): delete used to live inside the
-                    // horizontalScroll row above, so on narrow screens
-                    // (3 text buttons already fill the width) it was
-                    // scrolled off and effectively invisible/undiscoverable.
-                    // Pinned outside the scroll now so it's always visible.
-                    if (!selectionMode) {
-                        IconButton(onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onDelete() }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "Hapus", tint = MaterialTheme.colorScheme.error)
-                        }
+                HistoryAction(
+                    icon = Icons.Filled.Share,
+                    label = "Bagikan",
+                    enabled = !selectionMode,
+                    onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onShare() },
+                    modifier = Modifier.weight(1f)
+                )
+                HistoryAction(
+                    icon = Icons.Filled.Edit,
+                    label = "Edit ulang",
+                    enabled = !selectionMode,
+                    onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); onEditAgain() },
+                    modifier = Modifier.weight(1f)
+                )
+                Box(modifier = Modifier.weight(1f)) {
+                    HistoryAction(
+                        icon = Icons.Filled.MoreVert,
+                        label = "Lainnya",
+                        enabled = !selectionMode,
+                        onClick = { haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove); menuOpen = true },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Detail") },
+                            leadingIcon = { Icon(Icons.Filled.Info, contentDescription = null) },
+                            onClick = { menuOpen = false; onShowDetail() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Salin nama berkas") },
+                            leadingIcon = { Icon(Icons.Filled.ContentCopy, contentDescription = null) },
+                            onClick = { menuOpen = false; onCopyName() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Hapus", color = MaterialTheme.colorScheme.error) },
+                            leadingIcon = { Icon(Icons.Filled.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error) },
+                            onClick = { menuOpen = false; onDelete() }
+                        )
                     }
                 }
             }
         }
     }
+}
+
+/** Batch 103: dialog detail entri Riwayat (nama, ukuran, tanggal, durasi, pengaturan, lokasi). Ukuran dibaca di Dispatchers.IO. */
+@Composable
+private fun HistoryDetailDialog(entry: VideoHistoryEntry, onDismiss: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val labels = remember(entry) { historyEntryLabels(entry) }
+    val sizeText by produceState("Menghitung…", entry.id) {
+        value = withContext(Dispatchers.IO) {
+            val file = File(entry.outputFilePath)
+            val bytes = when {
+                file.exists() -> file.length()
+                entry.publicUri != null -> runCatching {
+                    context.contentResolver.openFileDescriptor(Uri.parse(entry.publicUri), "r")?.use { it.statSize }
+                }.getOrNull() ?: -1L
+                else -> -1L
+            }
+            if (bytes >= 0L) android.text.format.Formatter.formatShortFileSize(context, bytes) else "Tidak diketahui (file tidak ditemukan)"
+        }
+    }
+    val createdText = remember(entry.createdAt) {
+        java.text.SimpleDateFormat("d MMM yyyy, HH:mm", Locale.forLanguageTag("id-ID")).format(java.util.Date(entry.createdAt))
+    }
+    val kindText = when (entry.kind) {
+        "GIF" -> "GIF"
+        "GIF_COMPRESS" -> "GIF Terkompresi"
+        else -> "Video"
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Detail") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                HistoryDetailRow("Nama berkas", File(entry.outputFilePath).name)
+                HistoryDetailRow("Jenis", kindText)
+                HistoryDetailRow("Ukuran", sizeText)
+                HistoryDetailRow("Dibuat", createdText)
+                HistoryDetailRow("Durasi", formatSeconds(entry.trimEndMs - entry.trimStartMs) + if (entry.muteAudio) " • Tanpa audio" else "")
+                HistoryDetailRow("Pengaturan", labels.title + " • " + labels.detail)
+                HistoryDetailRow(
+                    "Lokasi",
+                    if (entry.publicUri != null) "Tersimpan di Galeri" else "Hanya di penyimpanan aplikasi (belum ada salinan Galeri)"
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Tutup") } }
+    )
+}
+
+@Composable
+private fun HistoryDetailRow(label: String, value: String) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurface)
+    }
+}
+
+/** Batch 103: salin nama berkas hasil ke clipboard. */
+private fun copyHistoryName(context: android.content.Context, entry: VideoHistoryEntry) {
+    val name = File(entry.outputFilePath).name
+    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+    cm.setPrimaryClip(android.content.ClipData.newPlainText("Nama berkas", name))
+    android.widget.Toast.makeText(context, "Nama berkas disalin.", android.widget.Toast.LENGTH_SHORT).show()
+}
+
+/**
+ * Batch 103: bagikan beberapa entri sekaligus (mode pilih). Memakai salinan publik (content://) bila ada, selain itu FileProvider atas
+ * file privat; entri yang filenya sudah tak ada dilewati. Satu entri -> ACTION_SEND, lebih -> ACTION_SEND_MULTIPLE.
+ */
+private fun shareHistoryEntries(context: android.content.Context, entries: List<VideoHistoryEntry>) {
+    val uris = ArrayList<Uri>()
+    var anyGif = false
+    var anyVideo = false
+    entries.forEach { e ->
+        val uri = e.publicUri?.let { Uri.parse(it) }
+            ?: File(e.outputFilePath).takeIf { it.exists() }?.let { FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", it) }
+        if (uri != null) {
+            uris.add(uri)
+            if (e.kind == "GIF" || e.kind == "GIF_COMPRESS") anyGif = true else anyVideo = true
+        }
+    }
+    if (uris.isEmpty()) {
+        android.widget.Toast.makeText(context, "File yang dipilih tidak ditemukan (mungkin cache sudah dibersihkan).", android.widget.Toast.LENGTH_LONG).show()
+        return
+    }
+    val mime = when {
+        anyGif && anyVideo -> "*/*"
+        anyGif -> "image/gif"
+        else -> "video/*"
+    }
+    val intent = if (uris.size == 1) {
+        Intent(Intent.ACTION_SEND).apply { putExtra(Intent.EXTRA_STREAM, uris[0]) }
+    } else {
+        Intent(Intent.ACTION_SEND_MULTIPLE).apply { putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris) }
+    }
+    intent.type = mime
+    intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    context.startActivity(Intent.createChooser(intent, "Bagikan hasil"))
 }
 
 /**

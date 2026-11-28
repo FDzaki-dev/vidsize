@@ -33,7 +33,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.Orientation
-import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.scrollable
@@ -42,6 +41,8 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
@@ -200,11 +201,13 @@ private fun PushScreen(visible: Boolean, shown: MutableFloatState, content: @Com
             modifier = Modifier
                 .fillMaxSize()
                 .graphicsLayer { translationX = size.width * (1f - shown.floatValue) }
-                .pointerInput(Unit) {
-                    awaitPointerEventScope {
-                        while (true) awaitPointerEvent().changes.forEach { it.consume() }
-                    }
-                }
+                // Batch 102 (user: gulir belum seluruhnya merespons): dulu node ini MENGONSUMSI semua perubahan pointer di pass Main.
+                // Karena pass Main berjalan anak -> induk, konsumsi itu terlihat oleh anak di pass Final: deteksi seret (`verticalScroll`)
+                // yg belum melewati touchSlop dibatalkan ("verifikasi tak ada yg mengonsumsi") dan ketukan yg berisi gerakan kecil
+                // dibatalkan, jadi gulir/tombol di Batch/GIF/Kompres/Riwayat hanya hidup bila geseran pertama sudah besar. Memblokir
+                // Beranda di bawahnya cukup dgn node pointer input KOSONG (hit-test tak meneruskan ke saudara di bawah; pola
+                // `Surface` Material3) tanpa mengonsumsi apa pun.
+                .pointerInput(Unit) {}
         ) {
             content()
         }
@@ -780,12 +783,16 @@ private fun VideoResizerApp(
 /**
  * Batch 82: satu top bar untuk semua alat (judul = nama alat di kartu Beranda, tombol kembali + haptic seragam).
  * Dulu 4 TopAppBar inline dengan bobot/warna judul berbeda-beda.
+ * Batch 102: [scrollState] (bila diberikan) membuat seretan vertikal di header ikut menggulir halaman. `reverseDirection = true`
+ * WAJIB: `scrollable` mentah memakai delta jari apa adanya, padahal `ScrollState` memakai posisi gulir (kebalikannya), sama
+ * seperti yang dipasang `verticalScroll` secara internal; tanpa itu gulir di header berlawanan arah dgn isi halaman.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ToolTopBar(title: String, onBack: () -> Unit, backDescription: String = "Kembali") {
+private fun ToolTopBar(title: String, onBack: () -> Unit, backDescription: String = "Kembali", scrollState: ScrollState? = null) {
     val haptic = LocalHapticFeedback.current
     TopAppBar(
+        modifier = if (scrollState != null) Modifier.scrollable(scrollState, Orientation.Vertical, reverseDirection = true) else Modifier,
         title = {
             Text(
                 title,
@@ -1833,10 +1840,14 @@ private fun ResizerScreen(
         modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
             // Batch 101 (user: "scroll hanya bisa diakses di area tertentu"): menyeret di HEADER dan DOK ikut menggulir halaman
-            // (state yang sama dgn kolom isi), bukan hanya di pita tengah di antara keduanya.
-            Box(modifier = Modifier.scrollable(resizerScrollState, Orientation.Vertical)) {
-                ToolTopBar(title = "Resize / Edit Video", onBack = onOpenHome, backDescription = "Kembali ke beranda")
-            }
+            // (state yang sama dgn kolom isi). Batch 102 (user: "gulir belum seluruhnya merespon"): Batch 101 memasang `scrollable`
+            // TANPA `reverseDirection = true` -> seretan di header/dok menggulir BERLAWANAN arah; kini diperbaiki (lihat ToolTopBar).
+            ToolTopBar(
+                title = "Resize / Edit Video",
+                onBack = onOpenHome,
+                backDescription = "Kembali ke beranda",
+                scrollState = resizerScrollState
+            )
         },
         // Batch 82: aksi utama (Resize / progres) kini DOK TETAP di bawah — dulu ujung kolom gulir sehingga harus
         // menggulir lewat semua pengaturan untuk mengekspor, dan progres hilang dari layar saat menggulir ke atas.
@@ -1848,7 +1859,7 @@ private fun ResizerScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .scrollable(resizerScrollState, Orientation.Vertical)
+                        .scrollable(resizerScrollState, Orientation.Vertical, reverseDirection = true)
                         .navigationBarsPadding()
                         .padding(horizontal = 14.dp, vertical = 8.dp)
                         .depthRaised(LocalDepthSpec.current, RoundedCornerShape(26.dp), DepthSize.MEDIUM)
@@ -2903,19 +2914,26 @@ private fun BatchScreen(onBack: () -> Unit) {
         )
     }
 
+    // Batch 102: state gulir diangkat supaya header ikut menggulir; padding 16dp dipindah ke DALAM area gulir (dulu di luar ->
+    // pita 16dp di sekeliling layar tak merespons seretan).
+    val batchScrollState = rememberScrollState()
     Scaffold(
         modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
-            ToolTopBar(title = "Ekspor Batch", onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() })
+            ToolTopBar(
+                title = "Ekspor Batch",
+                onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() },
+                scrollState = batchScrollState
+            )
         },
         containerColor = Color.Transparent
     ) { padding ->
         Column(
             modifier = Modifier
                 .padding(padding)
-                .padding(16.dp)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState()),
+                .verticalScroll(batchScrollState)
+                .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(18.dp)
         ) {
             Text(
@@ -3958,7 +3976,7 @@ private fun TrimHandle(
         modifier = Modifier
             // BUG FIX: Modifier.offset() mirrors its x offset in RTL
             // layouts (this app declares android:supportsRtl="true"), but
-            // detectDragGestures reports dragAmount in raw, un-mirrored
+            // detectHorizontalDragGestures reports dragAmount in raw, un-mirrored
             // physical-pixel space. Mixing the two meant a right-to-left
             // locale would have dragged handles backwards relative to the
             // finger. absoluteOffset never mirrors, matching the
@@ -3969,16 +3987,19 @@ private fun TrimHandle(
             .width(touchTargetWidth)
             .height(trackHeight)
             .semantics { contentDescription = label }
+            // Batch 102 (user: gulir tak merespons di area tertentu): `detectDragGestures` (2D) mengonsumsi seretan ke ARAH MANA PUN begitu
+            // lewat touchSlop, jadi seretan vertikal yg dimulai di handle (48dp x 56dp, dua buah) tak pernah sampai ke gulir halaman.
+            // `detectHorizontalDragGestures` hanya mengambil seretan horizontal; vertikal diteruskan ke induk.
             .pointerInput(Unit) {
-                detectDragGestures(
+                detectHorizontalDragGestures(
                     onDragStart = {
                         currentFraction = latestFraction.value
                         latestOnDragStart.value()
                     },
-                    onDrag = { change, dragAmount ->
+                    onHorizontalDrag = { change, dragAmount ->
                         change.consume()
                         val range = latestValidRange.value
-                        currentFraction = (currentFraction + dragAmount.x / latestTrackWidthPx.value)
+                        currentFraction = (currentFraction + dragAmount / latestTrackWidthPx.value)
                             .coerceIn(range.start, range.endInclusive)
                         latestOnFractionChange.value(currentFraction)
                     }
@@ -4577,10 +4598,14 @@ private fun StudioScreen(
         if (selectionMode) exitSelection() else onBack()
     }
 
+    // Batch 102: state daftar diangkat supaya seretan di header ikut menggulir daftar (LazyListState memakai konvensi tanda yg sama
+    // dgn ScrollState -> `reverseDirection = true`); padding 16dp pindah ke `contentPadding` (dulu di luar -> pita mati di tepi).
+    val studioListState = rememberLazyListState()
     Scaffold(
         modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
             TopAppBar(
+                modifier = Modifier.scrollable(studioListState, Orientation.Vertical, reverseDirection = true),
                 title = {
                     Text(
                         if (selectionMode) "${selectedIds.size} dipilih" else "Riwayat",
@@ -4635,7 +4660,9 @@ private fun StudioScreen(
             }
         } else {
             LazyColumn(
-                modifier = Modifier.padding(padding).fillMaxSize().padding(16.dp),
+                state = studioListState,
+                modifier = Modifier.padding(padding).fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 items(entries, key = { it.id }) { entry ->
@@ -5348,11 +5375,17 @@ private fun GifScreen(
 
     // Batch 13: same Box-wrap-Scaffold overlay pattern as ResizerScreen, so
     // VideoPickerScreen can render on top without unmounting this screen.
+    // Batch 102: state gulir diangkat supaya seretan di header ikut menggulir halaman.
+    val gifScrollState = rememberScrollState()
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
-            ToolTopBar(title = "Video ke GIF", onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() })
+            ToolTopBar(
+                title = "Video ke GIF",
+                onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() },
+                scrollState = gifScrollState
+            )
         },
         containerColor = Color.Transparent
     ) { padding ->
@@ -5360,7 +5393,7 @@ private fun GifScreen(
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(gifScrollState)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
@@ -5791,11 +5824,17 @@ private fun CompressorScreen(onBack: () -> Unit) {
         )
     }
 
+    // Batch 102: state gulir diangkat supaya seretan di header ikut menggulir halaman.
+    val compressorScrollState = rememberScrollState()
     Box(modifier = Modifier.fillMaxSize()) {
     Scaffold(
         modifier = Modifier.fillMaxSize().themeBackdrop(rememberThemeBackdrop()),
         topBar = {
-            ToolTopBar(title = "Kompres Video", onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() })
+            ToolTopBar(
+                title = "Kompres Video",
+                onBack = { if (isProcessing) showExitWhileProcessingConfirm = true else onBack() },
+                scrollState = compressorScrollState
+            )
         },
         containerColor = Color.Transparent
     ) { padding ->
@@ -5803,7 +5842,7 @@ private fun CompressorScreen(onBack: () -> Unit) {
             modifier = Modifier
                 .padding(padding)
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+                .verticalScroll(compressorScrollState)
                 .padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {

@@ -1015,8 +1015,9 @@ fun DepthSwitch(
 
 /**
  * Batch 85: slider neumorfik (pengganti `Slider`): bak CEKUNG berisi isi aksen sampai kenop, kenop TIMBUL (masuk ke dalam saat
- * disentuh) dengan titik aksen. Sentuh = langsung melompat ke posisi itu; geser horizontal = mengikuti jari (gerak vertikal tetap
- * diteruskan ke gulir induk). Semantik `progressBarRangeInfo` + `setProgress` untuk aksesibilitas.
+ * disentuh) dengan titik aksen. Ketuk (angkat tanpa menggeser) = melompat ke posisi itu; geser horizontal = mengikuti jari (gerak
+ * vertikal tetap diteruskan ke gulir induk TANPA mengubah nilai; Batch 102). Semantik `progressBarRangeInfo` + `setProgress`
+ * untuk aksesibilitas.
  */
 @Composable
 fun DepthSlider(
@@ -1065,13 +1066,19 @@ fun DepthSlider(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     dragging = true
                     try {
-                        pick(down.position.x)
+                        // Batch 102: nilai TIDAK lagi diubah saat sentuh-awal (dulu `pick(down.position.x)` di sini): memulai gulir halaman
+                        // dari slider ikut menggeser nilainya. Kini nilai berubah hanya saat seretan horizontal dimulai atau saat ketukan diangkat.
                         val slop = awaitHorizontalTouchSlopOrCancellation(down.id) { change, _ -> change.consume() }
                         if (slop != null) {
+                            pick(slop.position.x)
                             horizontalDrag(slop.id) { change ->
                                 pick(change.position.x)
                                 change.consume()
                             }
+                        } else {
+                            // null = diangkat tanpa menggeser (ketukan -> lompat) ATAU seretan diambil induk (sudah dikonsumsi -> diabaikan).
+                            val last = currentEvent.changes.firstOrNull { it.id == down.id }
+                            if (last != null && !last.pressed && !last.isConsumed) pick(last.position.x)
                         }
                     } finally {
                         dragging = false

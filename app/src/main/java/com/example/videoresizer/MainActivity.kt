@@ -338,11 +338,13 @@ class MainActivity : ComponentActivity() {
         applyHighestRefreshRate()
         jankyFrames = 0
         sampledFrames = 0
+        resumedAtMs = android.os.SystemClock.uptimeMillis()
         window.addOnFrameMetricsAvailableListener(frameListener, frameHandler)
     }
 
     override fun onPause() {
         window.removeOnFrameMetricsAvailableListener(frameListener)
+        flushJankLog()
         super.onPause()
     }
 
@@ -356,12 +358,19 @@ class MainActivity : ComponentActivity() {
     private val frameHandler = android.os.Handler(android.os.Looper.getMainLooper())
     private val frameListener = android.view.Window.OnFrameMetricsAvailableListener { _, metrics, _ -> onFrameMetrics(metrics) }
 
+    private var resumedAtMs = 0L
+    private val jankLog = StringBuilder()
+    private var jankLogLines = 0
+
     private fun onFrameMetrics(metrics: android.view.FrameMetrics) {
         if (metrics.getMetric(android.view.FrameMetrics.FIRST_DRAW_FRAME) != 0L) return
+        val nowMs = android.os.SystemClock.uptimeMillis()
+        val late = metrics.getMetric(android.view.FrameMetrics.TOTAL_DURATION) > metrics.getMetric(android.view.FrameMetrics.DEADLINE)
+        if (late && jankLogLines < JANK_LOG_MAX_LINES) appendJankLine(metrics, nowMs)
+        // Batch 104: frame hangat-awal (3 dtk pertama setelah onResume) tidak dihitung governor.
+        if (nowMs - resumedAtMs < GOVERNOR_WARMUP_MS) return
         sampledFrames++
-        if (metrics.getMetric(android.view.FrameMetrics.TOTAL_DURATION) > metrics.getMetric(android.view.FrameMetrics.DEADLINE)) {
-            jankyFrames++
-        }
+        if (late) jankyFrames++
         if (sampledFrames < GOVERNOR_WINDOW) return
         val janky = jankyFrames
         sampledFrames = 0
@@ -376,11 +385,45 @@ class MainActivity : ComponentActivity() {
         val lower = currentDisplay.supportedModes
             .filter { it.physicalWidth == active.physicalWidth && it.physicalHeight == active.physicalHeight }
             .map { it.refreshRate }
-            .filter { it < currentDisplay.refreshRate - 1f }
+            .filter { it >= GOVERNOR_MIN_HZ && it < currentDisplay.refreshRate - 1f }
             .maxOrNull()
             ?: return
         refreshCapHz = lower
         applyHighestRefreshRate()
+    }
+
+    /** Batch 104: satu baris MENTAH per frame lewat tenggat (nanodetik), tanpa tafsiran; dipakai untuk membaca fase mana yang berat. */
+    private fun appendJankLine(m: android.view.FrameMetrics, nowMs: Long) {
+        jankLogLines++
+        jankLog.append("up=").append(nowMs)
+            .append(" hz=").append(display?.refreshRate)
+            .append(" cap=").append(refreshCapHz)
+            .append(" total=").append(m.getMetric(android.view.FrameMetrics.TOTAL_DURATION))
+            .append(" deadline=").append(m.getMetric(android.view.FrameMetrics.DEADLINE))
+            .append(" input=").append(m.getMetric(android.view.FrameMetrics.INPUT_HANDLING_DURATION))
+            .append(" anim=").append(m.getMetric(android.view.FrameMetrics.ANIMATION_DURATION))
+            .append(" layout=").append(m.getMetric(android.view.FrameMetrics.LAYOUT_MEASURE_DURATION))
+            .append(" draw=").append(m.getMetric(android.view.FrameMetrics.DRAW_DURATION))
+            .append(" sync=").append(m.getMetric(android.view.FrameMetrics.SYNC_DURATION))
+            .append(" cmd=").append(m.getMetric(android.view.FrameMetrics.COMMAND_ISSUE_DURATION))
+            .append(" swap=").append(m.getMetric(android.view.FrameMetrics.SWAP_BUFFERS_DURATION))
+            .append(" gpu=").append(m.getMetric(android.view.FrameMetrics.GPU_DURATION))
+            .append('\n')
+    }
+
+    private fun flushJankLog() {
+        if (jankLogLines == 0) return
+        val header = buildString {
+            appendLine("=== Vidsize frame-metrics log (nanodetik) ===")
+            appendLine("Device model: ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("OS: Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+            appendLine("Frames logged: $jankLogLines")
+            display?.supportedModes?.forEach { appendLine("Mode: ${it.physicalWidth}x${it.physicalHeight} @${it.refreshRate}") }
+            appendLine()
+        }
+        CrashLogger.logRaw(this, "jank", header + jankLog.toString())
+        jankLog.setLength(0)
+        jankLogLines = 0
     }
 
     /**
@@ -515,6 +558,14 @@ private const val IOS_POP_MS = 360
 private const val LOG_TAG = "VidsizeMain"
 private const val GOVERNOR_WINDOW = 120
 private const val GOVERNOR_JANK_PERCENT = 30
+
+// Batch 104: governor TIDAK pernah menurunkan ke bawah 60Hz (mode 30/48Hz pada panel LTPO/OEM membuat gulir terasa ditahan) dan
+// tidak menghitung frame hangat-awal (bake kedalaman + komposisi pertama selalu berat dan dulu menurunkan batas sejak detik pertama).
+private const val GOVERNOR_MIN_HZ = 59f
+private const val GOVERNOR_WARMUP_MS = 3_000L
+
+// Batch 104: log metrik frame MENTAH (frame yang melewati tenggat) ke Documents/VideoResizer/logs/jank_*.txt, maks baris per sesi.
+private const val JANK_LOG_MAX_LINES = 400
 
 @androidx.annotation.OptIn(UnstableApi::class)
 @Composable

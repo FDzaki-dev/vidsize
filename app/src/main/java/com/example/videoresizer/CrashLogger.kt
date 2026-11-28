@@ -92,6 +92,20 @@ object CrashLogger {
         }.onFailure { Log.e(TAG, "logCaught", it) }
     }
 
+    /**
+     * Batch 104: menulis teks MENTAH [body] (mis. metrik frame) sebagai `<prefix>_<ts>_<uuid>.txt` di folder log yang sama,
+     * di thread latar yang sama dgn [logCaught] (retensi 50 berkas per [prefix]). Tak menambah penjelasan; tidak pernah melempar.
+     */
+    fun logRaw(context: Context, prefix: String, body: String) {
+        runCatching {
+            val appContext = context.applicationContext
+            caughtLogExecutor.execute {
+                runCatching { persist(appContext, prefix, body) }
+                    .onFailure { Log.e(TAG, "logRaw.persist", it) }
+            }
+        }.onFailure { Log.e(TAG, "logRaw", it) }
+    }
+
     private fun writeLog(context: Context, thread: Thread, throwable: Throwable) {
         persist(context, CRASH_PREFIX, buildLogBody(context, thread, throwable, CRASH_TITLE))
     }

@@ -7,7 +7,10 @@ plugins {
 
 android {
     namespace = "com.example.videoresizer"
-    compileSdk = 34
+    // Batch 104: compileSdk 34 -> 35, dibutuhkan metadata AAR Compose 1.8.x / AndroidX transitifnya (minCompileSdk 35).
+    // targetSdk TETAP 34 (perilaku runtime tidak berubah). AGP 8.4.0 hanya memberi PERINGATAN utk compileSdk 35 (diredam di
+    // gradle.properties: android.suppressUnsupportedCompileSdk=35). Balik bila CI merah: 34 + BOM 2024.06.00 (long screenshot hilang).
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.example.videoresizer"
@@ -84,12 +87,14 @@ android {
         }
     }
 
+    // Batch 104: target JVM 1.8 -> 11. Fungsi `inline` dari AAR Compose/AndroidX bertarget 11 TIDAK bisa di-inline ke bytecode 1.8
+    // ("Cannot inline bytecode built with JVM target 11 into ... 1.8"); sebaliknya aman. CI memakai JDK 17; D8 men-desugar ke minSdk 31.
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
     kotlinOptions {
-        jvmTarget = "1.8"
+        jvmTarget = "11"
     }
 
     buildFeatures {
@@ -115,7 +120,7 @@ android {
         // MissingPermission + pemeriksaan performa Compose + locale. Dikeluarkan sengaja: GradleDependency/
         // NewerVersionAvailable (nag versi; Media3 sengaja dipin 1.4.1, lihat komentar dependency di bawah), HardcodedText/
         // ContentDescription (i18n/gaya), UseKtx. ConfigurationScreenWidthHeight TIDAK dimasukkan: baru ada di Compose UI
-        // 1.7+ (proyek ini BOM 2024.06.00 = 1.6.x). Baseline TIDAK dipakai: baseline menyembunyikan temuan.
+        // 1.7+ (proyek ini kini BOM 2025.06.01 = 1.8.x; belum dimasukkan agar daftar lint tak berubah). Baseline TIDAK dipakai: baseline menyembunyikan temuan.
         // Run #1 CI: "NonObservableLocale" = Unknown issue id di AGP 8.4 -> DIHAPUS; 6 id lain dikenali.
         checkOnly.addAll(
             listOf(
@@ -170,7 +175,12 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")
 
-    implementation(platform("androidx.compose:compose-bom:2024.06.00"))
+    // Batch 104 (user: long screenshot tak berfungsi): BOM 2024.06.00 (Compose UI 1.6.8) TIDAK punya dukungan long screenshot
+    // sama sekali — `ScrollCaptureCallback` Compose baru ada di UI 1.7.0-alpha06 (di balik flag), aktif default sejak 1.7.0-alpha07,
+    // dan "latar hilang di long screenshot" baru diperbaiki di 1.8.0-alpha07. BOM 2025.06.01 = keluarga Compose 1.8.x: BUKAN ke
+    // 1.9+ karena 1.9.0 memakai metadata Kotlin 2.0 (butuh KGP 2.0+, proyek ini Kotlin 1.9.24 + compiler 1.5.14).
+    // Balik bila CI merah: "2024.06.00" (+ compileSdk 34, JVM 1.8).
+    implementation(platform("androidx.compose:compose-bom:2025.06.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-graphics")
     implementation("androidx.compose.ui:ui-tooling-preview")

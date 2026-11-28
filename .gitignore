@@ -9,3 +9,4 @@
 .cxx/
 *.apk
 *.aab
+release.keystore

@@ -98,6 +98,7 @@ fun Modifier.themeBackdrop(backdrop: ThemeBackdrop): Modifier = this.drawWithCac
         if (image != null) {
             drawImage(image, IntOffset.Zero, IntSize(image.width, image.height), IntOffset.Zero, IntSize(wi, hi))
         } else {
+            DepthBakery.noteDirectDraw()
             drawThemeBackdrop(backdrop)
         }
     }

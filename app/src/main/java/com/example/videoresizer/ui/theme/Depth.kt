@@ -606,6 +606,10 @@ internal class BakeSlot(val bytes: Long) {
 internal object DepthBakery {
     private val slots = LinkedHashMap<Any, BakeSlot>(64, 0.75f, true)
     private var totalBytes = 0L
+
+    // Batch 105: penghitung diagnostik (hanya utas utama) untuk log jank_*.txt: berapa slot tergusur dan berapa kali elemen jatuh ke gambar langsung.
+    private var evictions = 0
+    private var directDraws = 0L
     private val worker = Executors.newSingleThreadExecutor { runnable ->
         Thread(runnable, "depth-bake").apply {
             priority = Thread.NORM_PRIORITY - 1
@@ -621,7 +625,12 @@ internal object DepthBakery {
         while (totalBytes + bytes > BAKE_BUDGET_BYTES && oldest.hasNext()) {
             val evicted = oldest.next().value
             totalBytes -= evicted.bytes
-            evicted.image = null
+            evictions++
+            // Batch 105 (user: gulir masih slowmo di semua tab): dulu `evicted.image = null` di sini. Slot tertua = elemen yang MASIH tampil
+            // (latar layar-penuh, ubin Beranda, kartu Resizer) -> begitu anggaran penuh (layar alat yang ditutup tak pernah melepas slot-nya),
+            // elemen hidup itu dipaksa kembali ke gambar langsung 8 lapis blur dan TIDAK pernah dibake ulang (slot lazy/`activeBackdropBake`
+            // tetap menunjuk slot yang kosong) -> gulir berat permanen di semua tab. Kini slot hanya dilepas dari peta (tak dipakai ulang oleh
+            // peminta baru); bitmap-nya tetap dipegang pemiliknya yang masih hidup dan dibebaskan GC begitu pemiliknya hilang dari komposisi.
             oldest.remove()
         }
         val slot = BakeSlot(bytes)
@@ -630,6 +639,14 @@ internal object DepthBakery {
         scope.launch { slot.image = runCatching(render).getOrNull() }
         return slot
     }
+
+    /** Hanya dipanggil dari utas utama saat menggambar: elemen/latar jatuh ke jalur gambar langsung (bake belum siap atau gagal). */
+    fun noteDirectDraw() {
+        directDraws++
+    }
+
+    /** Ringkasan mentah untuk header log jank (utas utama). */
+    fun stats(): String = "slots=${slots.size} bytes=$totalBytes budget=$BAKE_BUDGET_BYTES evictions=$evictions directDraws=$directDraws"
 }
 
 /** Menggambar `block` (koordinat lokal 0..w, 0..h) ke bitmap berukuran (w + 2*margin) x (h + 2*margin). */
@@ -684,6 +701,7 @@ fun Modifier.depthRaised(
     onDrawBehind {
         val p = pressed().coerceIn(0f, 1f)
         if (!bakeable) {
+            DepthBakery.noteDirectDraw()
             kit.draw(this, p)
         } else {
             val restImage = restSlot.image
@@ -697,7 +715,10 @@ fun Modifier.depthRaised(
                     drawImage(restImage, at, alpha = 1f - p)
                     drawImage(pressImage, at, alpha = p)
                 }
-                else -> kit.draw(this, p)
+                else -> {
+                    DepthBakery.noteDirectDraw()
+                    kit.draw(this, p)
+                }
             }
         }
     }

@@ -1,5 +1,19 @@
 # Changelog
 
+## Batch 105: gulir slowmo di semua tab — slot bake kedalaman tak lagi dikosongkan saat anggaran penuh (elemen hidup + latar layar-penuh jatuh ke gambar langsung yang berat, tanpa bake ulang)
+
+User (setelah v104): "Long screenshot telah teratasi namun bergulir masih agak slowmo!!" (tanpa `jank_*.txt`, tanpa nama layar).
+1. **Akar (terbaca di kode, BUKAN profiling):** `DepthBakery.request` (Depth.kt) mengusir slot tertua saat `totalBytes + bytes > BAKE_BUDGET_BYTES` (48MB) dengan `evicted.image = null`. Slot tertua = elemen yang MASIH tampil (latar layar-penuh `themeBackdrop`, ubin Beranda, kartu Resizer), sedangkan slot layar alat yang sudah ditutup tak pernah dilepas -> anggaran penuh setelah beberapa kali berpindah layar/tema. Begitu `image` jadi null, `onDrawBehind` (state dibaca saat gambar -> gambar ulang) jatuh ke jalur gambar langsung: `drawThemeBackdrop` (gradien radial layar-penuh + ornamen) dan `RaisedKit.draw` (8 lapis blur) yang tersimpan di display list dan dijalankan GPU TIAP frame gulir. Tak ada bake ulang: slot dipegang `by lazy` tiap elemen dan `activeBackdropBake` (dipakai ulang selama tema+ukuran sama) tetap menunjuk slot kosong. Cocok dgn gejala "gulir berat di SELURUH tab" yang bertahan sejak Batch 87 walau tiap batch mengurangi satu sumber beban lain.
+2. **Perbaikan (`ui/theme/Depth.kt`):** pengusiran kini HANYA melepas slot dari peta (peminta baru tak memakainya ulang) dan mengurangi pembukuan; `image` TIDAK lagi di-null. Bitmap tetap dipegang pemilik yang masih hidup dan dibebaskan GC begitu pemiliknya keluar dari komposisi. Konsekuensi yang disadari: memori bitmap nyata = isi peta (<= 48MB) + elemen hidup yang slotnya sudah terusir (terbatas pada layar yang sedang terkomposisi: Beranda, Resizer, satu alat). Tak ada perubahan visual, perilaku tekan, kunci bake, atau ukuran anggaran.
+3. **Diagnostik (`Depth.kt`, `Ornaments.kt`, `MainActivity.kt`):** `DepthBakery.stats()` (slots/bytes/budget/evictions/directDraws) ditulis ke header `jank_*.txt` (`Bake: ...`); `directDraws` bertambah tiap kali `depthRaised`/`themeBackdrop` menggambar lewat jalur langsung. Bila gulir MASIH lambat, header ini membuktikan apakah gambar-langsung masih terjadi (`directDraws` besar) atau tidak (akar lain: baca kolom draw/sync/gpu).
+Berkas kode: `Depth.kt`, `Ornaments.kt`, `MainActivity.kt` (3). Dok: CHANGELOG/PROJECT_STATE/FILE_MANIFEST/README.
+### VERIFIED / NOT VERIFIED
+VERIFIED statis: kotlinc 1.9.24 tanpa classpath -> himpunan galat 3 berkas IDENTIK dgn v104 (250 baris, semuanya "unresolved reference" karena classpath Compose/Android tak ada; 0 galat sintaks); detekt-cli 1.23.8 + `config/detekt/detekt.yml` pada 3 berkas -> 0 temuan (exit 0). SpotBugs: `ST_WRITE_TO_STATIC_FROM_INSTANCE_METHOD` pada `Depth.kt` sudah disaring (Batch 90; field `evictions`/`directDraws` sama polanya dgn `totalBytes`). NOT VERIFIED: kompilasi Gradle, lintDebug, SpotBugs, ArchUnit, tes (Google Maven/Android SDK tak terjangkau di sandbox), dan PERILAKU di HP (apakah gulir kini mulus). Akar di atas = hipotesis kuat dari pembacaan kode, BELUM terbukti oleh data frame.
+### Bila MERAH
+Baca `e:` pertama; perubahan kode hanya 3 titik kecil (`DepthBakery`: dua field + dua fungsi, hapus `evicted.image = null`; dua panggilan `noteDirectDraw()`; satu baris header di `flushJankLog`). Jalan balik = `Vidsize_v104.zip`.
+### Bila gulir MASIH lambat
+Kirim `Documents/VideoResizer/logs/jank_*.txt` terbaru + nama layar. Baca baris `Bake:` dulu (directDraws/evictions), lalu kolom draw/sync/gpu/layout.
+
 ## Batch 104: long screenshot — Compose BOM 2024.06.00 -> 2025.06.01 (UI 1.6.8 tak punya scroll capture), compileSdk 35, JVM 11; governor refresh rate berlantai 60Hz; log metrik frame mentah
 
 User (setelah v103): "1. gulir di seluruh tab masih berasa delay nya kek dibuat-buat 2. long screenshot belum berfungsi. sepertinya kamu harus menaikkan versi dependency tertentu!!"

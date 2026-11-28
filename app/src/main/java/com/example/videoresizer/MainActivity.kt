@@ -418,6 +418,8 @@ class MainActivity : ComponentActivity() {
             appendLine("Device model: ${Build.MANUFACTURER} ${Build.MODEL}")
             appendLine("OS: Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
             appendLine("Frames logged: $jankLogLines")
+            // Batch 105: keadaan bake kedalaman saat log ditulis (evictions/directDraws > 0 = elemen jatuh ke gambar langsung yang berat).
+            appendLine("Bake: ${com.example.videoresizer.ui.theme.DepthBakery.stats()}")
             display?.supportedModes?.forEach { appendLine("Mode: ${it.physicalWidth}x${it.physicalHeight} @${it.refreshRate}") }
             appendLine()
         }
